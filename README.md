@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🦅 Eagle Vision — Hyper-Local Retail Discovery Platform
 
 > Connect consumers with physical inventory in nearby shops using **semantic text search**, **visual image search**, and **geospatial proximity ranking**.
@@ -199,3 +200,6 @@ eagle_vision/
     ├── services/        # Central API Client (dynamic IP resolution)
     └── constants/       # Global styling theme system
 ```
+=======
+# Lamba
+>>>>>>> abbfe9b0744d3ae75af90a508610c6ac1ccc053d
