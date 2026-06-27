@@ -1,0 +1,71 @@
+import { I18nManager } from 'react-native';
+import * as Localization from 'expo-localization';
+import { I18n } from 'i18n-js';
+import * as SecureStore from 'expo-secure-store';
+
+import en from '../locales/en.json';
+import ar from '../locales/ar.json';
+
+// Initialize i18n
+export const i18n = new I18n({
+  en,
+  ar,
+});
+
+i18n.enableFallback = true;
+i18n.defaultLocale = 'en';
+
+const LANGUAGE_KEY = 'lamba_language';
+
+// Setup i18n on app start
+export const setupI18n = async () => {
+  try {
+    const savedLanguage = await SecureStore.getItemAsync(LANGUAGE_KEY);
+    if (savedLanguage) {
+      i18n.locale = savedLanguage;
+    } else {
+      i18n.locale = Localization.getLocales()[0].languageCode ?? 'en';
+    }
+  } catch {
+    i18n.locale = Localization.getLocales()[0].languageCode ?? 'en';
+  }
+};
+
+// Toggle language (simple in-memory swap for Expo Go compatibility)
+export const toggleLanguage = async () => {
+  const currentLang = i18n.locale.includes('ar') ? 'ar' : 'en';
+  const newLang = currentLang === 'en' ? 'ar' : 'en';
+
+  const isRTL = newLang === 'ar';
+
+  // Persist preference
+  try {
+    await SecureStore.setItemAsync(LANGUAGE_KEY, newLang);
+  } catch {}
+
+  // Update locale
+  i18n.locale = newLang;
+
+  // Force RTL layout if Arabic
+  I18nManager.allowRTL(isRTL);
+  I18nManager.forceRTL(isRTL);
+
+  // Reload app to apply RTL layout changes
+  try {
+    const Updates = require('expo-updates');
+    if (Updates && Updates.reloadAsync) {
+      await Updates.reloadAsync();
+    }
+  } catch (e) {
+    // In Expo Go / dev mode, Updates.reloadAsync() will throw or not be available.
+    // We catch this so the caller (like profile.tsx) can show an alert asking the user to manually restart.
+    console.warn('Could not auto-reload app, manual restart required:', e);
+  }
+};
+
+// Expose standard translation function
+export const t = (key: string, options?: any) => i18n.t(key, options);
+
+// Reactive RTL check — re-evaluates on every call (not a static const)
+export const isRTL = (): boolean => i18n.locale.includes('ar');
+

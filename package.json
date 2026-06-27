@@ -1,0 +1,15 @@
+{
+  "name": "eagle-vision-workspace",
+  "version": "1.0.0",
+  "description": "Eagle Vision Workspace - Root Orchestrator for Mobile & Backend",
+  "private": true,
+  "scripts": {
+    "services:up": "docker compose up -d postgres elasticsearch",
+    "services:down": "docker compose down",
+    "backend:up": "docker compose up -d",
+    "backend:seed": "docker compose exec api python -m app.seed",
+    "backend:logs": "docker compose logs -f api",
+    "mobile:start": "node scripts/start-mobile.js",
+    "mobile:tunnel": "node scripts/start-mobile.js --tunnel"
+  }
+}

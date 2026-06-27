@@ -1,0 +1,61 @@
+{
+  "expo": {
+    "name": "Lamba",
+    "slug": "lamba",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "lamba",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#0A0A1A"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lamba.app",
+      "config": {
+        "googleMapsApiKey": "AIzaSyD6hMybeU3z0DrfqJ4OOVCtPOPlcwGDxYA"
+      },
+      "infoPlist": {
+        "NSCameraUsageDescription": "Lamba needs camera access for visual product search",
+        "NSLocationWhenInUseUsageDescription": "Lamba needs your location to find nearby shops"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0A0A1A"
+      },
+      "package": "com.lamba.app",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyD6hMybeU3z0DrfqJ4OOVCtPOPlcwGDxYA"
+        }
+      },
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-camera",
+      "expo-image-picker",
+      "expo-location",
+      "expo-secure-store",
+      "expo-asset",
+      "expo-localization"
+    ],
+    "locales": {
+      "en": "./locales/en.json",
+      "ar": "./locales/ar.json"
+    },
+    "extra": {
+      "I18nManager": {
+        "allowRTL": true,
+        "forceRTL": false
+      }
+    }
+  }
+}
