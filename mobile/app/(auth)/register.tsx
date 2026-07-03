@@ -5,7 +5,7 @@
  * Supports signup via Email or Phone Number.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, Alert, ActivityIndicator, ScrollView
@@ -14,10 +14,223 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { signUp } from '../../services/api';
-import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
 
 export default function RegisterScreen() {
+  const Colors = useThemeColors();
+
+  const styles = useMemo(() => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  scroll: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.xl,
+  },
+  rolePickerScroll: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.xl,
+  },
+  glowOrb1: {
+    position: 'absolute',
+    top: '10%',
+    right: '-20%',
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    opacity: 0.05,
+  },
+  glowOrb2: {
+    position: 'absolute',
+    bottom: '5%',
+    left: '-15%',
+    width: 250,
+    height: 250,
+    borderRadius: 125,
+    opacity: 0.04,
+  },
+  backButton: {
+    position: 'absolute',
+    top: 60,
+    left: Spacing.xl,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: Spacing.xxl,
+    marginTop: Spacing.xl,
+  },
+  logoContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+    ...Shadows.glow,
+  },
+  title: {
+    ...Typography.h1,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.xs,
+    textAlign: 'center',
+  },
+  subtitle: {
+    ...Typography.body,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+  },
+
+  // ── Role Picker Step ──
+  rolePickerCards: {
+    gap: Spacing.lg,
+    marginBottom: Spacing.xl,
+  },
+  rolePickerCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.xl,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+    ...Shadows.medium,
+  },
+  rolePickerIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  rolePickerTitle: {
+    ...Typography.h3,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.xs,
+  },
+  rolePickerDesc: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+  },
+
+  // ── Registration Form ──
+  card: {
+    backgroundColor: Colors.surfaceGlass,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    ...Shadows.medium,
+  },
+  roleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    marginBottom: Spacing.lg,
+  },
+  roleBadgeText: {
+    ...Typography.caption,
+    fontWeight: '700',
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: Spacing.xl,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    alignItems: 'center',
+    borderRadius: BorderRadius.md - 2,
+  },
+  tabButtonActive: {
+    backgroundColor: Colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  tabText: {
+    ...Typography.label,
+    color: Colors.textMuted,
+  },
+  tabTextActive: {
+    color: Colors.textPrimary,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+    height: 52,
+  },
+  inputIcon: {
+    marginEnd: Spacing.sm,
+  },
+  input: {
+    flex: 1,
+    color: Colors.textPrimary,
+    ...Typography.body,
+  },
+  button: {
+    borderRadius: BorderRadius.md,
+    height: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: Spacing.lg,
+    ...Shadows.small,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  buttonText: {
+    ...Typography.button,
+    color: Colors.textOnPrimary,
+  },
+  linkContainer: {
+    marginTop: Spacing.lg,
+    alignItems: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  linkText: {
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
+  },
+  linkHighlight: {
+    fontWeight: '600',
+  },
+  surfaceGlass: {
+    backgroundColor: 'rgba(18, 18, 42, 0.85)',
+  },
+  }), [Colors]);
   const router = useRouter();
   const searchParams = useLocalSearchParams();
 
@@ -338,215 +551,5 @@ export default function RegisterScreen() {
       </ScrollView>
     </KeyboardAvoidingView>
   );
+
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  scroll: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.xl,
-  },
-  rolePickerScroll: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.xl,
-  },
-  glowOrb1: {
-    position: 'absolute',
-    top: '10%',
-    right: '-20%',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    opacity: 0.05,
-  },
-  glowOrb2: {
-    position: 'absolute',
-    bottom: '5%',
-    left: '-15%',
-    width: 250,
-    height: 250,
-    borderRadius: 125,
-    opacity: 0.04,
-  },
-  backButton: {
-    position: 'absolute',
-    top: 60,
-    left: Spacing.xl,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: Spacing.xxl,
-    marginTop: Spacing.xl,
-  },
-  logoContainer: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: Spacing.lg,
-    ...Shadows.glow,
-  },
-  title: {
-    ...Typography.h1,
-    color: Colors.textPrimary,
-    marginBottom: Spacing.xs,
-    textAlign: 'center',
-  },
-  subtitle: {
-    ...Typography.body,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-  },
-
-  // ── Role Picker Step ──
-  rolePickerCards: {
-    gap: Spacing.lg,
-    marginBottom: Spacing.xl,
-  },
-  rolePickerCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.xl,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
-    ...Shadows.medium,
-  },
-  rolePickerIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-  },
-  rolePickerTitle: {
-    ...Typography.h3,
-    color: Colors.textPrimary,
-    marginBottom: Spacing.xs,
-  },
-  rolePickerDesc: {
-    ...Typography.caption,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-  },
-
-  // ── Registration Form ──
-  card: {
-    backgroundColor: Colors.surfaceGlass,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.xl,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    ...Shadows.medium,
-  },
-  roleBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'center',
-    gap: Spacing.xs,
-    paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.md,
-    borderRadius: BorderRadius.full,
-    borderWidth: 1,
-    marginBottom: Spacing.lg,
-  },
-  roleBadgeText: {
-    ...Typography.caption,
-    fontWeight: '700',
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    padding: 4,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: Spacing.xl,
-  },
-  tabButton: {
-    flex: 1,
-    paddingVertical: Spacing.sm,
-    alignItems: 'center',
-    borderRadius: BorderRadius.md - 2,
-  },
-  tabButtonActive: {
-    backgroundColor: Colors.surfaceElevated,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  tabText: {
-    ...Typography.label,
-    color: Colors.textMuted,
-  },
-  tabTextActive: {
-    color: Colors.textPrimary,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.md,
-    height: 52,
-  },
-  inputIcon: {
-    marginEnd: Spacing.sm,
-  },
-  input: {
-    flex: 1,
-    color: Colors.textPrimary,
-    ...Typography.body,
-  },
-  button: {
-    borderRadius: BorderRadius.md,
-    height: 52,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: Spacing.lg,
-    ...Shadows.small,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    ...Typography.button,
-    color: Colors.textOnPrimary,
-  },
-  linkContainer: {
-    marginTop: Spacing.lg,
-    alignItems: 'center',
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  linkText: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
-  },
-  linkHighlight: {
-    fontWeight: '600',
-  },
-  surfaceGlass: {
-    backgroundColor: 'rgba(18, 18, 42, 0.85)',
-  },
-});

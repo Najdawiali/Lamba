@@ -19,13 +19,15 @@ import {
   getInventoryValue, getCheckoutHistory, logout, MarketResponse, MarketItemDashboardResponse,
   HistoricalReceipt
 } from '../../services/api';
-import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { useThemeColors } from '../../context/ThemeContext';
 import { t, toggleLanguage, i18n } from '../../services/i18n';
 import { resolveImageUrl } from '../../services/utils';
 import { formatPrice, getCurrencyCode } from '../../services/currency';
 
 export default function DashboardScreen() {
   const router = useRouter();
+  const Colors = useThemeColors();
   const [market, setMarket] = useState<MarketResponse | null>(null);
   const [products, setProducts] = useState<MarketItemDashboardResponse[]>([]);
   const [historyReceipts, setHistoryReceipts] = useState<HistoricalReceipt[]>([]);
@@ -409,292 +411,7 @@ export default function DashboardScreen() {
     return filtered;
   }, [products, searchQuery, activeCategory]);
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </View>
-    );
-  }
-
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Toast Notification Banner */}
-      {notification.visible && (
-        <Animated.View style={[
-          styles.toastContainer,
-          { transform: [{ translateY: bannerY }] }
-        ]}>
-          <View style={[styles.toastInner, styles[`toast_${notification.type}` as const], { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-            <View style={[styles.toastIconWrapper, { marginRight: isAr ? 0 : Spacing.md, marginLeft: isAr ? Spacing.md : 0 }]}>
-              <Ionicons
-                name={notification.type === 'success' ? 'checkmark-circle' : notification.type === 'error' ? 'alert-circle' : 'information-circle'}
-                size={26}
-                color={notification.type === 'success' ? Colors.success : notification.type === 'error' ? Colors.error : Colors.primary}
-              />
-            </View>
-            <View style={styles.toastTextWrapper}>
-              <Text style={[styles.toastTitle, { textAlign: isAr ? 'right' : 'left' }]}>{notification.title}</Text>
-              <Text style={[styles.toastMessage, { textAlign: isAr ? 'right' : 'left' }]}>{notification.message}</Text>
-            </View>
-            <TouchableOpacity onPress={dismissNotification} style={styles.toastCloseBtn}>
-              <Ionicons name="close" size={18} color={Colors.textMuted} />
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
-      )}
-
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={[styles.greeting, { textAlign: isAr ? 'right' : 'left' }]} numberOfLines={1}>
-          {market?.name || t('dashboard.title')}
-        </Text>
-        <Text style={[styles.subtitle, { textAlign: isAr ? 'right' : 'left' }]} numberOfLines={1}>
-          {market?.address || t('dashboard.subtitle')}
-        </Text>
-      </View>
-
-      {/* Stat Chips Row */}
-      <View style={styles.statChipsRow}>
-        <View style={styles.statChip}>
-          <Ionicons name="cube-outline" size={16} color={Colors.secondary} />
-          <Text style={styles.statChipNumber}>{totalProducts}</Text>
-          <Text style={styles.statChipLabel}>{t('dashboard.total_items', 'Total Items')}</Text>
-        </View>
-        <View style={styles.statChip}>
-          <Ionicons name="checkmark-circle-outline" size={16} color={Colors.secondary} />
-          <Text style={styles.statChipNumber}>{inStockCount}</Text>
-          <Text style={styles.statChipLabel}>{t('dashboard.in_stock', 'In Stock')}</Text>
-        </View>
-        <View style={styles.statChip}>
-          <Ionicons name="warning-outline" size={16} color={Colors.warning} />
-          <Text style={styles.statChipNumber}>{lowStockCount}</Text>
-          <Text style={styles.statChipLabel}>{t('dashboard.low_stock', 'Low Stock')}</Text>
-        </View>
-      </View>
-
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
-          <Ionicons name="search-outline" size={18} color={Colors.textMuted} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder={t('dashboard.search_placeholder', 'Search inventory…')}
-            placeholderTextColor={Colors.textMuted}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            autoCapitalize="none"
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-
-      {/* Category Filter Chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterRow}
-        contentContainerStyle={styles.filterRowContent}
-      >
-        {categories.map((cat) => (
-          <TouchableOpacity
-            key={cat}
-            style={[
-              styles.filterChip,
-              activeCategory === cat && styles.filterChipActive,
-            ]}
-            onPress={() => setActiveCategory(cat)}
-            activeOpacity={0.7}
-          >
-            <Text style={[
-              styles.filterChipText,
-              activeCategory === cat && styles.filterChipTextActive,
-            ]}>
-              {cat}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      {/* Product List */}
-      <FlatList
-        data={filteredProducts}
-        keyExtractor={(item) => item.id}
-        refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
-            onRefresh={() => { setRefreshing(true); loadData(); }}
-            tintColor={Colors.secondary} 
-          />
-        }
-        contentContainerStyle={styles.listContent}
-        renderItem={({ item }) => {
-          const truncatedName = item.name.length > 26 ? item.name.substring(0, 26) + '…' : item.name;
-          return (
-          <TouchableOpacity
-            style={styles.productRow}
-            onPress={() => handleOpenEdit(item)}
-            activeOpacity={0.7}
-          >
-            {/* Product Image Thumbnail */}
-            <View style={styles.imageWrapper}>
-              {item.image_url ? (
-                <Image
-                  source={{ uri: resolveImageUrl(item.image_url) }}
-                  style={styles.productImage}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View style={styles.placeholderIconWrapper}>
-                  <Ionicons name="cube-outline" size={28} color={Colors.textMuted} />
-                </View>
-              )}
-            </View>
-
-            {/* Product Metadata Info */}
-            <View style={styles.productInfo}>
-              <Text style={styles.productName} numberOfLines={1}>{truncatedName}</Text>
-              <Text style={styles.categoryLabel}>{item.category || t('common.general', 'General')}</Text>
-              <Text style={styles.priceText}>{formatPrice(item.price)}</Text>
-              <Text style={styles.stockCountText}>{t('dashboard.stock_label', 'Stock')}: {item.stock_count}</Text>
-            </View>
-
-            {/* In-Stock Status Control */}
-            <View style={styles.stockControl}>
-              <Text style={styles.stockToggleLabel}>{t('dashboard.in_stock')}</Text>
-              <Switch
-                value={item.in_stock}
-                onValueChange={() => handleToggleStock(item.id, item.in_stock)}
-                trackColor={{ false: Colors.toggleInactive, true: Colors.toggleStockActive }}
-                thumbColor={'#FFFFFF'}
-              />
-            </View>
-          </TouchableOpacity>
-          );
-        }}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconCircle}>
-              <Ionicons name="cube-outline" size={28} color={Colors.textMuted} />
-            </View>
-            <Text style={styles.emptyTitle}>{t('dashboard.no_products', "No stocked products in this market.")}</Text>
-            <Text style={styles.emptyText}>{"Add or scan your first item to get started."}</Text>
-          </View>
-        }
-      />
-
-      {/* Edit Product Modal */}
-      <Modal
-        visible={editModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setEditModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={{ width: '100%' }}
-          >
-            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-              <View style={styles.modalContent}>
-                {/* Modal Header */}
-                <View style={[styles.modalHeader, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-                  <Text style={styles.modalTitle}>{t('dashboard.edit_product', 'Edit Product Details')}</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}>
-                    {keyboardVisible && (
-                      <TouchableOpacity 
-                        onPress={() => Keyboard.dismiss()} 
-                        style={styles.keyboardDismissBtn}
-                        activeOpacity={0.7}
-                      >
-                        <Ionicons name="keypad-outline" size={18} color={Colors.primary} />
-                        <Text style={styles.keyboardDismissText}>{t('rating.done', 'Done')}</Text>
-                      </TouchableOpacity>
-                    )}
-                    <TouchableOpacity onPress={() => setEditModalVisible(false)}>
-                      <Ionicons name="close" size={24} color={Colors.textPrimary} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-            {/* Inputs */}
-            <Text style={styles.inputLabel}>{t('dashboard.product_name', 'Product Name')}</Text>
-            <View style={styles.modalInputWrapper}>
-              <TextInput
-                style={styles.modalInput}
-                placeholder={t('dashboard.product_name', 'Product Name')}
-                placeholderTextColor={Colors.textMuted}
-                value={editName}
-                onChangeText={setEditName}
-              />
-            </View>
-
-            <View style={styles.inputRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.inputLabel}>{t('dashboard.stock_count', 'Stock Count')}</Text>
-                <View style={styles.modalInputWrapper}>
-                  <TextInput
-                    style={styles.modalInput}
-                    placeholder={t('dashboard.stock_count', 'Stock Count')}
-                    placeholderTextColor={Colors.textMuted}
-                    value={editStock}
-                    onChangeText={setEditStock}
-                    keyboardType="number-pad"
-                  />
-                </View>
-              </View>
-
-              <View style={{ flex: 1 }}>
-                <Text style={styles.inputLabel}>{t('dashboard.price_cost', 'Price/Cost (SAR)')}</Text>
-                <View style={styles.modalInputWrapper}>
-                  <TextInput
-                    style={styles.modalInput}
-                    placeholder={t('dashboard.price_cost', 'Price')}
-                    placeholderTextColor={Colors.textMuted}
-                    value={editPrice}
-                    onChangeText={setEditPrice}
-                    keyboardType="decimal-pad"
-                  />
-                </View>
-              </View>
-            </View>
-
-            {/* Action Buttons */}
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalBtn, styles.modalBtnCancel]}
-                onPress={() => setEditModalVisible(false)}
-                disabled={savingEdit}
-              >
-                <Text style={styles.modalBtnTextCancel}>{t('common.cancel', 'Cancel')}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.modalBtn, styles.modalBtnSave]}
-                onPress={handleSaveEdit}
-                disabled={savingEdit}
-              >
-                {savingEdit ? (
-                  <ActivityIndicator color={Colors.textOnPrimary} />
-                ) : (
-                  <Text style={styles.modalBtnTextSave}>{t('dashboard.save_changes', 'Save Changes')}</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-              </View>
-            </TouchableWithoutFeedback>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
+  const styles = useMemo(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background },
   header: {
@@ -1209,4 +926,289 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     lineHeight: 18,
   },
-});
+}), [Colors]);
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Toast Notification Banner */}
+      {notification.visible && (
+        <Animated.View style={[
+          styles.toastContainer,
+          { transform: [{ translateY: bannerY }] }
+        ]}>
+          <View style={[styles.toastInner, styles[`toast_${notification.type}` as const], { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+            <View style={[styles.toastIconWrapper, { marginRight: isAr ? 0 : Spacing.md, marginLeft: isAr ? Spacing.md : 0 }]}>
+              <Ionicons
+                name={notification.type === 'success' ? 'checkmark-circle' : notification.type === 'error' ? 'alert-circle' : 'information-circle'}
+                size={26}
+                color={notification.type === 'success' ? Colors.success : notification.type === 'error' ? Colors.error : Colors.primary}
+              />
+            </View>
+            <View style={styles.toastTextWrapper}>
+              <Text style={[styles.toastTitle, { textAlign: isAr ? 'right' : 'left' }]}>{notification.title}</Text>
+              <Text style={[styles.toastMessage, { textAlign: isAr ? 'right' : 'left' }]}>{notification.message}</Text>
+            </View>
+            <TouchableOpacity onPress={dismissNotification} style={styles.toastCloseBtn}>
+              <Ionicons name="close" size={18} color={Colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      )}
+
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={[styles.greeting, { textAlign: isAr ? 'right' : 'left' }]} numberOfLines={1}>
+          {market?.name || t('dashboard.title')}
+        </Text>
+        <Text style={[styles.subtitle, { textAlign: isAr ? 'right' : 'left' }]} numberOfLines={1}>
+          {market?.address || t('dashboard.subtitle')}
+        </Text>
+      </View>
+
+      {/* Stat Chips Row */}
+      <View style={styles.statChipsRow}>
+        <View style={styles.statChip}>
+          <Ionicons name="cube-outline" size={16} color={Colors.secondary} />
+          <Text style={styles.statChipNumber}>{totalProducts}</Text>
+          <Text style={styles.statChipLabel}>{t('dashboard.total_items', 'Total Items')}</Text>
+        </View>
+        <View style={styles.statChip}>
+          <Ionicons name="checkmark-circle-outline" size={16} color={Colors.secondary} />
+          <Text style={styles.statChipNumber}>{inStockCount}</Text>
+          <Text style={styles.statChipLabel}>{t('dashboard.in_stock', 'In Stock')}</Text>
+        </View>
+        <View style={styles.statChip}>
+          <Ionicons name="warning-outline" size={16} color={Colors.warning} />
+          <Text style={styles.statChipNumber}>{lowStockCount}</Text>
+          <Text style={styles.statChipLabel}>{t('dashboard.low_stock', 'Low Stock')}</Text>
+        </View>
+      </View>
+
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
+          <Ionicons name="search-outline" size={18} color={Colors.textMuted} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder={t('dashboard.search_placeholder', 'Search inventory…')}
+            placeholderTextColor={Colors.textMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {/* Category Filter Chips */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterRow}
+        contentContainerStyle={styles.filterRowContent}
+      >
+        {categories.map((cat) => (
+          <TouchableOpacity
+            key={cat}
+            style={[
+              styles.filterChip,
+              activeCategory === cat && styles.filterChipActive,
+            ]}
+            onPress={() => setActiveCategory(cat)}
+            activeOpacity={0.7}
+          >
+            <Text style={[
+              styles.filterChipText,
+              activeCategory === cat && styles.filterChipTextActive,
+            ]}>
+              {cat}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {/* Product List */}
+      <FlatList
+        data={filteredProducts}
+        keyExtractor={(item) => item.id}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={() => { setRefreshing(true); loadData(); }}
+            tintColor={Colors.secondary} 
+          />
+        }
+        contentContainerStyle={styles.listContent}
+        renderItem={({ item }) => {
+          const truncatedName = item.name.length > 26 ? item.name.substring(0, 26) + '…' : item.name;
+          return (
+          <TouchableOpacity
+            style={styles.productRow}
+            onPress={() => handleOpenEdit(item)}
+            activeOpacity={0.7}
+          >
+            {/* Product Image Thumbnail */}
+            <View style={styles.imageWrapper}>
+              {item.image_url ? (
+                <Image
+                  source={{ uri: resolveImageUrl(item.image_url) }}
+                  style={styles.productImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.placeholderIconWrapper}>
+                  <Ionicons name="cube-outline" size={28} color={Colors.textMuted} />
+                </View>
+              )}
+            </View>
+
+            {/* Product Metadata Info */}
+            <View style={styles.productInfo}>
+              <Text style={styles.productName} numberOfLines={1}>{truncatedName}</Text>
+              <Text style={styles.categoryLabel}>{item.category || t('common.general', 'General')}</Text>
+              <Text style={styles.priceText}>{formatPrice(item.price)}</Text>
+              <Text style={styles.stockCountText}>{t('dashboard.stock_label', 'Stock')}: {item.stock_count}</Text>
+            </View>
+
+            {/* In-Stock Status Control */}
+            <View style={styles.stockControl}>
+              <Text style={styles.stockToggleLabel}>{t('dashboard.in_stock')}</Text>
+              <Switch
+                value={item.in_stock}
+                onValueChange={() => handleToggleStock(item.id, item.in_stock)}
+                trackColor={{ false: Colors.toggleInactive, true: Colors.toggleStockActive }}
+                thumbColor={'#FFFFFF'}
+              />
+            </View>
+          </TouchableOpacity>
+          );
+        }}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIconCircle}>
+              <Ionicons name="cube-outline" size={28} color={Colors.textMuted} />
+            </View>
+            <Text style={styles.emptyTitle}>{t('dashboard.no_products', "No stocked products in this market.")}</Text>
+            <Text style={styles.emptyText}>{"Add or scan your first item to get started."}</Text>
+          </View>
+        }
+      />
+
+      {/* Edit Product Modal */}
+      <Modal
+        visible={editModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ width: '100%' }}
+          >
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+              <View style={styles.modalContent}>
+                {/* Modal Header */}
+                <View style={[styles.modalHeader, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                  <Text style={styles.modalTitle}>{t('dashboard.edit_product', 'Edit Product Details')}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}>
+                    {keyboardVisible && (
+                      <TouchableOpacity 
+                        onPress={() => Keyboard.dismiss()} 
+                        style={styles.keyboardDismissBtn}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="keypad-outline" size={18} color={Colors.primary} />
+                        <Text style={styles.keyboardDismissText}>{t('rating.done', 'Done')}</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity onPress={() => setEditModalVisible(false)}>
+                      <Ionicons name="close" size={24} color={Colors.textPrimary} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+            {/* Inputs */}
+            <Text style={styles.inputLabel}>{t('dashboard.product_name', 'Product Name')}</Text>
+            <View style={styles.modalInputWrapper}>
+              <TextInput
+                style={styles.modalInput}
+                placeholder={t('dashboard.product_name', 'Product Name')}
+                placeholderTextColor={Colors.textMuted}
+                value={editName}
+                onChangeText={setEditName}
+              />
+            </View>
+
+            <View style={styles.inputRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.inputLabel}>{t('dashboard.stock_count', 'Stock Count')}</Text>
+                <View style={styles.modalInputWrapper}>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder={t('dashboard.stock_count', 'Stock Count')}
+                    placeholderTextColor={Colors.textMuted}
+                    value={editStock}
+                    onChangeText={setEditStock}
+                    keyboardType="number-pad"
+                  />
+                </View>
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={styles.inputLabel}>{t('dashboard.price_cost', 'Price/Cost (SAR)')}</Text>
+                <View style={styles.modalInputWrapper}>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder={t('dashboard.price_cost', 'Price')}
+                    placeholderTextColor={Colors.textMuted}
+                    value={editPrice}
+                    onChangeText={setEditPrice}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+              </View>
+            </View>
+
+            {/* Action Buttons */}
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnCancel]}
+                onPress={() => setEditModalVisible(false)}
+                disabled={savingEdit}
+              >
+                <Text style={styles.modalBtnTextCancel}>{t('common.cancel', 'Cancel')}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnSave]}
+                onPress={handleSaveEdit}
+                disabled={savingEdit}
+              >
+                {savingEdit ? (
+                  <ActivityIndicator color={Colors.textOnPrimary} />
+                ) : (
+                  <Text style={styles.modalBtnTextSave}>{t('dashboard.save_changes', 'Save Changes')}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}

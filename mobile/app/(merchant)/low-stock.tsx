@@ -9,7 +9,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getMarketItems, updateMarketItem, logout, MarketItemDashboardResponse } from '../../services/api';
-import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
 import { resolveImageUrl } from '../../services/utils';
 
@@ -17,6 +18,7 @@ type StockFilterMode = 'all' | 'out_of_stock' | 'critical' | 'low';
 
 export default function LowStockScreen() {
   const router = useRouter();
+  const Colors = useThemeColors();
   const [products, setProducts] = useState<MarketItemDashboardResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -180,286 +182,7 @@ export default function LowStockScreen() {
     return isAr ? 'منخفض' : 'LOW STOCK';
   };
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </View>
-    );
-  }
-
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={[styles.header, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => router.back()}
-          activeOpacity={0.7}
-        >
-          <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={24} color={Colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>
-          {isAr ? 'لوحة إعادة تعبئة المخزون' : 'Replenishment Board'}
-        </Text>
-        <View style={{ width: 40 }} />
-      </View>
-
-      {/* Segmented Filter Control */}
-      <View style={styles.filterContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[styles.filterScroll, { flexDirection: isAr ? 'row-reverse' : 'row' }]}
-        >
-          <TouchableOpacity
-            style={[styles.filterTab, filterMode === 'all' && styles.filterTabActive]}
-            onPress={() => setFilterMode('all')}
-          >
-            <Text style={[styles.filterTabText, filterMode === 'all' && styles.filterTabTextActive]}>
-              {isAr ? 'الكل' : 'All Alerts'} ({lowStockItems.length})
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.filterTab, filterMode === 'out_of_stock' && styles.filterTabActive]}
-            onPress={() => setFilterMode('out_of_stock')}
-          >
-            <View style={[styles.tabBadge, { backgroundColor: Colors.error }]} />
-            <Text style={[styles.filterTabText, filterMode === 'out_of_stock' && styles.filterTabTextActive]}>
-              {isAr ? 'نفذ المخزون' : 'Out of Stock'} ({lowStockItems.filter(p => p.stock_count === 0).length})
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.filterTab, filterMode === 'critical' && styles.filterTabActive]}
-            onPress={() => setFilterMode('critical')}
-          >
-            <View style={[styles.tabBadge, { backgroundColor: '#FF9500' }]} />
-            <Text style={[styles.filterTabText, filterMode === 'critical' && styles.filterTabTextActive]}>
-              {isAr ? 'حرج' : 'Critical'} ({lowStockItems.filter(p => p.stock_count >= 1 && p.stock_count <= 5).length})
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.filterTab, filterMode === 'low' && styles.filterTabActive]}
-            onPress={() => setFilterMode('low')}
-          >
-            <View style={[styles.tabBadge, { backgroundColor: '#FFCC00' }]} />
-            <Text style={[styles.filterTabText, filterMode === 'low' && styles.filterTabTextActive]}>
-              {isAr ? 'منخفض' : 'Low'} ({lowStockItems.filter(p => p.stock_count >= 6 && p.stock_count <= 10).length})
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </View>
-
-      {/* Grouped Replenishment List */}
-      <FlatList
-        data={categoryGroups}
-        keyExtractor={item => item.categoryName}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={Colors.primary}
-          />
-        }
-        contentContainerStyle={styles.listContent}
-        renderItem={({ item: group }) => (
-          <View style={styles.categorySection}>
-            {/* Category Header */}
-            <View style={[styles.categoryHeaderRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-              <Ionicons name="folder-open-outline" size={16} color={Colors.primary} />
-              <Text style={styles.categoryHeaderTitle}>{group.categoryName}</Text>
-              <View style={styles.categoryHeaderLine} />
-            </View>
-
-            {/* Items inside this category */}
-            {group.items.map(item => (
-              <View key={item.id} style={[styles.productCard, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-                {/* Image */}
-                <View style={styles.imageWrapper}>
-                  {item.image_url ? (
-                    <Image
-                      source={{ uri: resolveImageUrl(item.image_url) }}
-                      style={styles.productImage}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View style={styles.placeholderIconWrapper}>
-                      <Ionicons name="cube-outline" size={20} color={Colors.textMuted} />
-                    </View>
-                  )}
-                </View>
-
-                {/* Details */}
-                <View style={[styles.productDetails, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
-                  <Text style={styles.productName} numberOfLines={1}>{item.name}</Text>
-                  
-                  <View style={[styles.badgeRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-                    {/* Priority Alert Badge */}
-                    <View style={[styles.priorityBadge, { borderColor: getPriorityColor(item.stock_count) }]}>
-                      <Text style={[styles.priorityBadgeText, { color: getPriorityColor(item.stock_count) }]}>
-                        {getPriorityText(item.stock_count)}
-                      </Text>
-                    </View>
-                    <Text style={styles.stockCountLabel}>
-                      {isAr ? `الكمية الحالية: ${item.stock_count}` : `Qty Remaining: ${item.stock_count}`}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Replenish Action Trigger */}
-                <TouchableOpacity
-                  style={styles.replenishBtn}
-                  onPress={() => handleOpenReplenish(item)}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="add" size={16} color="#FFF" />
-                  <Text style={styles.replenishBtnText}>{isAr ? 'تعبئة' : 'Replenish'}</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-        )}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconBg}>
-              <Ionicons name="checkmark-circle-outline" size={44} color={Colors.success} />
-            </View>
-            <Text style={styles.emptyText}>
-              {isAr
-                ? 'رائع! لا توجد منتجات أوشكت على النفاذ في متجرك حالياً.'
-                : 'Excellent! No items are currently running low or out of stock.'}
-            </Text>
-          </View>
-        }
-      />
-
-      {/* Quick Replenish Modal */}
-      <Modal
-        visible={replenishModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setReplenishModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={{ width: '100%' }}
-          >
-            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-              <View style={styles.modalContent}>
-                {/* Modal Notch Header */}
-                <View style={styles.notchWrapper}>
-                  <View style={styles.notch} />
-                </View>
-
-                {selectedProduct && (
-                  <View style={{ width: '100%' }}>
-                    {/* Header */}
-                    <View style={[styles.modalHeader, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-                      <Text style={styles.modalTitle}>{isAr ? 'شحن المخزون السريع' : 'Quick Stock Replenish'}</Text>
-                      {keyboardVisible && (
-                        <TouchableOpacity
-                          onPress={() => Keyboard.dismiss()}
-                          style={styles.keyboardDismissBtn}
-                          activeOpacity={0.7}
-                        >
-                          <Ionicons name="keypad-outline" size={16} color={Colors.primary} />
-                          <Text style={styles.keyboardDismissText}>{isAr ? 'تم' : 'Done'}</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-
-                    {/* Product Summary */}
-                    <View style={[styles.productModalSummary, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-                      <View style={styles.modalThumbWrapper}>
-                        {selectedProduct.image_url ? (
-                          <Image
-                            source={{ uri: resolveImageUrl(selectedProduct.image_url) }}
-                            style={styles.modalThumb}
-                          />
-                        ) : (
-                          <View style={styles.placeholderIconWrapper}>
-                            <Ionicons name="cube-outline" size={18} color={Colors.textMuted} />
-                          </View>
-                        )}
-                      </View>
-                      <View style={[styles.modalTextWrapper, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
-                        <Text style={styles.modalItemName} numberOfLines={1}>{selectedProduct.name}</Text>
-                        <Text style={styles.modalItemSub}>
-                          {isAr 
-                            ? `المخزون الحالي: ${selectedProduct.stock_count} قطع` 
-                            : `Current Stock Count: ${selectedProduct.stock_count}`}
-                        </Text>
-                      </View>
-                    </View>
-
-                    {/* Incrementor Fields */}
-                    <Text style={[styles.inputLabel, { textAlign: isAr ? 'right' : 'left' }]}>
-                      {isAr ? 'الكمية المراد إضافتها للمخزون' : 'Add Stock Quantity'}
-                    </Text>
-
-                    <View style={[styles.adjusterRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-                      <TouchableOpacity style={styles.adjusterBtn} onPress={() => adjustReplenishQty(-5)} activeOpacity={0.7}>
-                        <Text style={styles.adjusterBtnText}>-5</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.adjusterBtn} onPress={() => adjustReplenishQty(-1)} activeOpacity={0.7}>
-                        <Ionicons name="remove" size={20} color={Colors.textPrimary} />
-                      </TouchableOpacity>
-                      <TextInput
-                        style={styles.adjusterInput}
-                        keyboardType="number-pad"
-                        value={replenishCount}
-                        onChangeText={setReplenishCount}
-                        textAlign="center"
-                      />
-                      <TouchableOpacity style={styles.adjusterBtn} onPress={() => adjustReplenishQty(1)} activeOpacity={0.7}>
-                        <Ionicons name="add" size={20} color={Colors.textPrimary} />
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.adjusterBtn} onPress={() => adjustReplenishQty(5)} activeOpacity={0.7}>
-                        <Text style={styles.adjusterBtnText}>+5</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    {/* Action buttons */}
-                    <View style={styles.modalActions}>
-                      <TouchableOpacity
-                        style={[styles.modalBtn, styles.modalBtnCancel]}
-                        onPress={() => { setReplenishModalVisible(false); setSelectedProduct(null); }}
-                        disabled={savingReplenish}
-                      >
-                        <Text style={styles.modalBtnTextCancel}>{isAr ? 'إلغاء' : 'Cancel'}</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[styles.modalBtn, styles.modalBtnSave]}
-                        onPress={handleSaveReplenish}
-                        disabled={savingReplenish}
-                      >
-                        {savingReplenish ? (
-                          <ActivityIndicator color={Colors.textOnPrimary} />
-                        ) : (
-                          <>
-                            <Ionicons name="cube-outline" size={16} color="#FFF" style={{ marginRight: 6 }} />
-                            <Text style={styles.modalBtnTextSave}>{isAr ? 'تأكيد الشحن' : 'Replenish'}</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-              </View>
-            </TouchableWithoutFeedback>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
+  const styles = useMemo(() => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
@@ -808,4 +531,283 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.primary,
   },
-});
+}), [Colors]);
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
+      <View style={[styles.header, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => router.back()}
+          activeOpacity={0.7}
+        >
+          <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={24} color={Colors.textPrimary} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>
+          {isAr ? 'لوحة إعادة تعبئة المخزون' : 'Replenishment Board'}
+        </Text>
+        <View style={{ width: 40 }} />
+      </View>
+
+      {/* Segmented Filter Control */}
+      <View style={styles.filterContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={[styles.filterScroll, { flexDirection: isAr ? 'row-reverse' : 'row' }]}
+        >
+          <TouchableOpacity
+            style={[styles.filterTab, filterMode === 'all' && styles.filterTabActive]}
+            onPress={() => setFilterMode('all')}
+          >
+            <Text style={[styles.filterTabText, filterMode === 'all' && styles.filterTabTextActive]}>
+              {isAr ? 'الكل' : 'All Alerts'} ({lowStockItems.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.filterTab, filterMode === 'out_of_stock' && styles.filterTabActive]}
+            onPress={() => setFilterMode('out_of_stock')}
+          >
+            <View style={[styles.tabBadge, { backgroundColor: Colors.error }]} />
+            <Text style={[styles.filterTabText, filterMode === 'out_of_stock' && styles.filterTabTextActive]}>
+              {isAr ? 'نفذ المخزون' : 'Out of Stock'} ({lowStockItems.filter(p => p.stock_count === 0).length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.filterTab, filterMode === 'critical' && styles.filterTabActive]}
+            onPress={() => setFilterMode('critical')}
+          >
+            <View style={[styles.tabBadge, { backgroundColor: '#FF9500' }]} />
+            <Text style={[styles.filterTabText, filterMode === 'critical' && styles.filterTabTextActive]}>
+              {isAr ? 'حرج' : 'Critical'} ({lowStockItems.filter(p => p.stock_count >= 1 && p.stock_count <= 5).length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.filterTab, filterMode === 'low' && styles.filterTabActive]}
+            onPress={() => setFilterMode('low')}
+          >
+            <View style={[styles.tabBadge, { backgroundColor: '#FFCC00' }]} />
+            <Text style={[styles.filterTabText, filterMode === 'low' && styles.filterTabTextActive]}>
+              {isAr ? 'منخفض' : 'Low'} ({lowStockItems.filter(p => p.stock_count >= 6 && p.stock_count <= 10).length})
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+
+      {/* Grouped Replenishment List */}
+      <FlatList
+        data={categoryGroups}
+        keyExtractor={item => item.categoryName}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={Colors.primary}
+          />
+        }
+        contentContainerStyle={styles.listContent}
+        renderItem={({ item: group }) => (
+          <View style={styles.categorySection}>
+            {/* Category Header */}
+            <View style={[styles.categoryHeaderRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+              <Ionicons name="folder-open-outline" size={16} color={Colors.primary} />
+              <Text style={styles.categoryHeaderTitle}>{group.categoryName}</Text>
+              <View style={styles.categoryHeaderLine} />
+            </View>
+
+            {/* Items inside this category */}
+            {group.items.map(item => (
+              <View key={item.id} style={[styles.productCard, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                {/* Image */}
+                <View style={styles.imageWrapper}>
+                  {item.image_url ? (
+                    <Image
+                      source={{ uri: resolveImageUrl(item.image_url) }}
+                      style={styles.productImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={styles.placeholderIconWrapper}>
+                      <Ionicons name="cube-outline" size={20} color={Colors.textMuted} />
+                    </View>
+                  )}
+                </View>
+
+                {/* Details */}
+                <View style={[styles.productDetails, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
+                  <Text style={styles.productName} numberOfLines={1}>{item.name}</Text>
+                  
+                  <View style={[styles.badgeRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                    {/* Priority Alert Badge */}
+                    <View style={[styles.priorityBadge, { borderColor: getPriorityColor(item.stock_count) }]}>
+                      <Text style={[styles.priorityBadgeText, { color: getPriorityColor(item.stock_count) }]}>
+                        {getPriorityText(item.stock_count)}
+                      </Text>
+                    </View>
+                    <Text style={styles.stockCountLabel}>
+                      {isAr ? `الكمية الحالية: ${item.stock_count}` : `Qty Remaining: ${item.stock_count}`}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Replenish Action Trigger */}
+                <TouchableOpacity
+                  style={styles.replenishBtn}
+                  onPress={() => handleOpenReplenish(item)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="add" size={16} color="#FFF" />
+                  <Text style={styles.replenishBtnText}>{isAr ? 'تعبئة' : 'Replenish'}</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIconBg}>
+              <Ionicons name="checkmark-circle-outline" size={44} color={Colors.success} />
+            </View>
+            <Text style={styles.emptyText}>
+              {isAr
+                ? 'رائع! لا توجد منتجات أوشكت على النفاذ في متجرك حالياً.'
+                : 'Excellent! No items are currently running low or out of stock.'}
+            </Text>
+          </View>
+        }
+      />
+
+      {/* Quick Replenish Modal */}
+      <Modal
+        visible={replenishModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setReplenishModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ width: '100%' }}
+          >
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+              <View style={styles.modalContent}>
+                {/* Modal Notch Header */}
+                <View style={styles.notchWrapper}>
+                  <View style={styles.notch} />
+                </View>
+
+                {selectedProduct && (
+                  <View style={{ width: '100%' }}>
+                    {/* Header */}
+                    <View style={[styles.modalHeader, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                      <Text style={styles.modalTitle}>{isAr ? 'شحن المخزون السريع' : 'Quick Stock Replenish'}</Text>
+                      {keyboardVisible && (
+                        <TouchableOpacity
+                          onPress={() => Keyboard.dismiss()}
+                          style={styles.keyboardDismissBtn}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="keypad-outline" size={16} color={Colors.primary} />
+                          <Text style={styles.keyboardDismissText}>{isAr ? 'تم' : 'Done'}</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+
+                    {/* Product Summary */}
+                    <View style={[styles.productModalSummary, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                      <View style={styles.modalThumbWrapper}>
+                        {selectedProduct.image_url ? (
+                          <Image
+                            source={{ uri: resolveImageUrl(selectedProduct.image_url) }}
+                            style={styles.modalThumb}
+                          />
+                        ) : (
+                          <View style={styles.placeholderIconWrapper}>
+                            <Ionicons name="cube-outline" size={18} color={Colors.textMuted} />
+                          </View>
+                        )}
+                      </View>
+                      <View style={[styles.modalTextWrapper, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
+                        <Text style={styles.modalItemName} numberOfLines={1}>{selectedProduct.name}</Text>
+                        <Text style={styles.modalItemSub}>
+                          {isAr 
+                            ? `المخزون الحالي: ${selectedProduct.stock_count} قطع` 
+                            : `Current Stock Count: ${selectedProduct.stock_count}`}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Incrementor Fields */}
+                    <Text style={[styles.inputLabel, { textAlign: isAr ? 'right' : 'left' }]}>
+                      {isAr ? 'الكمية المراد إضافتها للمخزون' : 'Add Stock Quantity'}
+                    </Text>
+
+                    <View style={[styles.adjusterRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                      <TouchableOpacity style={styles.adjusterBtn} onPress={() => adjustReplenishQty(-5)} activeOpacity={0.7}>
+                        <Text style={styles.adjusterBtnText}>-5</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.adjusterBtn} onPress={() => adjustReplenishQty(-1)} activeOpacity={0.7}>
+                        <Ionicons name="remove" size={20} color={Colors.textPrimary} />
+                      </TouchableOpacity>
+                      <TextInput
+                        style={styles.adjusterInput}
+                        keyboardType="number-pad"
+                        value={replenishCount}
+                        onChangeText={setReplenishCount}
+                        textAlign="center"
+                      />
+                      <TouchableOpacity style={styles.adjusterBtn} onPress={() => adjustReplenishQty(1)} activeOpacity={0.7}>
+                        <Ionicons name="add" size={20} color={Colors.textPrimary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.adjusterBtn} onPress={() => adjustReplenishQty(5)} activeOpacity={0.7}>
+                        <Text style={styles.adjusterBtnText}>+5</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Action buttons */}
+                    <View style={styles.modalActions}>
+                      <TouchableOpacity
+                        style={[styles.modalBtn, styles.modalBtnCancel]}
+                        onPress={() => { setReplenishModalVisible(false); setSelectedProduct(null); }}
+                        disabled={savingReplenish}
+                      >
+                        <Text style={styles.modalBtnTextCancel}>{isAr ? 'إلغاء' : 'Cancel'}</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.modalBtn, styles.modalBtnSave]}
+                        onPress={handleSaveReplenish}
+                        disabled={savingReplenish}
+                      >
+                        {savingReplenish ? (
+                          <ActivityIndicator color={Colors.textOnPrimary} />
+                        ) : (
+                          <>
+                            <Ionicons name="cube-outline" size={16} color="#FFF" style={{ marginRight: 6 }} />
+                            <Text style={styles.modalBtnTextSave}>{isAr ? 'تأكيد الشحن' : 'Replenish'}</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </View>
+            </TouchableWithoutFeedback>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}

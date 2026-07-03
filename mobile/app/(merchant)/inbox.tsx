@@ -1,14 +1,16 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getChatSessions, getChatMessages, sendChatMessage, getUser, ChatSession, ChatMessage } from '../../services/api';
-import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../../constants/theme';
+import { Spacing, Typography, BorderRadius, Shadows } from '../../constants/theme';
+import { useThemeColors } from '../../context/ThemeContext';
 import { t } from '../../services/i18n';
 
 export default function MerchantInboxScreen() {
   const router = useRouter();
+  const Colors = useThemeColors();
   const { sessionId: querySessionId } = useLocalSearchParams<{ sessionId?: string }>();
   
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -163,97 +165,7 @@ export default function MerchantInboxScreen() {
 
   // ── Render Unified View ────────────────────────────────────────
 
-  if (selectedSession) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        {/* Chat Thread Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleBackToInbox} style={styles.backBtn} activeOpacity={0.7}>
-            <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
-          </TouchableOpacity>
-          <Text style={styles.title} numberOfLines={1}>{selectedSession.partner_name || t('inbox.chat_with_customer', 'Chat with Customer')}</Text>
-          <View style={{ width: 40 }} />
-        </View>
-
-        <KeyboardAvoidingView 
-          style={{ flex: 1 }} 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          {loadingMessages ? (
-            <View style={styles.center}>
-              <ActivityIndicator size="large" color={Colors.primary} />
-            </View>
-          ) : (
-            <FlatList
-              ref={flatListRef}
-              data={messages}
-              keyExtractor={item => item.id}
-              renderItem={renderMessageBubble}
-              contentContainerStyle={styles.listContent}
-              onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-              onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
-            />
-          )}
-
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              value={inputText}
-              onChangeText={setInputText}
-              placeholder={t('inbox.type_message')}
-              placeholderTextColor={Colors.textMuted}
-              multiline
-            />
-            <TouchableOpacity 
-              style={[styles.sendBtn, !inputText.trim() && styles.sendBtnDisabled]} 
-              onPress={handleSend}
-              disabled={!inputText.trim() || sending}
-              activeOpacity={0.7}
-            >
-              {sending ? (
-                <ActivityIndicator size="small" color="#FFF" />
-              ) : (
-                <Ionicons name="send" size={20} color="#FFF" />
-              )}
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    );
-  }
-
-  // ── Inbox List View ──
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.inboxHeader}>
-        <Text style={styles.inboxTitle}>{t('inbox.title')}</Text>
-      </View>
-
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-        </View>
-      ) : sessions.length === 0 ? (
-        <View style={styles.center}>
-          <View style={styles.emptyIconCircle}>
-            <Ionicons name="mail-outline" size={36} color={Colors.textMuted} />
-          </View>
-          <Text style={styles.emptyText}>{t('inbox.empty')}</Text>
-          <Text style={styles.emptySubtext}>{t('inbox.empty_desc')}</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={sessions}
-          keyExtractor={(item) => item.id}
-          renderItem={renderSessionCard}
-          contentContainerStyle={styles.listContent}
-        />
-      )}
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
+  const styles = useMemo(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
     flexDirection: 'row',
@@ -393,4 +305,94 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceElevated,
     opacity: 0.5,
   },
-});
+}), [Colors]);
+
+  if (selectedSession) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        {/* Chat Thread Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBackToInbox} style={styles.backBtn} activeOpacity={0.7}>
+            <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
+          </TouchableOpacity>
+          <Text style={styles.title} numberOfLines={1}>{selectedSession.partner_name || t('inbox.chat_with_customer', 'Chat with Customer')}</Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <KeyboardAvoidingView 
+          style={{ flex: 1 }} 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          {loadingMessages ? (
+            <View style={styles.center}>
+              <ActivityIndicator size="large" color={Colors.primary} />
+            </View>
+          ) : (
+            <FlatList
+              ref={flatListRef}
+              data={messages}
+              keyExtractor={item => item.id}
+              renderItem={renderMessageBubble}
+              contentContainerStyle={styles.listContent}
+              onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+              onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
+            />
+          )}
+
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.input}
+              value={inputText}
+              onChangeText={setInputText}
+              placeholder={t('inbox.type_message')}
+              placeholderTextColor={Colors.textMuted}
+              multiline
+            />
+            <TouchableOpacity 
+              style={[styles.sendBtn, !inputText.trim() && styles.sendBtnDisabled]} 
+              onPress={handleSend}
+              disabled={!inputText.trim() || sending}
+              activeOpacity={0.7}
+            >
+              {sending ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <Ionicons name="send" size={20} color="#FFF" />
+              )}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Inbox List View ──
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.inboxHeader}>
+        <Text style={styles.inboxTitle}>{t('inbox.title')}</Text>
+      </View>
+
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      ) : sessions.length === 0 ? (
+        <View style={styles.center}>
+          <View style={styles.emptyIconCircle}>
+            <Ionicons name="mail-outline" size={36} color={Colors.textMuted} />
+          </View>
+          <Text style={styles.emptyText}>{t('inbox.empty')}</Text>
+          <Text style={styles.emptySubtext}>{t('inbox.empty_desc')}</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={sessions}
+          keyExtractor={(item) => item.id}
+          renderItem={renderSessionCard}
+          contentContainerStyle={styles.listContent}
+        />
+      )}
+    </SafeAreaView>
+  );
+}

@@ -4,7 +4,7 @@
  * Includes a real-time 60-second countdown timer for resends.
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, Alert, ActivityIndicator
@@ -12,10 +12,163 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { verifyCode } from '../../services/api';
-import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { useThemeColors } from '../../context/ThemeContext';
 import { t } from '../../services/i18n';
 
 export default function VerifyScreen() {
+  const Colors = useThemeColors();
+
+  const styles = useMemo(() => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.xl,
+  },
+  glowOrb1: {
+    position: 'absolute',
+    top: '15%',
+    left: '-20%',
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    backgroundColor: Colors.secondary,
+    opacity: 0.05,
+  },
+  glowOrb2: {
+    position: 'absolute',
+    bottom: '15%',
+    right: '-15%',
+    width: 250,
+    height: 250,
+    borderRadius: 125,
+    backgroundColor: Colors.primary,
+    opacity: 0.04,
+  },
+  backButton: {
+    position: 'absolute',
+    top: 60,
+    left: Spacing.xl,
+    padding: Spacing.sm,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: Spacing.xxl,
+  },
+  iconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Colors.surfaceElevated,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+    ...Shadows.glow,
+  },
+  title: {
+    ...Typography.h1,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.xs,
+  },
+  subtitle: {
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+  },
+  contactText: {
+    ...Typography.body,
+    fontWeight: '700',
+    color: Colors.secondary,
+    marginTop: Spacing.xs,
+  },
+  card: {
+    backgroundColor: Colors.surfaceGlass,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    ...Shadows.medium,
+  },
+  boxesContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.xl,
+    width: '100%',
+  },
+  box: {
+    width: 44,
+    height: 52,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  boxFilled: {
+    borderColor: 'rgba(108, 99, 255, 0.4)',
+  },
+  boxFocused: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.surfaceElevated,
+    ...Shadows.small,
+  },
+  boxText: {
+    ...Typography.h2,
+    color: Colors.textPrimary,
+  },
+  cursor: {
+    position: 'absolute',
+    width: 2,
+    height: 20,
+    backgroundColor: Colors.primary,
+  },
+  hiddenInput: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    opacity: 0,
+  },
+  button: {
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.md,
+    height: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: Spacing.lg,
+    ...Shadows.small,
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  buttonText: {
+    ...Typography.button,
+    color: Colors.textOnPrimary,
+  },
+  resendContainer: {
+    marginTop: Spacing.xl,
+    alignItems: 'center',
+  },
+  timerText: {
+    ...Typography.bodySmall,
+    color: Colors.textMuted,
+  },
+  timerCount: {
+    color: Colors.secondary,
+    fontWeight: '700',
+  },
+  resendText: {
+    ...Typography.bodySmall,
+    color: Colors.primary,
+    fontWeight: '700',
+  },
+  }), [Colors]);
   const router = useRouter();
   const params = useLocalSearchParams();
   
@@ -215,155 +368,5 @@ export default function VerifyScreen() {
       </View>
     </KeyboardAvoidingView>
   );
-}
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.xl,
-  },
-  glowOrb1: {
-    position: 'absolute',
-    top: '15%',
-    left: '-20%',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: Colors.secondary,
-    opacity: 0.05,
-  },
-  glowOrb2: {
-    position: 'absolute',
-    bottom: '15%',
-    right: '-15%',
-    width: 250,
-    height: 250,
-    borderRadius: 125,
-    backgroundColor: Colors.primary,
-    opacity: 0.04,
-  },
-  backButton: {
-    position: 'absolute',
-    top: 60,
-    left: Spacing.xl,
-    padding: Spacing.sm,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: BorderRadius.full,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: Spacing.xxl,
-  },
-  iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: Colors.surfaceElevated,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: Spacing.lg,
-    ...Shadows.glow,
-  },
-  title: {
-    ...Typography.h1,
-    color: Colors.textPrimary,
-    marginBottom: Spacing.xs,
-  },
-  subtitle: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-  },
-  contactText: {
-    ...Typography.body,
-    fontWeight: '700',
-    color: Colors.secondary,
-    marginTop: Spacing.xs,
-  },
-  card: {
-    backgroundColor: Colors.surfaceGlass,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.xl,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    ...Shadows.medium,
-  },
-  boxesContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: Spacing.xl,
-    width: '100%',
-  },
-  box: {
-    width: 44,
-    height: 52,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  boxFilled: {
-    borderColor: 'rgba(108, 99, 255, 0.4)',
-  },
-  boxFocused: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.surfaceElevated,
-    ...Shadows.small,
-  },
-  boxText: {
-    ...Typography.h2,
-    color: Colors.textPrimary,
-  },
-  cursor: {
-    position: 'absolute',
-    width: 2,
-    height: 20,
-    backgroundColor: Colors.primary,
-  },
-  hiddenInput: {
-    position: 'absolute',
-    width: 1,
-    height: 1,
-    opacity: 0,
-  },
-  button: {
-    backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.md,
-    height: 52,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: Spacing.lg,
-    ...Shadows.small,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    ...Typography.button,
-    color: Colors.textOnPrimary,
-  },
-  resendContainer: {
-    marginTop: Spacing.xl,
-    alignItems: 'center',
-  },
-  timerText: {
-    ...Typography.bodySmall,
-    color: Colors.textMuted,
-  },
-  timerCount: {
-    color: Colors.secondary,
-    fontWeight: '700',
-  },
-  resendText: {
-    ...Typography.bodySmall,
-    color: Colors.primary,
-    fontWeight: '700',
-  },
-});
+}

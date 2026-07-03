@@ -1,94 +1,22 @@
 /**
  * Lamba Design System — Theme Constants
  *
- * Premium dark-first theme with vibrant accents.
- * All colors, spacing, typography, and shadows defined here.
+ * Static design tokens (spacing, typography, border radii, shadows) that do not
+ * change with the color scheme. The dynamic color palettes live in
+ * `./palettes.ts` and are consumed via `ThemeContext`.
  *
- * Color discipline (from seller-side spec):
- * - Purple (#6C63FF): barcode scanner UI, catalog actions, selected states
- * - Teal-green (#00D68F): CTAs, active nav, prices, success, bottom nav active
- * - Red (#E53935): destructive actions, out-of-stock, closed badges, errors
- * - Orange (#FF6B35): critical stock
- * - Amber (#FFA726): low stock warning
- * - White (#FFFFFF): primary text
- * - #B0B3C6: secondary/body text
- * - #7A7D9C: muted/caption text, section labels
- * - #5A5E7A: disabled/version text, inactive nav icons
- * - #1A1D3A: elevated surfaces, chips, input backgrounds
- * - #12142A: card backgrounds
- * - #0A0B14: page background
+ * For backward compatibility, `Colors` re-exports the dark palette so that
+ * any module still importing it compiles — but new code should use
+ * `useThemeColors()` from `../context/ThemeContext` for live switching.
  */
 
-export const Colors = {
-  // ── Core Backgrounds ───────────────────────────────────
-  background: '#0A0B14',       // Page background
-  surface: '#12142A',          // Card backgrounds
-  surfaceElevated: '#1A1D3A',  // Elevated cards, chips, input backgrounds
-  surfaceGlass: 'rgba(18, 20, 42, 0.85)',
+import { darkColors, type ColorsType, type ColorScheme } from './palettes';
 
-  // ── Accent ─────────────────────────────────────────────
-  primary: '#6C63FF',          // Vibrant purple — scanner, catalog, selected
-  primaryLight: '#8B83FF',
-  primaryDark: '#4A42DB',
-  secondary: '#00D68F',        // Teal-green — CTAs, active states, success
-  secondaryLight: '#33E4AB',
-  accent: '#FF6B9D',           // Coral pink (decorative)
+export { darkColors, lightColors, getColors } from './palettes';
+export type { ColorsType, ColorScheme } from './palettes';
 
-  // ── Text ───────────────────────────────────────────────
-  textPrimary: '#FFFFFF',      // Primary text — white
-  textSecondary: '#B0B3C6',    // Secondary/body text
-  textMuted: '#7A7D9C',        // Muted — section labels, captions
-  textDark: '#5A5E7A',         // Disabled/version text, inactive nav
-  textOnPrimary: '#FFFFFF',    // Text on primary buttons
-
-  // ── Status ─────────────────────────────────────────────
-  success: '#00D68F',          // Aligned to teal-green CTA
-  warning: '#FFA726',          // Amber — low stock
-  error: '#E53935',            // Red — destructive/out-of-stock
-  critical: '#FF6B35',         // Orange — critical stock
-  inStock: '#00D68F',          // Green dot
-  outOfStock: '#E53935',       // Red dot
-
-  // ── Status Backgrounds & Borders ───────────────────────
-  successBg: 'rgba(0, 214, 143, 0.12)',
-  successBorder: 'rgba(0, 214, 143, 0.4)',
-  errorBg: 'rgba(229, 57, 53, 0.08)',
-  errorBorder: 'rgba(229, 57, 53, 0.2)',
-  warningBg: 'rgba(255, 167, 38, 0.1)',
-  warningBorder: 'rgba(255, 167, 38, 0.25)',
-  criticalBg: 'rgba(255, 107, 53, 0.15)',
-  criticalBorder: 'rgba(255, 107, 53, 0.3)',
-
-  // ── Toggle States ──────────────────────────────────────
-  toggleStockActive: '#6C63FF',    // In-stock toggle ON track
-  toggleOfferActive: '#00D68F',    // Offer active toggle ON track
-  toggleInactive: '#2A2D4A',       // Toggle OFF track
-
-  // ── Tab Bar ────────────────────────────────────────────
-  tabActive: '#00D68F',        // Bottom nav active tint
-  tabInactive: '#5A5E7A',     // Bottom nav inactive tint
-
-  // ── Interactive Pills ──────────────────────────────────
-  ratePillBg: 'rgba(255, 176, 0, 0.1)',
-  ratePillBorder: '#FFB000',
-  ratePillText: '#FFB000',
-  chatPillBg: 'rgba(108, 99, 255, 0.15)',
-  chatPillBorder: 'rgba(108, 99, 255, 0.3)',
-
-  // ── Borders & Dividers ─────────────────────────────────
-  border: '#1E2040',
-  divider: '#1E2040',
-
-  // ── Map ────────────────────────────────────────────────
-  mapOverlay: 'rgba(10, 11, 20, 0.6)',
-
-  // ── Review Cards ───────────────────────────────────────
-  surfaceReview: 'rgba(255,255,255,0.015)',
-  surfaceReviewBorder: 'rgba(255,255,255,0.04)',
-
-  // ── Overlay ────────────────────────────────────────────
-  modalOverlay: 'rgba(10, 11, 20, 0.65)',
-} as const;
+/** @deprecated Use `useThemeColors()` from context/ThemeContext for live switching. */
+export const Colors: ColorsType = darkColors;
 
 export const Spacing = {
   xs: 4,
@@ -135,33 +63,67 @@ export const Typography = {
   muted: { fontSize: 12, fontWeight: '400' as const, lineHeight: 16 },
 } as const;
 
-export const Shadows = {
-  small: {
+export type ShadowKey = 'small' | 'medium' | 'large' | 'glow';
+
+export interface ShadowToken {
+  shadowColor: string;
+  shadowOffset: { width: number; height: number };
+  shadowOpacity: number;
+  shadowRadius: number;
+  elevation: number;
+}
+
+export const Shadows: Record<ShadowKey, ShadowToken> = {
+  small: buildShadow(0, 2, 0.14, 4, 3),
+  medium: buildShadow(0, 4, 0.18, 8, 6),
+  large: buildShadowGlow('#6C63FF', 0, 6, 0.2, 16, 10),
+  glow: buildShadowGlow('#6C63FF', 0, 0, 0.4, 20, 8),
+};
+
+function buildShadow(
+  offsetX: number,
+  offsetY: number,
+  opacity: number,
+  radius: number,
+  elevation: number,
+): ShadowToken {
+  return {
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  medium: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  large: {
-    shadowColor: '#6C63FF',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 10,
-  },
-  glow: {
-    shadowColor: '#6C63FF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 8,
-  },
-} as const;
+    shadowOffset: { width: offsetX, height: offsetY },
+    shadowOpacity: opacity,
+    shadowRadius: radius,
+    elevation,
+  };
+}
+
+function buildShadowGlow(
+  color: string,
+  offsetX: number,
+  offsetY: number,
+  opacity: number,
+  radius: number,
+  elevation: number,
+): ShadowToken {
+  return {
+    shadowColor: color,
+    shadowOffset: { width: offsetX, height: offsetY },
+    shadowOpacity: opacity,
+    shadowRadius: radius,
+    elevation,
+  };
+}
+
+/**
+ * Resolve shadow tokens for a given scheme. Light mode uses the same purple
+ * `glow` for the brand element but reduces base shadow opacities so cards
+ * stay readable against light backgrounds.
+ */
+export function getShadows(scheme: ColorScheme) {
+  const baseOpacityMul = scheme === 'dark' ? 1 : 0.5;
+  return {
+    small: buildShadow(0, 2, 0.14 * baseOpacityMul, 4, 3),
+    medium: buildShadow(0, 4, 0.18 * baseOpacityMul, 8, 6),
+    large: buildShadowGlow('#6C63FF', 0, 6, 0.2 * baseOpacityMul, 16, 10),
+    glow: buildShadowGlow('#6C63FF', 0, 0, 0.4 * baseOpacityMul, 20, 8),
+  };
+}

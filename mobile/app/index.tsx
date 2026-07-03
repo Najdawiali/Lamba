@@ -6,9 +6,10 @@ import { useEffect, useState } from 'react';
 import { Redirect } from 'expo-router';
 import { View, ActivityIndicator } from 'react-native';
 import { getToken, getUser } from '../services/api';
-import { Colors } from '../constants/theme';
+import { useThemeColors } from '../context/ThemeContext';
 
 export default function Index() {
+  const Colors = useThemeColors();
   const [loading, setLoading] = useState(true);
   const [isAuthed, setIsAuthed] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);

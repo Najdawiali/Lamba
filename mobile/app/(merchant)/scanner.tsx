@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
   Alert, TextInput, Animated, Vibration, Platform, Dimensions, Image, FlatList, ScrollView, Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, Modal
@@ -7,7 +7,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
 import {
   lookupItemByBarcode,
@@ -36,6 +37,668 @@ interface CartItem {
 
 export default function BarcodeScannerScreen() {
   const router = useRouter();
+  const Colors = useThemeColors();
+
+const styles = useMemo(() => StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#000' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
+  
+  // Real-time HUD banner overlay
+  hudOverlay: {
+    position: 'absolute',
+    top: 130,
+    left: Spacing.xl,
+    right: Spacing.xl,
+    backgroundColor: 'rgba(10, 200, 100, 0.95)',
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    zIndex: 10,
+    ...Shadows.medium
+  },
+  hudText: {
+    ...Typography.bodySmall,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+
+  // Viewfinder Overlay Background Styling
+  overlayBackground: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'space-between',
+  },
+  overlayTop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center',
+  },
+  headerSafeArea: { width: '100%' },
+  headerOverlay: {
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  headerBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+
+  // Segmented Mode tabs control
+  modeSegment: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: BorderRadius.md,
+    padding: 2,
+    flex: 1,
+    marginHorizontal: Spacing.md,
+  },
+  modeTab: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: BorderRadius.sm,
+  },
+  modeTabActive: {
+    backgroundColor: Colors.primary,
+  },
+  modeTabText: {
+    ...Typography.caption,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.7)',
+  },
+  modeTabTextActive: {
+    color: '#FFF',
+  },
+
+  // Viewfinder Middle Row
+  overlayMid: {
+    flexDirection: 'row',
+    height: VIEWFINDER_SIZE,
+  },
+  overlaySide: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+  },
+  viewfinder: {
+    width: VIEWFINDER_SIZE,
+    height: VIEWFINDER_SIZE,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  
+  // Viewfinder Corners
+  corner: {
+    position: 'absolute',
+    width: 24,
+    height: 24,
+    borderColor: Colors.primary,
+  },
+  cornerTL: { top: 0, left: 0, borderTopWidth: 4, borderLeftWidth: 4, borderTopLeftRadius: 12 },
+  cornerTR: { top: 0, right: 0, borderTopWidth: 4, borderRightWidth: 4, borderTopRightRadius: 12 },
+  cornerBL: { bottom: 0, left: 0, borderBottomWidth: 4, borderLeftWidth: 4, borderBottomLeftRadius: 12 },
+  cornerBR: { bottom: 0, right: 0, borderBottomWidth: 4, borderRightWidth: 4, borderBottomRightRadius: 12 },
+
+  scannerLine: {
+    position: 'absolute',
+    left: 2,
+    right: 2,
+    height: 3,
+    backgroundColor: Colors.secondary,
+    shadowColor: Colors.secondary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+
+  overlayBottom: {
+    flex: 1.5,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    paddingTop: Spacing.xl,
+  },
+  helperText: {
+    ...Typography.bodySmall,
+    color: 'rgba(255,255,255,0.6)',
+    textAlign: 'center',
+    paddingHorizontal: Spacing.xl,
+  },
+
+  // POS Bottom Summary Bar Styling
+  summaryBar: {
+    position: 'absolute',
+    bottom: 30,
+    left: Spacing.lg,
+    right: Spacing.lg,
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.lg,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.lg,
+    ...Shadows.large,
+    zIndex: 9,
+  },
+  summaryInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  cartCountBadge: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    minWidth: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  cartCountText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.primary,
+  },
+  summaryLabel: {
+    ...Typography.body,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+  summaryAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  summaryTotal: {
+    ...Typography.h3,
+    color: '#FFF',
+  },
+
+  // Glassmorphic Drawer
+  drawerContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(10, 10, 26, 0.95)',
+    borderTopLeftRadius: BorderRadius.xl,
+    borderTopRightRadius: BorderRadius.xl,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    paddingBottom: Spacing.xl,
+    zIndex: 11,
+    ...Shadows.large,
+  },
+  drawerContent: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
+    alignItems: 'center',
+  },
+  notchWrapper: {
+    width: '100%',
+    alignItems: 'center',
+    paddingVertical: Spacing.xs,
+    marginBottom: Spacing.sm,
+  },
+  notch: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+
+  loadingWrapper: {
+    paddingVertical: Spacing.xxl,
+    alignItems: 'center',
+  },
+  loadingText: {
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
+    marginTop: Spacing.md,
+  },
+
+  // Single Item details summary card (Inventory Mode)
+  itemSummaryCard: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    width: '100%',
+    marginBottom: Spacing.md,
+  },
+  thumbWrapper: {
+    width: 60,
+    height: 60,
+    borderRadius: BorderRadius.sm,
+    overflow: 'hidden',
+    backgroundColor: Colors.surface,
+  },
+  thumbnail: {
+    width: '100%',
+    height: '100%',
+  },
+  placeholderIcon: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  summaryText: {
+    flex: 1,
+    marginHorizontal: Spacing.md,
+  },
+  itemName: {
+    ...Typography.body,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  itemCategory: {
+    ...Typography.caption,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: Spacing.xs,
+    gap: 8,
+  },
+  badge: {
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: BorderRadius.sm,
+  },
+  badgeSuccess: { backgroundColor: 'rgba(0, 217, 126, 0.12)' },
+  badgeInfo: { backgroundColor: 'rgba(108, 99, 255, 0.12)' },
+  badgeText: { fontSize: 10, fontWeight: '700' },
+  badgeTextSuccess: { color: Colors.success },
+  badgeTextInfo: { color: Colors.primary },
+  barcodeText: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+  },
+
+  // Configuration stock adjusters
+  formContainer: {
+    width: '100%',
+  },
+  formRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  inputLabel: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.xs,
+  },
+  adjusterRow: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    height: 48,
+    paddingHorizontal: Spacing.xs,
+  },
+  adjusterBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  adjusterInput: {
+    flex: 1,
+    color: Colors.textPrimary,
+    ...Typography.body,
+    fontWeight: '700',
+  },
+  priceInputWrapper: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    height: 48,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.md,
+  },
+  priceInput: {
+    color: Colors.textPrimary,
+    ...Typography.body,
+    fontWeight: '700',
+  },
+
+  actionButtons: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    width: '100%',
+  },
+  btn: {
+    height: 48,
+    borderRadius: BorderRadius.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  btnCancel: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  btnSubmit: {
+    flex: 2,
+    backgroundColor: Colors.primary,
+    ...Shadows.small,
+  },
+  btnTextCancel: {
+    ...Typography.button,
+    color: Colors.textSecondary,
+  },
+  btnTextSubmit: {
+    ...Typography.button,
+    color: '#FFF',
+    fontWeight: '700',
+  },
+
+  // Unregistered alert layout
+  unregisteredContainer: {
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    width: '100%',
+  },
+  alertIconBg: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255, 77, 106, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  unregisteredTitle: {
+    ...Typography.h2,
+    color: Colors.error,
+    marginBottom: Spacing.sm,
+  },
+  unregisteredDesc: {
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    paddingHorizontal: Spacing.md,
+    marginBottom: Spacing.lg,
+    lineHeight: 18,
+  },
+
+  // ── POS Transaction styles ──
+  posHeader: {
+    flexDirection: 'row',
+    width: '100%',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
+    paddingBottom: Spacing.sm,
+  },
+  posTitle: {
+    ...Typography.h3,
+    color: Colors.textPrimary,
+  },
+  posClearText: {
+    ...Typography.bodySmall,
+    color: Colors.error,
+    fontWeight: '600',
+  },
+  cartList: {
+    width: '100%',
+    maxHeight: 220,
+  },
+  cartItemRow: {
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.03)',
+    width: '100%',
+  },
+  cartItemText: {
+    flex: 1,
+    marginRight: Spacing.md,
+  },
+  cartItemName: {
+    ...Typography.bodySmall,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  cartItemSub: {
+    ...Typography.caption,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  cartItemActions: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  cartQtyBtn: {
+    padding: 4,
+  },
+  cartQtyVal: {
+    color: Colors.textPrimary,
+    fontWeight: '700',
+    minWidth: 20,
+    textAlign: 'center',
+  },
+  cartDeleteBtn: {
+    padding: 4,
+    marginLeft: 8,
+  },
+  receiptSummary: {
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.02)',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginVertical: Spacing.md,
+  },
+  receiptRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 2,
+  },
+  receiptLabel: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+  },
+  receiptValue: {
+    ...Typography.caption,
+    color: Colors.textPrimary,
+    fontWeight: '600',
+  },
+  receiptRowDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    marginVertical: Spacing.xs,
+  },
+  receiptRowTotal: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+  receiptTotalLabel: {
+    ...Typography.bodySmall,
+    color: Colors.textPrimary,
+    fontWeight: '700',
+  },
+  receiptTotalValue: {
+    ...Typography.h3,
+    color: Colors.secondary,
+  },
+
+  permissionContainer: { flex: 1, backgroundColor: Colors.background, justifyContent: 'center' },
+  permissionContent: { alignItems: 'center', padding: Spacing.xxl },
+  permissionIconWrapper: {
+    width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(108, 99, 255, 0.1)',
+    justifyContent: 'center', alignItems: 'center', marginBottom: Spacing.xl,
+  },
+  permissionTitle: { ...Typography.h2, color: Colors.textPrimary, marginBottom: Spacing.md },
+  permissionSubtitle: {
+    ...Typography.body, color: Colors.textSecondary, textAlign: 'center',
+    lineHeight: 20, marginBottom: Spacing.xxl,
+  },
+  permissionBtn: {
+    backgroundColor: Colors.primary, borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.md, paddingHorizontal: Spacing.xxl, ...Shadows.small,
+  },
+  permissionBtnText: { ...Typography.button, color: Colors.textOnPrimary },
+  keyboardDismissBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(108, 99, 255, 0.15)',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(108, 99, 255, 0.3)',
+  },
+  keyboardDismissText: {
+    ...Typography.caption,
+    fontWeight: '700',
+    color: Colors.primary,
+  },
+  receiptScreenContainer: {
+    flex: 1,
+    backgroundColor: '#0a0a1a',
+    padding: Spacing.lg,
+  },
+  receiptScreenHeader: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xl,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  receiptSuccessIconWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(0, 217, 126, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  receiptScreenTitle: {
+    ...Typography.h2,
+    color: '#FFF',
+    fontWeight: '800',
+  },
+  receiptScreenSubtitle: {
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 6,
+    paddingHorizontal: Spacing.xl,
+  },
+  receiptScreenDate: {
+    ...Typography.caption,
+    color: Colors.textMuted,
+    marginTop: Spacing.sm,
+  },
+  receiptScreenBody: {
+    flex: 1,
+    marginVertical: Spacing.lg,
+  },
+  receiptBodySectionTitle: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: Spacing.sm,
+  },
+  receiptScreenDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    marginVertical: Spacing.xs,
+  },
+  receiptItemDetailsRow: {
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.03)',
+  },
+  receiptItemDetailsName: {
+    ...Typography.bodySmall,
+    color: '#FFF',
+    fontWeight: '700',
+  },
+  receiptItemDetailsSub: {
+    ...Typography.caption,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  receiptItemDetailsSubtotal: {
+    ...Typography.body,
+    color: '#FFF',
+    fontWeight: '700',
+  },
+  receiptScreenFooter: {
+    paddingBottom: Spacing.xl,
+  },
+  receiptScreenTotalRow: {
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+  },
+  receiptScreenTotalLabel: {
+    ...Typography.body,
+    color: Colors.textSecondary,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  receiptScreenTotalValue: {
+    ...Typography.h1,
+    color: Colors.secondary,
+    fontWeight: '800',
+  },
+  receiptScreenThanksText: {
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    fontStyle: 'italic',
+    marginVertical: Spacing.lg,
+  },
+  receiptScreenCloseBtn: {
+    height: 52,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.primary,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Shadows.medium,
+  },
+  receiptScreenCloseBtnText: {
+    ...Typography.button,
+    color: '#FFF',
+    fontWeight: '700',
+  },
+}), [Colors]);
+
+
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [torch, setTorch] = useState(false);
@@ -891,662 +1554,3 @@ export default function BarcodeScannerScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
-  
-  // Real-time HUD banner overlay
-  hudOverlay: {
-    position: 'absolute',
-    top: 130,
-    left: Spacing.xl,
-    right: Spacing.xl,
-    backgroundColor: 'rgba(10, 200, 100, 0.95)',
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    borderRadius: BorderRadius.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    zIndex: 10,
-    ...Shadows.medium
-  },
-  hudText: {
-    ...Typography.bodySmall,
-    fontWeight: '700',
-    color: '#FFF',
-  },
-
-  // Viewfinder Overlay Background Styling
-  overlayBackground: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'space-between',
-  },
-  overlayTop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    justifyContent: 'center',
-  },
-  headerSafeArea: { width: '100%' },
-  headerOverlay: {
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-  },
-  headerBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#FFF',
-  },
-
-  // Segmented Mode tabs control
-  modeSegment: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: BorderRadius.md,
-    padding: 2,
-    flex: 1,
-    marginHorizontal: Spacing.md,
-  },
-  modeTab: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: BorderRadius.sm,
-  },
-  modeTabActive: {
-    backgroundColor: Colors.primary,
-  },
-  modeTabText: {
-    ...Typography.caption,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.7)',
-  },
-  modeTabTextActive: {
-    color: '#FFF',
-  },
-
-  // Viewfinder Middle Row
-  overlayMid: {
-    flexDirection: 'row',
-    height: VIEWFINDER_SIZE,
-  },
-  overlaySide: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-  },
-  viewfinder: {
-    width: VIEWFINDER_SIZE,
-    height: VIEWFINDER_SIZE,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  
-  // Viewfinder Corners
-  corner: {
-    position: 'absolute',
-    width: 24,
-    height: 24,
-    borderColor: Colors.primary,
-  },
-  cornerTL: { top: 0, left: 0, borderTopWidth: 4, borderLeftWidth: 4, borderTopLeftRadius: 12 },
-  cornerTR: { top: 0, right: 0, borderTopWidth: 4, borderRightWidth: 4, borderTopRightRadius: 12 },
-  cornerBL: { bottom: 0, left: 0, borderBottomWidth: 4, borderLeftWidth: 4, borderBottomLeftRadius: 12 },
-  cornerBR: { bottom: 0, right: 0, borderBottomWidth: 4, borderRightWidth: 4, borderBottomRightRadius: 12 },
-
-  scannerLine: {
-    position: 'absolute',
-    left: 2,
-    right: 2,
-    height: 3,
-    backgroundColor: Colors.secondary,
-    shadowColor: Colors.secondary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-
-  overlayBottom: {
-    flex: 1.5,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    paddingTop: Spacing.xl,
-  },
-  helperText: {
-    ...Typography.bodySmall,
-    color: 'rgba(255,255,255,0.6)',
-    textAlign: 'center',
-    paddingHorizontal: Spacing.xl,
-  },
-
-  // POS Bottom Summary Bar Styling
-  summaryBar: {
-    position: 'absolute',
-    bottom: 30,
-    left: Spacing.lg,
-    right: Spacing.lg,
-    backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.lg,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: Spacing.lg,
-    ...Shadows.large,
-    zIndex: 9,
-  },
-  summaryInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  cartCountBadge: {
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    minWidth: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-  },
-  cartCountText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.primary,
-  },
-  summaryLabel: {
-    ...Typography.body,
-    fontWeight: '700',
-    color: '#FFF',
-  },
-  summaryAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  summaryTotal: {
-    ...Typography.h3,
-    color: '#FFF',
-  },
-
-  // Glassmorphic Drawer
-  drawerContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(10, 10, 26, 0.95)',
-    borderTopLeftRadius: BorderRadius.xl,
-    borderTopRightRadius: BorderRadius.xl,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-    paddingBottom: Spacing.xl,
-    zIndex: 11,
-    ...Shadows.large,
-  },
-  drawerContent: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.sm,
-    alignItems: 'center',
-  },
-  notchWrapper: {
-    width: '100%',
-    alignItems: 'center',
-    paddingVertical: Spacing.xs,
-    marginBottom: Spacing.sm,
-  },
-  notch: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-  },
-
-  loadingWrapper: {
-    paddingVertical: Spacing.xxl,
-    alignItems: 'center',
-  },
-  loadingText: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
-    marginTop: Spacing.md,
-  },
-
-  // Single Item details summary card (Inventory Mode)
-  itemSummaryCard: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    width: '100%',
-    marginBottom: Spacing.md,
-  },
-  thumbWrapper: {
-    width: 60,
-    height: 60,
-    borderRadius: BorderRadius.sm,
-    overflow: 'hidden',
-    backgroundColor: Colors.surface,
-  },
-  thumbnail: {
-    width: '100%',
-    height: '100%',
-  },
-  placeholderIcon: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  summaryText: {
-    flex: 1,
-    marginHorizontal: Spacing.md,
-  },
-  itemName: {
-    ...Typography.body,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  itemCategory: {
-    ...Typography.caption,
-    color: Colors.textMuted,
-    marginTop: 2,
-  },
-  badgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: Spacing.xs,
-    gap: 8,
-  },
-  badge: {
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-    borderRadius: BorderRadius.sm,
-  },
-  badgeSuccess: { backgroundColor: 'rgba(0, 217, 126, 0.12)' },
-  badgeInfo: { backgroundColor: 'rgba(108, 99, 255, 0.12)' },
-  badgeText: { fontSize: 10, fontWeight: '700' },
-  badgeTextSuccess: { color: Colors.success },
-  badgeTextInfo: { color: Colors.primary },
-  barcodeText: {
-    ...Typography.caption,
-    color: Colors.textSecondary,
-  },
-
-  // Configuration stock adjusters
-  formContainer: {
-    width: '100%',
-  },
-  formRow: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-    marginBottom: Spacing.lg,
-  },
-  inputLabel: {
-    ...Typography.caption,
-    color: Colors.textSecondary,
-    marginBottom: Spacing.xs,
-  },
-  adjusterRow: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-    height: 48,
-    paddingHorizontal: Spacing.xs,
-  },
-  adjusterBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  adjusterInput: {
-    flex: 1,
-    color: Colors.textPrimary,
-    ...Typography.body,
-    fontWeight: '700',
-  },
-  priceInputWrapper: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-    height: 48,
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.md,
-  },
-  priceInput: {
-    color: Colors.textPrimary,
-    ...Typography.body,
-    fontWeight: '700',
-  },
-
-  actionButtons: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    width: '100%',
-  },
-  btn: {
-    height: 48,
-    borderRadius: BorderRadius.md,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'row',
-  },
-  btnCancel: {
-    flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  btnSubmit: {
-    flex: 2,
-    backgroundColor: Colors.primary,
-    ...Shadows.small,
-  },
-  btnTextCancel: {
-    ...Typography.button,
-    color: Colors.textSecondary,
-  },
-  btnTextSubmit: {
-    ...Typography.button,
-    color: '#FFF',
-    fontWeight: '700',
-  },
-
-  // Unregistered alert layout
-  unregisteredContainer: {
-    alignItems: 'center',
-    paddingVertical: Spacing.md,
-    width: '100%',
-  },
-  alertIconBg: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(255, 77, 106, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-  },
-  unregisteredTitle: {
-    ...Typography.h2,
-    color: Colors.error,
-    marginBottom: Spacing.sm,
-  },
-  unregisteredDesc: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    paddingHorizontal: Spacing.md,
-    marginBottom: Spacing.lg,
-    lineHeight: 18,
-  },
-
-  // ── POS Transaction styles ──
-  posHeader: {
-    flexDirection: 'row',
-    width: '100%',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
-    paddingBottom: Spacing.sm,
-  },
-  posTitle: {
-    ...Typography.h3,
-    color: Colors.textPrimary,
-  },
-  posClearText: {
-    ...Typography.bodySmall,
-    color: Colors.error,
-    fontWeight: '600',
-  },
-  cartList: {
-    width: '100%',
-    maxHeight: 220,
-  },
-  cartItemRow: {
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: Spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.03)',
-    width: '100%',
-  },
-  cartItemText: {
-    flex: 1,
-    marginRight: Spacing.md,
-  },
-  cartItemName: {
-    ...Typography.bodySmall,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  cartItemSub: {
-    ...Typography.caption,
-    color: Colors.textMuted,
-    marginTop: 2,
-  },
-  cartItemActions: {
-    alignItems: 'center',
-    gap: 8,
-  },
-  cartQtyBtn: {
-    padding: 4,
-  },
-  cartQtyVal: {
-    color: Colors.textPrimary,
-    fontWeight: '700',
-    minWidth: 20,
-    textAlign: 'center',
-  },
-  cartDeleteBtn: {
-    padding: 4,
-    marginLeft: 8,
-  },
-  receiptSummary: {
-    width: '100%',
-    backgroundColor: 'rgba(255,255,255,0.02)',
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    marginVertical: Spacing.md,
-  },
-  receiptRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 2,
-  },
-  receiptLabel: {
-    ...Typography.caption,
-    color: Colors.textSecondary,
-  },
-  receiptValue: {
-    ...Typography.caption,
-    color: Colors.textPrimary,
-    fontWeight: '600',
-  },
-  receiptRowDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    marginVertical: Spacing.xs,
-  },
-  receiptRowTotal: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 2,
-  },
-  receiptTotalLabel: {
-    ...Typography.bodySmall,
-    color: Colors.textPrimary,
-    fontWeight: '700',
-  },
-  receiptTotalValue: {
-    ...Typography.h3,
-    color: Colors.secondary,
-  },
-
-  permissionContainer: { flex: 1, backgroundColor: Colors.background, justifyContent: 'center' },
-  permissionContent: { alignItems: 'center', padding: Spacing.xxl },
-  permissionIconWrapper: {
-    width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(108, 99, 255, 0.1)',
-    justifyContent: 'center', alignItems: 'center', marginBottom: Spacing.xl,
-  },
-  permissionTitle: { ...Typography.h2, color: Colors.textPrimary, marginBottom: Spacing.md },
-  permissionSubtitle: {
-    ...Typography.body, color: Colors.textSecondary, textAlign: 'center',
-    lineHeight: 20, marginBottom: Spacing.xxl,
-  },
-  permissionBtn: {
-    backgroundColor: Colors.primary, borderRadius: BorderRadius.md,
-    paddingVertical: Spacing.md, paddingHorizontal: Spacing.xxl, ...Shadows.small,
-  },
-  permissionBtnText: { ...Typography.button, color: Colors.textOnPrimary },
-  keyboardDismissBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(108, 99, 255, 0.15)',
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: BorderRadius.full,
-    borderWidth: 1,
-    borderColor: 'rgba(108, 99, 255, 0.3)',
-  },
-  keyboardDismissText: {
-    ...Typography.caption,
-    fontWeight: '700',
-    color: Colors.primary,
-  },
-  receiptScreenContainer: {
-    flex: 1,
-    backgroundColor: '#0a0a1a',
-    padding: Spacing.lg,
-  },
-  receiptScreenHeader: {
-    alignItems: 'center',
-    paddingVertical: Spacing.xl,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  receiptSuccessIconWrapper: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(0, 217, 126, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-  },
-  receiptScreenTitle: {
-    ...Typography.h2,
-    color: '#FFF',
-    fontWeight: '800',
-  },
-  receiptScreenSubtitle: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 6,
-    paddingHorizontal: Spacing.xl,
-  },
-  receiptScreenDate: {
-    ...Typography.caption,
-    color: Colors.textMuted,
-    marginTop: Spacing.sm,
-  },
-  receiptScreenBody: {
-    flex: 1,
-    marginVertical: Spacing.lg,
-  },
-  receiptBodySectionTitle: {
-    ...Typography.caption,
-    color: Colors.textSecondary,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: Spacing.sm,
-  },
-  receiptScreenDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    marginVertical: Spacing.xs,
-  },
-  receiptItemDetailsRow: {
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.03)',
-  },
-  receiptItemDetailsName: {
-    ...Typography.bodySmall,
-    color: '#FFF',
-    fontWeight: '700',
-  },
-  receiptItemDetailsSub: {
-    ...Typography.caption,
-    color: Colors.textMuted,
-    marginTop: 2,
-  },
-  receiptItemDetailsSubtotal: {
-    ...Typography.body,
-    color: '#FFF',
-    fontWeight: '700',
-  },
-  receiptScreenFooter: {
-    paddingBottom: Spacing.xl,
-  },
-  receiptScreenTotalRow: {
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: Spacing.md,
-  },
-  receiptScreenTotalLabel: {
-    ...Typography.body,
-    color: Colors.textSecondary,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  receiptScreenTotalValue: {
-    ...Typography.h1,
-    color: Colors.secondary,
-    fontWeight: '800',
-  },
-  receiptScreenThanksText: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    fontStyle: 'italic',
-    marginVertical: Spacing.lg,
-  },
-  receiptScreenCloseBtn: {
-    height: 52,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.primary,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...Shadows.medium,
-  },
-  receiptScreenCloseBtnText: {
-    ...Typography.button,
-    color: '#FFF',
-    fontWeight: '700',
-  },
-});

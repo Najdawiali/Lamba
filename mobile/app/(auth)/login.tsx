@@ -4,7 +4,7 @@
  * Validates returned user_type matches selected role (mismatch guard).
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ActivityIndicator
@@ -13,10 +13,197 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { signIn, logout as doLogout } from '../../services/api';
-import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { useThemeColors } from '../../context/ThemeContext';
 import { t, toggleLanguage, i18n } from '../../services/i18n';
 
 export default function LoginScreen() {
+  const Colors = useThemeColors();
+
+  const styles = useMemo(() => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.xl,
+  },
+  glowOrb1: {
+    position: 'absolute',
+    top: '15%',
+    left: '-20%',
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    opacity: 0.06,
+  },
+  glowOrb2: {
+    position: 'absolute',
+    bottom: '10%',
+    right: '-15%',
+    width: 250,
+    height: 250,
+    borderRadius: 125,
+    opacity: 0.05,
+  },
+  langButton: {
+    position: 'absolute',
+    top: 60,
+    right: Spacing.xl,
+    zIndex: 10,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: BorderRadius.full,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  langText: {
+    fontSize: 14,
+    color: Colors.textPrimary,
+    fontWeight: '600',
+  },
+  backButton: {
+    position: 'absolute',
+    top: 60,
+    left: Spacing.xl,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: Spacing.xxl,
+  },
+  logoContainer: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+    ...Shadows.glow,
+  },
+  title: {
+    ...Typography.h1,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.xs,
+  },
+  subtitle: {
+    ...Typography.body,
+    color: Colors.textSecondary,
+  },
+  card: {
+    backgroundColor: Colors.surfaceGlass,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    ...Shadows.medium,
+  },
+  cardTitle: {
+    ...Typography.h3,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.xl,
+    textAlign: 'center',
+  },
+  errorBanner: {
+    backgroundColor: Colors.errorBg,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.errorBorder,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  errorHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  errorText: {
+    ...Typography.bodySmall,
+    color: Colors.error,
+    flex: 1,
+  },
+  verifyActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    borderRadius: BorderRadius.sm,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    marginTop: Spacing.sm,
+    alignSelf: 'flex-start',
+  },
+  verifyActionBtnText: {
+    ...Typography.caption,
+    color: Colors.textOnPrimary,
+    fontWeight: '700',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+    height: 52,
+  },
+  inputIcon: {
+    marginRight: Spacing.sm,
+  },
+  input: {
+    flex: 1,
+    color: Colors.textPrimary,
+    ...Typography.body,
+  },
+  forgotPassword: {
+    alignSelf: 'flex-end',
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.xs,
+  },
+  forgotPasswordText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  button: {
+    borderRadius: BorderRadius.md,
+    height: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: Spacing.md,
+    ...Shadows.small,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  buttonText: {
+    ...Typography.button,
+    color: Colors.textOnPrimary,
+  },
+  linkContainer: {
+    marginTop: Spacing.lg,
+    alignItems: 'center',
+  },
+  linkText: {
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
+  },
+  linkHighlight: {
+    fontWeight: '600',
+  },
+  }), [Colors]);
   const router = useRouter();
   const searchParams = useLocalSearchParams();
 
@@ -269,189 +456,5 @@ export default function LoginScreen() {
       </View>
     </KeyboardAvoidingView>
   );
-}
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.xl,
-  },
-  glowOrb1: {
-    position: 'absolute',
-    top: '15%',
-    left: '-20%',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    opacity: 0.06,
-  },
-  glowOrb2: {
-    position: 'absolute',
-    bottom: '10%',
-    right: '-15%',
-    width: 250,
-    height: 250,
-    borderRadius: 125,
-    opacity: 0.05,
-  },
-  langButton: {
-    position: 'absolute',
-    top: 60,
-    right: Spacing.xl,
-    zIndex: 10,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: BorderRadius.full,
-    minWidth: 44,
-    minHeight: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  langText: {
-    fontSize: 14,
-    color: Colors.textPrimary,
-    fontWeight: '600',
-  },
-  backButton: {
-    position: 'absolute',
-    top: 60,
-    left: Spacing.xl,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: Spacing.xxl,
-  },
-  logoContainer: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: Spacing.lg,
-    ...Shadows.glow,
-  },
-  title: {
-    ...Typography.h1,
-    color: Colors.textPrimary,
-    marginBottom: Spacing.xs,
-  },
-  subtitle: {
-    ...Typography.body,
-    color: Colors.textSecondary,
-  },
-  card: {
-    backgroundColor: Colors.surfaceGlass,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.xl,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    ...Shadows.medium,
-  },
-  cardTitle: {
-    ...Typography.h3,
-    color: Colors.textPrimary,
-    marginBottom: Spacing.xl,
-    textAlign: 'center',
-  },
-  errorBanner: {
-    backgroundColor: Colors.errorBg,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.errorBorder,
-    padding: Spacing.md,
-    marginBottom: Spacing.lg,
-  },
-  errorHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  errorText: {
-    ...Typography.bodySmall,
-    color: Colors.error,
-    flex: 1,
-  },
-  verifyActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    borderRadius: BorderRadius.sm,
-    paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.sm,
-    marginTop: Spacing.sm,
-    alignSelf: 'flex-start',
-  },
-  verifyActionBtnText: {
-    ...Typography.caption,
-    color: Colors.textOnPrimary,
-    fontWeight: '700',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.md,
-    height: 52,
-  },
-  inputIcon: {
-    marginRight: Spacing.sm,
-  },
-  input: {
-    flex: 1,
-    color: Colors.textPrimary,
-    ...Typography.body,
-  },
-  forgotPassword: {
-    alignSelf: 'flex-end',
-    marginTop: Spacing.xs,
-    marginBottom: Spacing.xs,
-  },
-  forgotPasswordText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.primary,
-  },
-  button: {
-    borderRadius: BorderRadius.md,
-    height: 52,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: Spacing.md,
-    ...Shadows.small,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    ...Typography.button,
-    color: Colors.textOnPrimary,
-  },
-  linkContainer: {
-    marginTop: Spacing.lg,
-    alignItems: 'center',
-  },
-  linkText: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
-  },
-  linkHighlight: {
-    fontWeight: '600',
-  },
-});
+}

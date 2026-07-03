@@ -11,7 +11,8 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
+import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
+import { useThemeColors } from '../../../context/ThemeContext';
 import {
   getMarketItemDetails, getUser,
   MarketItemDetailsResponse, isFavorite, addFavorite, removeFavorite
@@ -21,6 +22,7 @@ import { getCurrencyCode, formatPrice } from '../../../services/currency';
 import { resolveImageUrl, calculateDistanceMeters, roundDistance } from '../../../services/utils';
 
 export default function ProductDetailScreen() {
+  const Colors = useThemeColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { width: SCREEN_WIDTH } = useWindowDimensions();
@@ -107,6 +109,60 @@ export default function ProductDetailScreen() {
       ? product.images
       : (product.image_url ? [product.image_url] : []);
   }, [product?.images, product?.image_url]);
+
+  const styles = useMemo(() => StyleSheet.create({
+    container: { flex: 1, backgroundColor: Colors.background },
+    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background },
+    errorText: { ...Typography.body, color: Colors.error, marginTop: Spacing.md, marginBottom: Spacing.md },
+    retryBtn: { paddingHorizontal: Spacing.xl, paddingVertical: Spacing.sm, backgroundColor: Colors.primary, borderRadius: BorderRadius.md, ...Shadows.small },
+    retryBtnText: { ...Typography.button, color: Colors.textOnPrimary },
+    scrollContent: { paddingBottom: 40 },
+
+    carouselContainer: { height: 280, backgroundColor: Colors.surface, position: 'relative' },
+    carouselImage: { height: 280, resizeMode: 'cover' },
+    imagePlaceholder: { height: 280, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.surface },
+
+    heroActionsOverlay: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm },
+    overlayIconBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(10, 10, 26, 0.7)', justifyContent: 'center', alignItems: 'center' },
+
+    dotsContainer: { flexDirection: 'row', position: 'absolute', bottom: Spacing.md, left: 0, right: 0, justifyContent: 'center', alignItems: 'center', gap: 6 },
+    dot: { width: 8, height: 8, borderRadius: 4 },
+    dotActive: { backgroundColor: Colors.primary, width: 18 },
+    dotInactive: { backgroundColor: 'rgba(255,255,255,0.4)' },
+
+    stockBadge: { position: 'absolute', bottom: -16, right: Spacing.xl, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, borderRadius: BorderRadius.full, ...Shadows.small, borderWidth: 2, borderColor: Colors.background },
+    stockText: { ...Typography.label, color: Colors.background, fontWeight: '800' },
+
+    infoSection: { paddingHorizontal: Spacing.xl, paddingTop: Spacing.xxl },
+    productName: { ...Typography.h1, color: Colors.textPrimary, marginBottom: Spacing.xs },
+    price: { ...Typography.h1, color: Colors.secondary, marginBottom: Spacing.md },
+    priceFree: { fontSize: 20, fontWeight: '700', color: Colors.textSecondary, marginBottom: Spacing.md },
+    currency: { ...Typography.body, color: Colors.textSecondary },
+
+    categoryBadge: { alignSelf: 'flex-start', backgroundColor: Colors.surfaceElevated, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: BorderRadius.full, borderWidth: 1, borderColor: Colors.border },
+    categoryText: { ...Typography.label, color: Colors.textSecondary },
+
+    section: { paddingHorizontal: Spacing.xl, paddingTop: Spacing.xl },
+    sectionTitle: { ...Typography.h3, color: Colors.textPrimary, marginBottom: Spacing.md },
+    description: { ...Typography.body, color: Colors.textSecondary, lineHeight: 24 },
+    readMoreText: { ...Typography.bodySmall, color: Colors.secondary, fontWeight: '700', marginTop: Spacing.xs },
+
+    shopCard: { backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.xl, padding: Spacing.lg, borderWidth: 1, borderColor: Colors.border, ...Shadows.small },
+    shopMetaRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: Spacing.sm },
+    shopName: { ...Typography.h3, color: Colors.textPrimary },
+    shopAddress: { ...Typography.bodySmall, color: Colors.textMuted, marginTop: 2 },
+
+    viewShopLink: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: Spacing.lg, marginLeft: 32 },
+    viewShopText: { ...Typography.bodySmall, color: Colors.secondary, fontWeight: '700' },
+
+    collapsibleTrigger: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: Spacing.md, borderTopWidth: 1, borderTopColor: Colors.border },
+    triggerLabel: { ...Typography.body, color: Colors.textPrimary, fontWeight: '600' },
+    collapsibleContent: { paddingVertical: Spacing.md, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' },
+    scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: Spacing.xs },
+    scheduleDay: { ...Typography.bodySmall, color: Colors.textSecondary },
+    scheduleTime: { ...Typography.bodySmall, color: Colors.textMuted, fontWeight: '600' },
+    emptyDetailsText: { ...Typography.bodySmall, color: Colors.textMuted, fontStyle: 'italic' },
+  }), [Colors]);
 
   if (loading && !product) {
     return (
@@ -267,57 +323,3 @@ export default function ProductDetailScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background },
-  errorText: { ...Typography.body, color: Colors.error, marginTop: Spacing.md, marginBottom: Spacing.md },
-  retryBtn: { paddingHorizontal: Spacing.xl, paddingVertical: Spacing.sm, backgroundColor: Colors.primary, borderRadius: BorderRadius.md, ...Shadows.small },
-  retryBtnText: { ...Typography.button, color: Colors.textOnPrimary },
-  scrollContent: { paddingBottom: 40 },
-
-  carouselContainer: { height: 280, backgroundColor: Colors.surface, position: 'relative' },
-  carouselImage: { height: 280, resizeMode: 'cover' },
-  imagePlaceholder: { height: 280, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.surface },
-  
-  heroActionsOverlay: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm },
-  overlayIconBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(10, 10, 26, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  
-  dotsContainer: { flexDirection: 'row', position: 'absolute', bottom: Spacing.md, left: 0, right: 0, justifyContent: 'center', alignItems: 'center', gap: 6 },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  dotActive: { backgroundColor: Colors.primary, width: 18 },
-  dotInactive: { backgroundColor: 'rgba(255,255,255,0.4)' },
-  
-  stockBadge: { position: 'absolute', bottom: -16, right: Spacing.xl, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, borderRadius: BorderRadius.full, ...Shadows.small, borderWidth: 2, borderColor: Colors.background },
-  stockText: { ...Typography.label, color: Colors.background, fontWeight: '800' },
-
-  infoSection: { paddingHorizontal: Spacing.xl, paddingTop: Spacing.xxl },
-  productName: { ...Typography.h1, color: Colors.textPrimary, marginBottom: Spacing.xs },
-  price: { ...Typography.h1, color: Colors.secondary, marginBottom: Spacing.md },
-  priceFree: { fontSize: 20, fontWeight: '700', color: Colors.textSecondary, marginBottom: Spacing.md },
-  currency: { ...Typography.body, color: Colors.textSecondary },
-  
-  categoryBadge: { alignSelf: 'flex-start', backgroundColor: Colors.surfaceElevated, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: BorderRadius.full, borderWidth: 1, borderColor: Colors.border },
-  categoryText: { ...Typography.label, color: Colors.textSecondary },
-  
-  section: { paddingHorizontal: Spacing.xl, paddingTop: Spacing.xl },
-  sectionTitle: { ...Typography.h3, color: Colors.textPrimary, marginBottom: Spacing.md },
-  description: { ...Typography.body, color: Colors.textSecondary, lineHeight: 24 },
-  readMoreText: { ...Typography.bodySmall, color: Colors.secondary, fontWeight: '700', marginTop: Spacing.xs },
-
-  shopCard: { backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.xl, padding: Spacing.lg, borderWidth: 1, borderColor: Colors.border, ...Shadows.small },
-  shopMetaRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: Spacing.sm },
-  shopName: { ...Typography.h3, color: Colors.textPrimary },
-  shopAddress: { ...Typography.bodySmall, color: Colors.textMuted, marginTop: 2 },
-  
-  viewShopLink: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: Spacing.lg, marginLeft: 32 },
-  viewShopText: { ...Typography.bodySmall, color: Colors.secondary, fontWeight: '700' },
-
-  collapsibleTrigger: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: Spacing.md, borderTopWidth: 1, borderTopColor: Colors.border },
-  triggerLabel: { ...Typography.body, color: Colors.textPrimary, fontWeight: '600' },
-  collapsibleContent: { paddingVertical: Spacing.md, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' },
-  scheduleRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: Spacing.xs },
-  scheduleDay: { ...Typography.bodySmall, color: Colors.textSecondary },
-  scheduleTime: { ...Typography.bodySmall, color: Colors.textMuted, fontWeight: '600' },
-  emptyDetailsText: { ...Typography.bodySmall, color: Colors.textMuted, fontStyle: 'italic' },
-});

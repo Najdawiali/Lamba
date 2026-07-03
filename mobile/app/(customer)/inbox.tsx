@@ -1,31 +1,181 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getChatSessions, getChatMessages, sendChatMessage, getUser, ChatSession, ChatMessage } from '../../services/api';
-import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../../constants/theme';
+import { Spacing, Typography, BorderRadius, Shadows } from '../../constants/theme';
+import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
 import { formatRelativeTime } from '../../services/utils';
 
 export default function CustomerInboxScreen() {
+  const Colors = useThemeColors();
   const router = useRouter();
   const { sessionId: querySessionId } = useLocalSearchParams<{ sessionId?: string }>();
   const isAr = i18n.locale.includes('ar');
-  
+
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Chat thread states
   const [selectedSession, setSelectedSession] = useState<ChatSession | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
-  
+
   const flatListRef = useRef<FlatList>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+
+  const styles = useMemo(() => StyleSheet.create({
+    container: { flex: 1, backgroundColor: Colors.background },
+    headerInbox: {
+      paddingHorizontal: Spacing.xl,
+      paddingVertical: Spacing.lg,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: Spacing.lg,
+      paddingVertical: Spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: Colors.border,
+    },
+    backBtn: { width: 40, height: 40, justifyContent: 'center' },
+    title: { ...Typography.h1, color: Colors.textPrimary },
+    titleThread: { ...Typography.h1, color: Colors.textPrimary, flex: 1, textAlign: 'center', fontSize: 20 },
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.xl },
+
+    // Empty State
+    emptyContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: Spacing.xxl,
+    },
+    emptyIconCircle: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: Colors.surfaceElevated,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: Spacing.xl,
+    },
+    emptyText: { ...Typography.h2, color: Colors.textPrimary, marginBottom: Spacing.sm },
+    emptySubtext: { ...Typography.body, color: Colors.textSecondary, textAlign: 'center', marginBottom: Spacing.xxl },
+    exploreBtn: {
+      backgroundColor: Colors.surfaceElevated,
+      paddingVertical: Spacing.md,
+      paddingHorizontal: Spacing.xl,
+      borderRadius: BorderRadius.full,
+      borderWidth: 1,
+      borderColor: Colors.border,
+    },
+    exploreBtnText: {
+      ...Typography.button,
+      color: Colors.primary,
+    },
+
+    listContent: { padding: Spacing.md, paddingBottom: Spacing.xl },
+
+    // Inbox Card Styles
+    chatCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: Spacing.md,
+      paddingHorizontal: Spacing.sm,
+      borderBottomWidth: 1,
+      borderBottomColor: Colors.border,
+    },
+    cardLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    unreadDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: Colors.primary,
+      marginRight: 8,
+    },
+    avatar: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: 'rgba(108, 99, 255, 0.1)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: Spacing.md,
+    },
+    chatInfo: { flex: 1, marginRight: Spacing.sm },
+    partnerName: { ...Typography.body, fontWeight: '600', color: Colors.textPrimary, marginBottom: 2 },
+    lastMessage: { ...Typography.caption, color: Colors.textSecondary },
+    timestamp: {
+      ...Typography.caption,
+      color: Colors.textMuted,
+      alignSelf: 'flex-start',
+      marginTop: 4,
+    },
+
+    // Chat Thread Bubble Styles
+    messageBubble: {
+      maxWidth: '80%',
+      padding: Spacing.md,
+      borderRadius: BorderRadius.lg,
+      marginBottom: Spacing.sm,
+    },
+    messageMe: {
+      alignSelf: 'flex-end',
+      backgroundColor: Colors.primary,
+      borderBottomRightRadius: 4,
+    },
+    messageThem: {
+      alignSelf: 'flex-start',
+      backgroundColor: Colors.surfaceElevated,
+      borderBottomLeftRadius: 4,
+    },
+    messageText: { ...Typography.body },
+    messageTextMe: { color: Colors.textOnPrimary },
+    messageTextThem: { color: Colors.textPrimary },
+
+    // Chat Thread Input Styles
+    inputContainer: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      padding: Spacing.md,
+      backgroundColor: Colors.surface,
+      borderTopWidth: 1,
+      borderTopColor: Colors.border,
+    },
+    input: {
+      flex: 1,
+      backgroundColor: Colors.surfaceElevated,
+      color: Colors.textPrimary,
+      minHeight: 44,
+      maxHeight: 120,
+      borderRadius: 22,
+      paddingHorizontal: Spacing.lg,
+      paddingTop: 12,
+      paddingBottom: 12,
+      marginRight: Spacing.sm,
+    },
+    sendBtn: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: Colors.primary,
+      justifyContent: 'center',
+      alignItems: 'center',
+      ...Shadows.small,
+    },
+    sendBtnDisabled: {
+      backgroundColor: Colors.surfaceElevated,
+      opacity: 0.5,
+    },
+  }), [Colors]);
 
   // Load current user ID for message alignment
   useEffect(() => {
@@ -103,13 +253,12 @@ export default function CustomerInboxScreen() {
     setMessages([]);
     stopPolling();
     fetchSessions(); // Refresh list to get new last_messages
-    // Clean query param
     router.replace('/(customer)/inbox');
   };
 
   const handleSend = async () => {
     if (!inputText.trim() || !selectedSession || sending) return;
-    
+
     setSending(true);
     try {
       const newMsg = await sendChatMessage(selectedSession.id, inputText.trim());
@@ -124,10 +273,8 @@ export default function CustomerInboxScreen() {
   };
 
   const renderSessionCard = ({ item }: { item: ChatSession }) => {
-    // For demo purposes, checking if last message is from partner as unread heuristic
-    // Or normally check an unread_count property
     const hasUnread = item.last_message && item.last_message.length > 0 && Math.random() > 0.5; // Simulate unread
-    
+
     return (
       <TouchableOpacity
         style={styles.chatCard}
@@ -182,8 +329,8 @@ export default function CustomerInboxScreen() {
           <View style={{ width: 40 }} />
         </View>
 
-        <KeyboardAvoidingView 
-          style={{ flex: 1 }} 
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           {loadingMessages ? (
@@ -211,8 +358,8 @@ export default function CustomerInboxScreen() {
               placeholderTextColor={Colors.textMuted}
               multiline
             />
-            <TouchableOpacity 
-              style={[styles.sendBtn, !inputText.trim() && styles.sendBtnDisabled]} 
+            <TouchableOpacity
+              style={[styles.sendBtn, !inputText.trim() && styles.sendBtnDisabled]}
               onPress={handleSend}
               disabled={!inputText.trim() || sending}
               activeOpacity={0.7}
@@ -247,8 +394,8 @@ export default function CustomerInboxScreen() {
           </View>
           <Text style={styles.emptyText}>{t('inbox.empty')}</Text>
           <Text style={styles.emptySubtext}>{t('inbox.empty_desc')}</Text>
-          <TouchableOpacity 
-            style={styles.exploreBtn} 
+          <TouchableOpacity
+            style={styles.exploreBtn}
             activeOpacity={0.8}
             onPress={() => router.replace('/(customer)/search')}
           >
@@ -266,151 +413,3 @@ export default function CustomerInboxScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  headerInbox: {
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.lg,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  backBtn: { width: 40, height: 40, justifyContent: 'center' },
-  title: { ...Typography.h1, color: Colors.textPrimary },
-  titleThread: { ...Typography.h1, color: Colors.textPrimary, flex: 1, textAlign: 'center', fontSize: 20 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.xl },
-  
-  // Empty State
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.xxl,
-  },
-  emptyIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: Colors.surfaceElevated,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: Spacing.xl,
-  },
-  emptyText: { ...Typography.h2, color: Colors.textPrimary, marginBottom: Spacing.sm },
-  emptySubtext: { ...Typography.body, color: Colors.textSecondary, textAlign: 'center', marginBottom: Spacing.xxl },
-  exploreBtn: {
-    backgroundColor: Colors.surfaceElevated,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.xl,
-    borderRadius: BorderRadius.full,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  exploreBtnText: {
-    ...Typography.button,
-    color: Colors.primary,
-  },
-
-  listContent: { padding: Spacing.md, paddingBottom: Spacing.xl },
-  
-  // Inbox Card Styles
-  chatCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  cardLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: Colors.primary,
-    marginRight: 8,
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(108, 99, 255, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: Spacing.md,
-  },
-  chatInfo: { flex: 1, marginRight: Spacing.sm },
-  partnerName: { ...Typography.body, fontWeight: '600', color: Colors.textPrimary, marginBottom: 2 },
-  lastMessage: { ...Typography.caption, color: Colors.textSecondary },
-  timestamp: {
-    ...Typography.caption,
-    color: Colors.textMuted,
-    alignSelf: 'flex-start',
-    marginTop: 4,
-  },
-
-  // Chat Thread Bubble Styles
-  messageBubble: {
-    maxWidth: '80%',
-    padding: Spacing.md,
-    borderRadius: BorderRadius.lg,
-    marginBottom: Spacing.sm,
-  },
-  messageMe: {
-    alignSelf: 'flex-end',
-    backgroundColor: Colors.primary,
-    borderBottomRightRadius: 4,
-  },
-  messageThem: {
-    alignSelf: 'flex-start',
-    backgroundColor: Colors.surfaceElevated,
-    borderBottomLeftRadius: 4,
-  },
-  messageText: { ...Typography.body },
-  messageTextMe: { color: Colors.textOnPrimary },
-  messageTextThem: { color: Colors.textPrimary },
-  
-  // Chat Thread Input Styles
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    padding: Spacing.md,
-    backgroundColor: Colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  input: {
-    flex: 1,
-    backgroundColor: Colors.surfaceElevated,
-    color: Colors.textPrimary,
-    minHeight: 44,
-    maxHeight: 120,
-    borderRadius: 22,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: 12,
-    paddingBottom: 12,
-    marginRight: Spacing.sm,
-  },
-  sendBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...Shadows.small,
-  },
-  sendBtnDisabled: {
-    backgroundColor: Colors.surfaceElevated,
-    opacity: 0.5,
-  },
-});

@@ -336,7 +336,16 @@
     "notif_messages": "Messages",
     "notif_messages_desc": "Replies from shops to your conversations",
     "notif_saved": "Notification Preferences Saved",
-    "notif_saved_desc": "Your settings will be applied immediately."
+    "notif_saved_desc": "Your settings will be applied immediately.",
+    "appearance": "Appearance",
+    "appearance_desc": "Choose how Lamba looks",
+    "theme_system": "System Default",
+    "theme_system_desc": "Follow your device's setting",
+    "theme_light": "Light",
+    "theme_light_desc": "Bright surfaces and dark text",
+    "theme_dark": "Dark",
+    "theme_dark_desc": "Premium dark surfaces",
+    "theme_saved": "Theme Updated"
   },
   "product": {
     "details": "Product Details",

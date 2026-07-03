@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, Dimensions } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
+import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
+import { useThemeColors } from '../../../context/ThemeContext';
 import { getMarketCatalog, MarketCatalogResponse, CustomerItemResponse } from '../../../services/api';
 import { t } from '../../../services/i18n';
 import { getCurrencyCode } from '../../../services/currency';
@@ -14,6 +15,7 @@ const COLUMN_SPACING = Spacing.md;
 const CARD_WIDTH = (SCREEN_WIDTH - Spacing.xl * 2 - COLUMN_SPACING) / 2;
 
 export default function ShopCatalogScreen() {
+  const Colors = useThemeColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   
@@ -41,6 +43,48 @@ export default function ShopCatalogScreen() {
       }
     })();
   }, [id]);
+
+  const styles = useMemo(() => StyleSheet.create({
+    container: { flex: 1, backgroundColor: Colors.background },
+    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background },
+    errorText: { ...Typography.body, color: Colors.error, marginTop: Spacing.md, marginBottom: Spacing.md },
+    retryBtn: { paddingHorizontal: Spacing.xl, paddingVertical: Spacing.sm, backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.full, borderWidth: 1, borderColor: Colors.border },
+    retryBtnText: { ...Typography.button, color: Colors.textPrimary },
+
+    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border },
+    headerBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.surfaceElevated, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
+    headerTitle: { ...Typography.h3, color: Colors.textPrimary },
+
+    tabsContainer: { borderBottomWidth: 1, borderBottomColor: Colors.border },
+    tabsScroll: { paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, gap: Spacing.sm },
+    tabBtn: { paddingHorizontal: Spacing.lg, paddingVertical: 8, borderRadius: BorderRadius.full, backgroundColor: Colors.surfaceElevated, borderWidth: 1, borderColor: Colors.border },
+    tabBtnActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+    tabText: { ...Typography.bodySmall, color: Colors.textSecondary, fontWeight: '600' },
+    tabTextActive: { color: Colors.textOnPrimary },
+
+    gridContainer: { flexDirection: 'row', flexWrap: 'wrap', padding: Spacing.xl, gap: COLUMN_SPACING, paddingBottom: 100 },
+    cardContainer: { width: CARD_WIDTH, backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.lg, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border, ...Shadows.small },
+
+    imageContainer: { width: '100%', height: CARD_WIDTH, backgroundColor: Colors.surface, position: 'relative' },
+    image: { width: '100%', height: '100%', resizeMode: 'cover' },
+    imagePlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    outOfStockOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(10, 10, 26, 0.7)', justifyContent: 'center', alignItems: 'center' },
+    outOfStockText: { ...Typography.caption, color: Colors.textOnPrimary, fontWeight: '700', backgroundColor: Colors.error, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
+
+    cardInfo: { padding: Spacing.sm },
+    itemName: { ...Typography.bodySmall, color: Colors.textPrimary, fontWeight: '600', marginBottom: Spacing.xs, height: 36 },
+
+    priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
+    priceText: { ...Typography.h3, color: Colors.secondary },
+    currencyText: { fontSize: 10, fontWeight: '400', color: Colors.textMuted },
+    priceFree: { ...Typography.caption, color: Colors.textSecondary },
+
+    quickAddBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center' },
+
+    emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.xxl },
+    emptyTitle: { ...Typography.h3, color: Colors.textPrimary, marginTop: Spacing.lg },
+    emptySubtitle: { ...Typography.bodySmall, color: Colors.textMuted, textAlign: 'center', marginTop: Spacing.sm },
+  }), [Colors]);
 
   if (loading) {
     return (
@@ -152,48 +196,6 @@ export default function ShopCatalogScreen() {
           <Text style={styles.emptySubtitle}>{t('common.no_items_desc', 'This shop has not listed any items yet.')}</Text>
         </View>
       )}
-    </SafeAreaView>
+</SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background },
-  errorText: { ...Typography.body, color: Colors.error, marginTop: Spacing.md, marginBottom: Spacing.md },
-  retryBtn: { paddingHorizontal: Spacing.xl, paddingVertical: Spacing.sm, backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.full, borderWidth: 1, borderColor: Colors.border },
-  retryBtnText: { ...Typography.button, color: Colors.textPrimary },
-  
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  headerBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.surfaceElevated, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
-  headerTitle: { ...Typography.h3, color: Colors.textPrimary },
-
-  tabsContainer: { borderBottomWidth: 1, borderBottomColor: Colors.border },
-  tabsScroll: { paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, gap: Spacing.sm },
-  tabBtn: { paddingHorizontal: Spacing.lg, paddingVertical: 8, borderRadius: BorderRadius.full, backgroundColor: Colors.surfaceElevated, borderWidth: 1, borderColor: Colors.border },
-  tabBtnActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  tabText: { ...Typography.bodySmall, color: Colors.textSecondary, fontWeight: '600' },
-  tabTextActive: { color: Colors.textOnPrimary },
-
-  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', padding: Spacing.xl, gap: COLUMN_SPACING, paddingBottom: 100 },
-  cardContainer: { width: CARD_WIDTH, backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.lg, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border, ...Shadows.small },
-  
-  imageContainer: { width: '100%', height: CARD_WIDTH, backgroundColor: Colors.surface, position: 'relative' },
-  image: { width: '100%', height: '100%', resizeMode: 'cover' },
-  imagePlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  outOfStockOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(10, 10, 26, 0.7)', justifyContent: 'center', alignItems: 'center' },
-  outOfStockText: { ...Typography.caption, color: Colors.textOnPrimary, fontWeight: '700', backgroundColor: Colors.error, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
-
-  cardInfo: { padding: Spacing.sm },
-  itemName: { ...Typography.bodySmall, color: Colors.textPrimary, fontWeight: '600', marginBottom: Spacing.xs, height: 36 },
-  
-  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
-  priceText: { ...Typography.h3, color: Colors.secondary },
-  currencyText: { fontSize: 10, fontWeight: '400', color: Colors.textMuted },
-  priceFree: { ...Typography.caption, color: Colors.textSecondary },
-  
-  quickAddBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center' },
-
-  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.xxl },
-  emptyTitle: { ...Typography.h3, color: Colors.textPrimary, marginTop: Spacing.lg },
-  emptySubtitle: { ...Typography.bodySmall, color: Colors.textMuted, textAlign: 'center', marginTop: Spacing.sm },
-});

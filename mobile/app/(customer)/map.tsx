@@ -2,7 +2,7 @@
  * Map Screen — Google Maps with nearby shop markers and interactive carousel.
  */
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
   FlatList, Image, Platform, Alert, useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent
@@ -14,15 +14,62 @@ import * as Location from 'expo-location';
 import * as Linking from 'expo-linking';
 import { Ionicons } from '@expo/vector-icons';
 import { getNearMarkets, NearMarketResponse } from '../../services/api';
-import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { useTheme } from '../../context/ThemeContext';
 import { t } from '../../services/i18n';
-import { darkMapStyle, calculateDistanceMeters } from '../../services/utils';
+import { getMapStyle, calculateDistanceMeters } from '../../services/utils';
 
 const CARD_WIDTH = 280;
 const CARD_MARGIN = 10;
 const SNAP_INTERVAL = CARD_WIDTH + CARD_MARGIN * 2;
 
 export default function MapScreen() {
+  const { colors: Colors, scheme } = useTheme();
+  const mapStyle = useMemo(() => getMapStyle(scheme), [scheme]);
+
+  const styles = useMemo(() => StyleSheet.create({
+  container: { flex: 1 },
+  map: { flex: 1 },
+  deniedContainer: { flex: 1, backgroundColor: Colors.background, justifyContent: 'center', alignItems: 'center', padding: Spacing.xxl },
+  deniedTitle: { ...Typography.h2, color: Colors.textPrimary, marginTop: Spacing.lg, textAlign: 'center' },
+  deniedText: { ...Typography.body, color: Colors.textSecondary, textAlign: 'center', marginTop: Spacing.md, marginBottom: Spacing.xl },
+  settingsBtn: { width: '100%', height: 48, backgroundColor: Colors.primary, borderRadius: BorderRadius.md, justifyContent: 'center', alignItems: 'center' },
+  settingsBtnText: { ...Typography.button, color: Colors.textOnPrimary },
+  retryBtn: { marginTop: Spacing.md, paddingVertical: Spacing.sm },
+  retryBtnText: { ...Typography.bodySmall, color: Colors.textMuted },
+  
+  titleBar: { position: 'absolute', top: 0, left: 0, right: 0 },
+  titleContainer: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, backgroundColor: Colors.surfaceElevated, alignSelf: 'center', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, borderRadius: BorderRadius.full, marginTop: Spacing.sm, borderWidth: 1, borderColor: Colors.border, ...Shadows.small },
+  title: { ...Typography.label, color: Colors.textPrimary },
+  countBadge: { backgroundColor: Colors.primary, borderRadius: 10, width: 20, height: 20, justifyContent: 'center', alignItems: 'center' },
+  countText: { fontSize: 10, fontWeight: '700', color: Colors.textOnPrimary },
+
+  recenterBtn: { position: 'absolute', bottom: 150, right: Spacing.xl, width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.surfaceElevated, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border, ...Shadows.medium, zIndex: 10 },
+  
+  markerPin: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.surface, borderWidth: 2, borderColor: Colors.primary, justifyContent: 'center', alignItems: 'center', ...Shadows.small },
+  markerPinSelected: { backgroundColor: Colors.primary, borderColor: Colors.textOnPrimary, ...Shadows.glow },
+  markerArrow: { width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 8, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: Colors.primary, alignSelf: 'center', marginTop: -2 },
+  markerArrowSelected: { borderTopColor: Colors.textOnPrimary },
+
+  loadingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(10,10,26,0.3)' },
+  
+  emptyOverlay: { position: 'absolute', bottom: 100, left: Spacing.xl, right: Spacing.xl },
+  emptyCard: { backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.xl, padding: Spacing.xl, alignItems: 'center', borderWidth: 1, borderColor: Colors.border, ...Shadows.medium },
+  emptyTitle: { ...Typography.h3, color: Colors.textPrimary, marginTop: Spacing.md },
+  emptyDesc: { ...Typography.bodySmall, color: Colors.textMuted, textAlign: 'center', marginTop: Spacing.sm },
+
+  carouselContainer: { position: 'absolute', bottom: 30, left: 0, right: 0, height: 110 },
+  cardContainer: { width: CARD_WIDTH, marginHorizontal: CARD_MARGIN, height: 100, backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.lg, padding: Spacing.md, flexDirection: 'row', alignItems: 'center', gap: Spacing.md, borderWidth: 1, borderColor: Colors.border, ...Shadows.medium },
+  cardIcon: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(108, 99, 255, 0.1)', justifyContent: 'center', alignItems: 'center' },
+  cardContent: { flex: 1, justifyContent: 'center' },
+  cardTitle: { ...Typography.h3, color: Colors.textPrimary, marginBottom: 2 },
+  cardSubtitle: { ...Typography.caption, color: Colors.textSecondary, marginBottom: 8 },
+  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  statusDot: { width: 6, height: 6, borderRadius: 3 },
+  statusText: { fontSize: 10, fontWeight: '700' },
+  distanceText: { ...Typography.caption, color: Colors.primary, fontWeight: '600' }
+}), [Colors]);
   const mapRef = useRef<MapView>(null);
   const flatListRef = useRef<FlatList>(null);
   const router = useRouter();
@@ -136,7 +183,7 @@ export default function MapScreen() {
         provider={PROVIDER_GOOGLE}
         showsUserLocation
         showsMyLocationButton={false}
-        customMapStyle={darkMapStyle}
+        customMapStyle={mapStyle}
       >
         {markets.map((market, index) => {
           const isSelected = focusedIndex === index;
@@ -242,48 +289,5 @@ export default function MapScreen() {
       )}
     </View>
   );
+
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  map: { flex: 1 },
-  deniedContainer: { flex: 1, backgroundColor: Colors.background, justifyContent: 'center', alignItems: 'center', padding: Spacing.xxl },
-  deniedTitle: { ...Typography.h2, color: Colors.textPrimary, marginTop: Spacing.lg, textAlign: 'center' },
-  deniedText: { ...Typography.body, color: Colors.textSecondary, textAlign: 'center', marginTop: Spacing.md, marginBottom: Spacing.xl },
-  settingsBtn: { width: '100%', height: 48, backgroundColor: Colors.primary, borderRadius: BorderRadius.md, justifyContent: 'center', alignItems: 'center' },
-  settingsBtnText: { ...Typography.button, color: Colors.textOnPrimary },
-  retryBtn: { marginTop: Spacing.md, paddingVertical: Spacing.sm },
-  retryBtnText: { ...Typography.bodySmall, color: Colors.textMuted },
-  
-  titleBar: { position: 'absolute', top: 0, left: 0, right: 0 },
-  titleContainer: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, backgroundColor: Colors.surfaceElevated, alignSelf: 'center', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, borderRadius: BorderRadius.full, marginTop: Spacing.sm, borderWidth: 1, borderColor: Colors.border, ...Shadows.small },
-  title: { ...Typography.label, color: Colors.textPrimary },
-  countBadge: { backgroundColor: Colors.primary, borderRadius: 10, width: 20, height: 20, justifyContent: 'center', alignItems: 'center' },
-  countText: { fontSize: 10, fontWeight: '700', color: Colors.textOnPrimary },
-
-  recenterBtn: { position: 'absolute', bottom: 150, right: Spacing.xl, width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.surfaceElevated, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border, ...Shadows.medium, zIndex: 10 },
-  
-  markerPin: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.surface, borderWidth: 2, borderColor: Colors.primary, justifyContent: 'center', alignItems: 'center', ...Shadows.small },
-  markerPinSelected: { backgroundColor: Colors.primary, borderColor: Colors.textOnPrimary, ...Shadows.glow },
-  markerArrow: { width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 8, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: Colors.primary, alignSelf: 'center', marginTop: -2 },
-  markerArrowSelected: { borderTopColor: Colors.textOnPrimary },
-
-  loadingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(10,10,26,0.3)' },
-  
-  emptyOverlay: { position: 'absolute', bottom: 100, left: Spacing.xl, right: Spacing.xl },
-  emptyCard: { backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.xl, padding: Spacing.xl, alignItems: 'center', borderWidth: 1, borderColor: Colors.border, ...Shadows.medium },
-  emptyTitle: { ...Typography.h3, color: Colors.textPrimary, marginTop: Spacing.md },
-  emptyDesc: { ...Typography.bodySmall, color: Colors.textMuted, textAlign: 'center', marginTop: Spacing.sm },
-
-  carouselContainer: { position: 'absolute', bottom: 30, left: 0, right: 0, height: 110 },
-  cardContainer: { width: CARD_WIDTH, marginHorizontal: CARD_MARGIN, height: 100, backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.lg, padding: Spacing.md, flexDirection: 'row', alignItems: 'center', gap: Spacing.md, borderWidth: 1, borderColor: Colors.border, ...Shadows.medium },
-  cardIcon: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(108, 99, 255, 0.1)', justifyContent: 'center', alignItems: 'center' },
-  cardContent: { flex: 1, justifyContent: 'center' },
-  cardTitle: { ...Typography.h3, color: Colors.textPrimary, marginBottom: 2 },
-  cardSubtitle: { ...Typography.caption, color: Colors.textSecondary, marginBottom: 8 },
-  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  statusDot: { width: 6, height: 6, borderRadius: 3 },
-  statusText: { fontSize: 10, fontWeight: '700' },
-  distanceText: { ...Typography.caption, color: Colors.primary, fontWeight: '600' }
-});

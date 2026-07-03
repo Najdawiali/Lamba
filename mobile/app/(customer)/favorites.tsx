@@ -3,7 +3,7 @@
  * Uses SecureStore for persistent, local encrypted storage.
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl,
   ActivityIndicator, Alert, Animated, Easing
@@ -11,12 +11,161 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { useThemeColors } from '../../context/ThemeContext';
 import { i18n } from '../../services/i18n';
 import { getFavorites, getMarketItemDetails, removeFavorite, SearchResultItem } from '../../services/api';
 import ProductCard from '../../components/ProductCard';
 
 export default function FavoritesScreen() {
+  const Colors = useThemeColors();
+
+  const styles = useMemo(() => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  header: {
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
+  },
+  title: {
+    ...Typography.h1,
+    color: Colors.textPrimary,
+  },
+  subtitle: {
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  tabsContainer: {
+    paddingHorizontal: Spacing.xl,
+    marginBottom: Spacing.lg,
+  },
+  tabsBackground: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: BorderRadius.full,
+    padding: 4,
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  tabActiveIndicator: {
+    position: 'absolute',
+    top: 4,
+    bottom: 4,
+    width: '48%',
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  tabText: {
+    ...Typography.body,
+    color: Colors.textSecondary,
+    fontWeight: '500',
+  },
+  tabTextActive: {
+    color: Colors.textPrimary,
+    fontWeight: '700',
+  },
+  listContent: {
+    flexGrow: 1,
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.xl,
+  },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loaderText: { ...Typography.bodySmall, color: Colors.textMuted, marginTop: Spacing.sm },
+  cardWrapper: {
+    position: 'relative',
+    marginBottom: Spacing.sm,
+  },
+  deleteButton: {
+    position: 'absolute',
+    top: Spacing.md,
+    right: Spacing.md,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(226, 75, 74, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(226, 75, 74, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xl,
+  },
+  emptyIconWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 107, 157, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.xl,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 157, 0.2)',
+  },
+  emptyTitle: {
+    ...Typography.h2,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.sm,
+  },
+  emptyDesc: {
+    ...Typography.body,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: Spacing.xxl,
+  },
+  featureList: {
+    width: '100%',
+    gap: Spacing.md,
+    marginBottom: Spacing.xxxl,
+  },
+  featureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  featureIcon: {
+    width: 24,
+    textAlign: 'center',
+  },
+  featureText: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    fontSize: 14,
+  },
+  exploreBtn: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: BorderRadius.full,
+    width: '100%',
+    alignItems: 'center',
+    ...Shadows.small,
+  },
+  exploreBtnText: {
+    ...Typography.button,
+    color: Colors.textOnPrimary,
+  },
+}), [Colors]);
   const router = useRouter();
   const [favoritesList, setFavoritesList] = useState<SearchResultItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -267,151 +416,5 @@ export default function FavoritesScreen() {
       )}
     </SafeAreaView>
   );
-}
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  header: {
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.lg,
-  },
-  title: {
-    ...Typography.h1,
-    color: Colors.textPrimary,
-  },
-  subtitle: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  tabsContainer: {
-    paddingHorizontal: Spacing.xl,
-    marginBottom: Spacing.lg,
-  },
-  tabsBackground: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: BorderRadius.full,
-    padding: 4,
-    position: 'relative',
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  tabActiveIndicator: {
-    position: 'absolute',
-    top: 4,
-    bottom: 4,
-    width: '48%',
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.full,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  tabButton: {
-    flex: 1,
-    paddingVertical: Spacing.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1,
-  },
-  tabText: {
-    ...Typography.body,
-    color: Colors.textSecondary,
-    fontWeight: '500',
-  },
-  tabTextActive: {
-    color: Colors.textPrimary,
-    fontWeight: '700',
-  },
-  listContent: {
-    flexGrow: 1,
-    paddingHorizontal: Spacing.xl,
-    paddingBottom: Spacing.xl,
-  },
-  loaderContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loaderText: { ...Typography.bodySmall, color: Colors.textMuted, marginTop: Spacing.sm },
-  cardWrapper: {
-    position: 'relative',
-    marginBottom: Spacing.sm,
-  },
-  deleteButton: {
-    position: 'absolute',
-    top: Spacing.md,
-    right: Spacing.md,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(226, 75, 74, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(226, 75, 74, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingVertical: Spacing.xl,
-  },
-  emptyIconWrapper: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(255, 107, 157, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: Spacing.xl,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 107, 157, 0.2)',
-  },
-  emptyTitle: {
-    ...Typography.h2,
-    color: Colors.textPrimary,
-    marginBottom: Spacing.sm,
-  },
-  emptyDesc: {
-    ...Typography.body,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: Spacing.xxl,
-  },
-  featureList: {
-    width: '100%',
-    gap: Spacing.md,
-    marginBottom: Spacing.xxxl,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  featureIcon: {
-    width: 24,
-    textAlign: 'center',
-  },
-  featureText: {
-    ...Typography.caption,
-    color: Colors.textSecondary,
-    fontSize: 14,
-  },
-  exploreBtn: {
-    backgroundColor: Colors.primary,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: BorderRadius.full,
-    width: '100%',
-    alignItems: 'center',
-    ...Shadows.small,
-  },
-  exploreBtnText: {
-    ...Typography.button,
-    color: Colors.textOnPrimary,
-  },
-});
+}

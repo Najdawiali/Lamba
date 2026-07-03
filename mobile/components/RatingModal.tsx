@@ -7,14 +7,15 @@
  *  - Submit button with spinner loading state and a visual "Rating Stored!" checkmark success panel.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Modal, View, Text, StyleSheet, TouchableOpacity, TextInput,
   ActivityIndicator, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
-import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../constants/theme';
+import { Spacing, BorderRadius, Typography, Shadows } from '../constants/theme';
+import { useThemeColors } from '../context/ThemeContext';
 import { submitMarketRating, getUser } from '../services/api';
 
 interface Props {
@@ -25,6 +26,142 @@ interface Props {
 }
 
 export default function RatingModal({ visible, onClose, marketId, marketName }: Props) {
+  const Colors = useThemeColors();
+
+  const styles = useMemo(() => StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: Colors.modalOverlay,
+    justifyContent: 'flex-end',
+  },
+  keyboardView: {
+    width: '100%',
+  },
+  sheet: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: BorderRadius.xl,
+    borderTopRightRadius: BorderRadius.xl,
+    paddingTop: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Platform.OS === 'ios' ? Spacing.xxxl : Spacing.xl,
+    borderTopWidth: 1,
+    borderColor: Colors.border,
+    ...Shadows.large,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: Spacing.md,
+  },
+  headerTitle: {
+    ...Typography.h2,
+    color: Colors.textPrimary,
+    flex: 1,
+    marginRight: Spacing.md,
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.surfaceElevated,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  formContainer: {
+    paddingVertical: Spacing.sm,
+  },
+  label: {
+    ...Typography.label,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  starRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: Spacing.md,
+    marginVertical: Spacing.md,
+  },
+  starTouch: {
+    padding: Spacing.xs,
+  },
+  textInput: {
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    color: Colors.textPrimary,
+    ...Typography.bodySmall,
+    height: 100,
+    textAlignVertical: 'top',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  errorText: {
+    ...Typography.bodySmall,
+    color: Colors.error,
+    marginTop: Spacing.md,
+    textAlign: 'center',
+  },
+  submitButton: {
+    backgroundColor: Colors.primary,
+    height: 50,
+    borderRadius: BorderRadius.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: Spacing.xl,
+    ...Shadows.small,
+  },
+  submitText: {
+    ...Typography.label,
+    color: Colors.background,
+    fontWeight: '700',
+  },
+  submitTextDisabled: {
+    opacity: 0.6,
+  },
+  
+  // Success View Styles
+  successContainer: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xl,
+  },
+  successBadge: {
+    marginBottom: Spacing.md,
+  },
+  successTitle: {
+    ...Typography.h2,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.sm,
+  },
+  successText: {
+    ...Typography.body,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    paddingHorizontal: Spacing.lg,
+    marginBottom: Spacing.xl,
+    lineHeight: 22,
+  },
+  doneButton: {
+    backgroundColor: Colors.surfaceElevated,
+    height: 48,
+    borderRadius: BorderRadius.md,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  doneButtonText: {
+    ...Typography.label,
+    color: Colors.textPrimary,
+  },
+  }), [Colors]);
   const [score, setScore] = useState<number>(0);
   const [review, setReview] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
@@ -189,139 +326,5 @@ export default function RatingModal({ visible, onClose, marketId, marketName }: 
       </TouchableWithoutFeedback>
     </Modal>
   );
-}
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(5, 5, 15, 0.65)',
-    justifyContent: 'flex-end',
-  },
-  keyboardView: {
-    width: '100%',
-  },
-  sheet: {
-    backgroundColor: Colors.surface,
-    borderTopLeftRadius: BorderRadius.xl,
-    borderTopRightRadius: BorderRadius.xl,
-    paddingTop: Spacing.md,
-    paddingHorizontal: Spacing.xl,
-    paddingBottom: Platform.OS === 'ios' ? Spacing.xxxl : Spacing.xl,
-    borderTopWidth: 1,
-    borderColor: Colors.border,
-    ...Shadows.large,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: Spacing.sm,
-    borderBottomWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: Spacing.md,
-  },
-  headerTitle: {
-    ...Typography.h2,
-    color: Colors.textPrimary,
-    flex: 1,
-    marginRight: Spacing.md,
-  },
-  closeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.surfaceElevated,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  formContainer: {
-    paddingVertical: Spacing.sm,
-  },
-  label: {
-    ...Typography.label,
-    color: Colors.textSecondary,
-    marginBottom: Spacing.sm,
-    marginTop: Spacing.md,
-  },
-  starRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: Spacing.md,
-    marginVertical: Spacing.md,
-  },
-  starTouch: {
-    padding: Spacing.xs,
-  },
-  textInput: {
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    color: Colors.textPrimary,
-    ...Typography.bodySmall,
-    height: 100,
-    textAlignVertical: 'top',
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  errorText: {
-    ...Typography.bodySmall,
-    color: Colors.error,
-    marginTop: Spacing.md,
-    textAlign: 'center',
-  },
-  submitButton: {
-    backgroundColor: Colors.primary,
-    height: 50,
-    borderRadius: BorderRadius.md,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: Spacing.xl,
-    ...Shadows.small,
-  },
-  submitText: {
-    ...Typography.label,
-    color: Colors.background,
-    fontWeight: '700',
-  },
-  submitTextDisabled: {
-    opacity: 0.6,
-  },
-  
-  // Success View Styles
-  successContainer: {
-    alignItems: 'center',
-    paddingVertical: Spacing.xl,
-  },
-  successBadge: {
-    marginBottom: Spacing.md,
-  },
-  successTitle: {
-    ...Typography.h2,
-    color: Colors.textPrimary,
-    marginBottom: Spacing.sm,
-  },
-  successText: {
-    ...Typography.body,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.xl,
-    lineHeight: 22,
-  },
-  doneButton: {
-    backgroundColor: Colors.surfaceElevated,
-    height: 48,
-    borderRadius: BorderRadius.md,
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  doneButtonText: {
-    ...Typography.label,
-    color: Colors.textPrimary,
-  },
-});
+}

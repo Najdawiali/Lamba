@@ -17,13 +17,16 @@ import {
   getInventoryValue, getCheckoutHistory, getMarketItems, updateMarketStatus,
   HistoricalReceipt
 } from '../../services/api';
-import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n, toggleLanguage } from '../../services/i18n';
 import { formatPrice } from '../../services/currency';
+import ThemePreferenceRow from '../../components/ThemePreferenceRow';
 import Constants from 'expo-constants';
 
 export default function MerchantProfileScreen() {
   const router = useRouter();
+  const Colors = useThemeColors();
   const [user, setUser] = useState<any>(null);
   const [market, setMarket] = useState<MarketResponse | null>(null);
   const [loadingMarket, setLoadingMarket] = useState(true);
@@ -219,408 +222,7 @@ export default function MerchantProfileScreen() {
 
   const appVersion = Constants.expoConfig?.version || '1.0.0';
 
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>{t('profile.title')}</Text>
-        </View>
-
-        {/* Profile Card */}
-        <View style={styles.profileCard}>
-          <LinearGradient
-            colors={[Colors.secondary, '#33E4BC']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.avatar}
-          >
-            <Text style={styles.avatarText}>{initials}</Text>
-          </LinearGradient>
-
-          <Text style={styles.displayName}>{displayName}</Text>
-
-          <View style={styles.roleBadge}>
-            <Ionicons name="storefront-outline" size={14} color={Colors.secondary} />
-            <Text style={styles.roleBadgeText}>
-              {isAr ? 'حساب بائع' : 'Seller Account'}
-            </Text>
-          </View>
-
-          {user?.created_at && (
-            <Text style={styles.memberSince}>
-              {isAr ? 'عضو منذ' : 'Member since'}{' '}
-              {new Date(user.created_at).toLocaleDateString()}
-            </Text>
-          )}
-        </View>
-
-        {/* Market Info Card */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>{isAr ? 'متجري' : 'My Store'}</Text>
-
-          {loadingMarket ? (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator size="small" color={Colors.secondary} />
-            </View>
-          ) : market ? (
-            <>
-              <View style={styles.menuItem}>
-                <View style={[styles.menuIcon, { backgroundColor: 'rgba(0, 217, 166, 0.1)' }]}>
-                  <Ionicons name="storefront" size={20} color={Colors.secondary} />
-                </View>
-                <View style={styles.menuContent}>
-                  <Text style={styles.menuLabel}>{market.name}</Text>
-                  <Text style={styles.menuValue}>{market.address}</Text>
-                </View>
-              </View>
-              <View style={styles.menuItem}>
-                <View style={[styles.menuIcon, { backgroundColor: 'rgba(108, 99, 255, 0.1)' }]}>
-                  <Ionicons name="location" size={20} color={Colors.primary} />
-                </View>
-                <View style={styles.menuContent}>
-                  <Text style={styles.menuLabel}>{isAr ? 'الإحداثيات' : 'Coordinates'}</Text>
-                  <Text style={styles.menuValue}>
-                    {market.latitude.toFixed(4)}, {market.longitude.toFixed(4)}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.menuDivider} />
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => setAnalyticsVisible(true)}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-                accessibilityLabel={isAr ? 'تحليلات المتجر وحالته' : 'Store Analytics & Status'}
-              >
-                <View style={[styles.menuIcon, { backgroundColor: 'rgba(0, 217, 166, 0.1)' }]}>
-                  <Ionicons name="bar-chart-outline" size={20} color={Colors.secondary} />
-                </View>
-                <View style={styles.menuContent}>
-                  <Text style={styles.menuLabel}>{isAr ? 'تحليلات المتجر وحالته' : 'Store Analytics & Status'}</Text>
-                  <Text style={styles.menuValue}>
-                    {isAr ? 'تتبع الإيرادات، قيم المخزون، والتحليلات وحالة المتجر' : 'Track revenue metrics, asset valuation, and toggle status'}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
-              </TouchableOpacity>
-            </>
-          ) : (
-            <TouchableOpacity
-              style={styles.setupButton}
-              onPress={() => router.push('/(merchant)/onboarding')}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="add-circle-outline" size={20} color={Colors.secondary} />
-              <Text style={styles.setupText}>
-                {isAr ? 'إعداد المتجر' : 'Set Up Your Store'}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Settings Section */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>{t('profile.preferences')}</Text>
-
-          <TouchableOpacity style={styles.menuItem} onPress={toggleLanguage} activeOpacity={0.7}>
-            <View style={[styles.menuIcon, { backgroundColor: 'rgba(108, 99, 255, 0.1)' }]}>
-              <Ionicons name="language" size={20} color={Colors.primary} />
-            </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuLabel}>{t('profile.language')}</Text>
-              <Text style={styles.menuValue}>{isAr ? 'العربية' : 'English'}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
-            <View style={[styles.menuIcon, { backgroundColor: 'rgba(0, 217, 166, 0.1)' }]}>
-              <Ionicons name="notifications-outline" size={20} color={Colors.secondary} />
-            </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuLabel}>{t('profile.notifications')}</Text>
-              <Text style={styles.menuValue}>{isAr ? 'مفعّلة' : 'Enabled'}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
-          </TouchableOpacity>
-        </View>
-
-        {/* About */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>{isAr ? 'حول' : 'About'}</Text>
-
-          <View style={styles.menuItem}>
-            <View style={[styles.menuIcon, { backgroundColor: 'rgba(255, 107, 157, 0.1)' }]}>
-              <Ionicons name="information-circle-outline" size={20} color={Colors.accent} />
-            </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuLabel}>{t('profile.version')}</Text>
-              <Text style={styles.menuValue}>{appVersion}</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Logout */}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
-          <Ionicons name="log-out-outline" size={20} color={Colors.error} />
-          <Text style={styles.logoutText}>{t('profile.logout')}</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.footer}>Lamba v{appVersion} • Secure & Hyper-local</Text>
-      </ScrollView>
-
-      {/* Analytics & Store Status Modal */}
-      <Modal
-        visible={analyticsVisible}
-        animationType="slide"
-        onRequestClose={() => setAnalyticsVisible(false)}
-      >
-        <SafeAreaView style={styles.modalContainer} edges={['top']}>
-          {/* Modal Header */}
-          <View style={[styles.modalHeader, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-            <Text style={styles.modalTitle}>{isAr ? 'تحليلات المتجر وحالته' : 'Store Analytics & Status'}</Text>
-            <TouchableOpacity 
-              onPress={() => setAnalyticsVisible(false)}
-              style={styles.modalCloseBtn}
-            >
-              <Ionicons name="close" size={24} color={Colors.textPrimary} />
-            </TouchableOpacity>
-          </View>
-
-          {loadingStats && !refreshingStats ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={Colors.secondary} />
-              <Text style={styles.loadingText}>{isAr ? 'جاري تحميل التحليلات...' : 'Loading analytics...'}</Text>
-            </View>
-          ) : (
-            <ScrollView
-              contentContainerStyle={styles.modalScroll}
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshingStats}
-                  onRefresh={() => {
-                    setRefreshingStats(true);
-                    loadAnalyticsData();
-                  }}
-                  tintColor={Colors.secondary}
-                />
-              }
-            >
-              {/* Store Status Control Card */}
-              {market && (
-                <View style={styles.statusCardContainer}>
-                  <View style={styles.statusCardHeader}>
-                    <View style={styles.statusCardTitleRow}>
-                      <View style={[styles.statusDot, { backgroundColor: market.is_currently_open ? Colors.success : Colors.error }]} />
-                      <Text style={styles.statusCardTitle}>
-                        {t('common.store_status')}: <Text style={[styles.statusCardValue, { color: market.is_currently_open ? Colors.success : Colors.error }]}>
-                          {market.is_currently_open ? t('common.open') : t('common.closed')}
-                        </Text>
-                      </Text>
-                    </View>
-                    <Text style={styles.statusCardSubtitle}>
-                      {market.is_manual_override ? t('common.manual_override') : t('common.automatic_schedule')}
-                    </Text>
-                  </View>
-
-                  {/* Mode Selector Segmented Control */}
-                  <View style={styles.segmentedContainer}>
-                    <TouchableOpacity
-                      style={[styles.segmentBtn, !market.is_manual_override && styles.segmentBtnActive]}
-                      onPress={async () => {
-                        try {
-                          const updated = await updateMarketStatus(null, false);
-                          setMarket(updated);
-                        } catch (err) {
-                          Alert.alert('Error', 'Failed to set store to automatic mode');
-                        }
-                      }}
-                    >
-                      <Text style={[styles.segmentText, !market.is_manual_override && styles.segmentTextActive]}>
-                        {t('common.automatic_schedule')}
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[styles.segmentBtn, market.is_manual_override && styles.segmentBtnActive]}
-                      onPress={async () => {
-                        try {
-                          const updated = await updateMarketStatus(market.is_currently_open, true);
-                          setMarket(updated);
-                        } catch (err) {
-                          Alert.alert('Error', 'Failed to set store to manual override mode');
-                        }
-                      }}
-                    >
-                      <Text style={[styles.segmentText, market.is_manual_override && styles.segmentTextActive]}>
-                        {t('common.manual_override')}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Manual Switch */}
-                  {market.is_manual_override && (
-                    <View style={styles.manualSwitchRow}>
-                      <Text style={styles.manualSwitchLabel}>{t('common.reverts_at_midnight')}</Text>
-                      <Switch
-                        value={market.is_currently_open}
-                        onValueChange={async (value) => {
-                          try {
-                            const updated = await updateMarketStatus(value, true);
-                            setMarket(updated);
-                          } catch (err) {
-                            Alert.alert('Error', 'Failed to override store status');
-                          }
-                        }}
-                        trackColor={{ false: '#444466', true: Colors.primaryDark }}
-                        thumbColor={market.is_currently_open ? Colors.success : Colors.textMuted}
-                      />
-                    </View>
-                  )}
-                </View>
-              )}
-
-              {/* Inventory Assets Value Glow Card */}
-              {market && (
-                <View style={styles.assetsGlowCard}>
-                  <View style={[styles.assetsGlowInner, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-                    <View style={styles.assetsIconWrapper}>
-                      <Ionicons name="calculator-outline" size={22} color={Colors.primary} />
-                    </View>
-                    <View style={[styles.assetsTextWrapper, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
-                      <Text style={styles.assetsLabel}>{t('dashboard.inventory_value', 'Total Inventory Assets Value')}</Text>
-                      <Text style={styles.assetsValue}>
-                        {formatPrice(totalAssetsValue)}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              )}
-
-              {/* Sales Performance Card */}
-              {market && (
-                <View style={styles.analyticsCard}>
-                  <View style={[styles.analyticsHeader, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-                    <Ionicons name="trending-up-outline" size={20} color={Colors.secondary} />
-                    <Text style={styles.analyticsTitle}>
-                      {t('dashboard.sales_performance', 'Sales Performance & Daily Insights')}
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.analyticsDivider} />
-
-                  <View style={styles.trendRows}>
-                    {/* Daily Trend */}
-                    <View style={[styles.trendRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-                      <View style={[styles.trendLabelCol, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
-                        <Text style={styles.trendLabel}>{t('dashboard.todays_sales', "TODAY'S SALES")}</Text>
-                        <Text style={styles.trendVal}>{formatPrice(stats.todaySales)}</Text>
-                      </View>
-                      
-                      <View style={[styles.trendBadge, stats.todaySales >= stats.yesterdaySales ? styles.trendBadgeUp : styles.trendBadgeDown, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-                        <Ionicons 
-                          name={stats.todaySales >= stats.yesterdaySales ? 'trending-up' : 'trending-down'} 
-                          size={14} 
-                          color={stats.todaySales >= stats.yesterdaySales ? Colors.success : Colors.error} 
-                        />
-                        <Text style={[styles.trendBadgeText, { color: stats.todaySales >= stats.yesterdaySales ? Colors.success : Colors.error }]}>
-                          {stats.todaySales >= stats.yesterdaySales ? '+' : ''}{stats.dailyChange.toFixed(1)}%
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.trendRowDivider} />
-
-                    {/* Weekly Trend */}
-                    <View style={[styles.trendRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-                      <View style={[styles.trendLabelCol, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
-                        <Text style={styles.trendLabel}>{t('dashboard.this_weeks_sales', "THIS WEEK'S SALES")}</Text>
-                        <Text style={styles.trendVal}>{formatPrice(stats.thisWeekSales)}</Text>
-                      </View>
-                      
-                      <View style={[styles.trendBadge, stats.thisWeekSales >= stats.lastWeekSales ? styles.trendBadgeUp : styles.trendBadgeDown, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-                        <Ionicons 
-                          name={stats.thisWeekSales >= stats.lastWeekSales ? 'trending-up' : 'trending-down'} 
-                          size={14} 
-                          color={stats.thisWeekSales >= stats.lastWeekSales ? Colors.success : Colors.error} 
-                        />
-                        <Text style={[styles.trendBadgeText, { color: stats.thisWeekSales >= stats.lastWeekSales ? Colors.success : Colors.error }]}>
-                          {stats.thisWeekSales >= stats.lastWeekSales ? '+' : ''}{stats.weeklyChange.toFixed(1)}%
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* Daily Dynamic Analysis Insights box */}
-                  <View style={styles.insightsBox}>
-                    <View style={[styles.insightsHeaderRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-                      <Ionicons name="sparkles-outline" size={16} color={Colors.primary} />
-                      <Text style={styles.insightsHeaderTitle}>
-                        {t('dashboard.daily_summary_analysis', 'DAILY SUMMARY ANALYSIS')}
-                      </Text>
-                    </View>
-                    <Text style={[styles.insightsBodyText, { textAlign: isAr ? 'right' : 'left' }]}>
-                      {stats.summaryAnalysis}
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Stats Summary cards */}
-              <View style={styles.statsRow}>
-                <View style={styles.statCard}>
-                  <Text style={[styles.statNumber, { color: Colors.secondary }]}>{market ? 1 : 0}</Text>
-                  <Text style={styles.statLabel}>{t('dashboard.store_active', 'Store Active')}</Text>
-                </View>
-                
-                <View style={styles.statCard}>
-                  <Text style={styles.statNumber}>{totalProducts}</Text>
-                  <Text style={styles.statLabel}>{t('dashboard.catalog_items', 'Catalog Items')}</Text>
-                </View>
-                
-                <View style={[styles.statCard, { borderColor: Colors.success }]}>
-                  <Text style={[styles.statNumber, { color: Colors.success }]}>{inStockCount}</Text>
-                  <Text style={styles.statLabel}>{t('dashboard.in_stock')}</Text>
-                </View>
-              </View>
-
-              {/* Deficiencies Warnings (Low Stock Button) */}
-              <TouchableOpacity
-                style={styles.lowStockWarningCard}
-                onPress={() => {
-                  setAnalyticsVisible(false);
-                  router.push('/(merchant)/low-stock');
-                }}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.lowStockInner, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-                  <View style={styles.lowStockIconWrapper}>
-                    <Ionicons name="warning-outline" size={22} color={Colors.error} />
-                  </View>
-                  <View style={[styles.lowStockTextWrapper, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
-                    <Text style={styles.lowStockLabel}>
-                      {t('lowStock.title', 'Stock Deficiency Warnings')}
-                    </Text>
-                    <Text style={styles.lowStockSubText}>
-                      {isAr ? 'اضغط لعرض المنتجات منخفضة المخزون' : 'Tap to manage depleting inventory items'}
-                    </Text>
-                  </View>
-                  <Ionicons name={isAr ? 'chevron-back' : 'chevron-forward'} size={20} color={Colors.textMuted} />
-                </View>
-              </TouchableOpacity>
-
-            </ScrollView>
-          )}
-        </SafeAreaView>
-      </Modal>
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
+  const styles = useMemo(() => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
@@ -1098,4 +700,408 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     textAlign: 'center',
   },
-});
+}), [Colors]);
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ScrollView contentContainerStyle={styles.scroll}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>{t('profile.title')}</Text>
+        </View>
+
+        {/* Profile Card */}
+        <View style={styles.profileCard}>
+          <LinearGradient
+            colors={[Colors.secondary, '#33E4BC']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.avatar}
+          >
+            <Text style={styles.avatarText}>{initials}</Text>
+          </LinearGradient>
+
+          <Text style={styles.displayName}>{displayName}</Text>
+
+          <View style={styles.roleBadge}>
+            <Ionicons name="storefront-outline" size={14} color={Colors.secondary} />
+            <Text style={styles.roleBadgeText}>
+              {isAr ? 'حساب بائع' : 'Seller Account'}
+            </Text>
+          </View>
+
+          {user?.created_at && (
+            <Text style={styles.memberSince}>
+              {isAr ? 'عضو منذ' : 'Member since'}{' '}
+              {new Date(user.created_at).toLocaleDateString()}
+            </Text>
+          )}
+        </View>
+
+        {/* Market Info Card */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>{isAr ? 'متجري' : 'My Store'}</Text>
+
+          {loadingMarket ? (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator size="small" color={Colors.secondary} />
+            </View>
+          ) : market ? (
+            <>
+              <View style={styles.menuItem}>
+                <View style={[styles.menuIcon, { backgroundColor: 'rgba(0, 217, 166, 0.1)' }]}>
+                  <Ionicons name="storefront" size={20} color={Colors.secondary} />
+                </View>
+                <View style={styles.menuContent}>
+                  <Text style={styles.menuLabel}>{market.name}</Text>
+                  <Text style={styles.menuValue}>{market.address}</Text>
+                </View>
+              </View>
+              <View style={styles.menuItem}>
+                <View style={[styles.menuIcon, { backgroundColor: 'rgba(108, 99, 255, 0.1)' }]}>
+                  <Ionicons name="location" size={20} color={Colors.primary} />
+                </View>
+                <View style={styles.menuContent}>
+                  <Text style={styles.menuLabel}>{isAr ? 'الإحداثيات' : 'Coordinates'}</Text>
+                  <Text style={styles.menuValue}>
+                    {market.latitude.toFixed(4)}, {market.longitude.toFixed(4)}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.menuDivider} />
+
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => setAnalyticsVisible(true)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={isAr ? 'تحليلات المتجر وحالته' : 'Store Analytics & Status'}
+              >
+                <View style={[styles.menuIcon, { backgroundColor: 'rgba(0, 217, 166, 0.1)' }]}>
+                  <Ionicons name="bar-chart-outline" size={20} color={Colors.secondary} />
+                </View>
+                <View style={styles.menuContent}>
+                  <Text style={styles.menuLabel}>{isAr ? 'تحليلات المتجر وحالته' : 'Store Analytics & Status'}</Text>
+                  <Text style={styles.menuValue}>
+                    {isAr ? 'تتبع الإيرادات، قيم المخزون، والتحليلات وحالة المتجر' : 'Track revenue metrics, asset valuation, and toggle status'}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity
+              style={styles.setupButton}
+              onPress={() => router.push('/(merchant)/onboarding')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="add-circle-outline" size={20} color={Colors.secondary} />
+              <Text style={styles.setupText}>
+                {isAr ? 'إعداد المتجر' : 'Set Up Your Store'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Settings Section */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>{t('profile.preferences')}</Text>
+
+          <TouchableOpacity style={styles.menuItem} onPress={toggleLanguage} activeOpacity={0.7}>
+            <View style={[styles.menuIcon, { backgroundColor: 'rgba(108, 99, 255, 0.1)' }]}>
+              <Ionicons name="language" size={20} color={Colors.primary} />
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={styles.menuLabel}>{t('profile.language')}</Text>
+              <Text style={styles.menuValue}>{isAr ? 'العربية' : 'English'}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
+            <View style={[styles.menuIcon, { backgroundColor: 'rgba(0, 217, 166, 0.1)' }]}>
+              <Ionicons name="notifications-outline" size={20} color={Colors.secondary} />
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={styles.menuLabel}>{t('profile.notifications')}</Text>
+              <Text style={styles.menuValue}>{isAr ? 'مفعّلة' : 'Enabled'}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Appearance — theme picker */}
+        <ThemePreferenceRow />
+
+        {/* About */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>{isAr ? 'حول' : 'About'}</Text>
+
+          <View style={styles.menuItem}>
+            <View style={[styles.menuIcon, { backgroundColor: 'rgba(255, 107, 157, 0.1)' }]}>
+              <Ionicons name="information-circle-outline" size={20} color={Colors.accent} />
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={styles.menuLabel}>{t('profile.version')}</Text>
+              <Text style={styles.menuValue}>{appVersion}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Logout */}
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
+          <Ionicons name="log-out-outline" size={20} color={Colors.error} />
+          <Text style={styles.logoutText}>{t('profile.logout')}</Text>
+        </TouchableOpacity>
+
+        <Text style={styles.footer}>Lamba v{appVersion} • Secure & Hyper-local</Text>
+      </ScrollView>
+
+      {/* Analytics & Store Status Modal */}
+      <Modal
+        visible={analyticsVisible}
+        animationType="slide"
+        onRequestClose={() => setAnalyticsVisible(false)}
+      >
+        <SafeAreaView style={styles.modalContainer} edges={['top']}>
+          {/* Modal Header */}
+          <View style={[styles.modalHeader, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+            <Text style={styles.modalTitle}>{isAr ? 'تحليلات المتجر وحالته' : 'Store Analytics & Status'}</Text>
+            <TouchableOpacity 
+              onPress={() => setAnalyticsVisible(false)}
+              style={styles.modalCloseBtn}
+            >
+              <Ionicons name="close" size={24} color={Colors.textPrimary} />
+            </TouchableOpacity>
+          </View>
+
+          {loadingStats && !refreshingStats ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={Colors.secondary} />
+              <Text style={styles.loadingText}>{isAr ? 'جاري تحميل التحليلات...' : 'Loading analytics...'}</Text>
+            </View>
+          ) : (
+            <ScrollView
+              contentContainerStyle={styles.modalScroll}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshingStats}
+                  onRefresh={() => {
+                    setRefreshingStats(true);
+                    loadAnalyticsData();
+                  }}
+                  tintColor={Colors.secondary}
+                />
+              }
+            >
+              {/* Store Status Control Card */}
+              {market && (
+                <View style={styles.statusCardContainer}>
+                  <View style={styles.statusCardHeader}>
+                    <View style={styles.statusCardTitleRow}>
+                      <View style={[styles.statusDot, { backgroundColor: market.is_currently_open ? Colors.success : Colors.error }]} />
+                      <Text style={styles.statusCardTitle}>
+                        {t('common.store_status')}: <Text style={[styles.statusCardValue, { color: market.is_currently_open ? Colors.success : Colors.error }]}>
+                          {market.is_currently_open ? t('common.open') : t('common.closed')}
+                        </Text>
+                      </Text>
+                    </View>
+                    <Text style={styles.statusCardSubtitle}>
+                      {market.is_manual_override ? t('common.manual_override') : t('common.automatic_schedule')}
+                    </Text>
+                  </View>
+
+                  {/* Mode Selector Segmented Control */}
+                  <View style={styles.segmentedContainer}>
+                    <TouchableOpacity
+                      style={[styles.segmentBtn, !market.is_manual_override && styles.segmentBtnActive]}
+                      onPress={async () => {
+                        try {
+                          const updated = await updateMarketStatus(null, false);
+                          setMarket(updated);
+                        } catch (err) {
+                          Alert.alert('Error', 'Failed to set store to automatic mode');
+                        }
+                      }}
+                    >
+                      <Text style={[styles.segmentText, !market.is_manual_override && styles.segmentTextActive]}>
+                        {t('common.automatic_schedule')}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.segmentBtn, market.is_manual_override && styles.segmentBtnActive]}
+                      onPress={async () => {
+                        try {
+                          const updated = await updateMarketStatus(market.is_currently_open, true);
+                          setMarket(updated);
+                        } catch (err) {
+                          Alert.alert('Error', 'Failed to set store to manual override mode');
+                        }
+                      }}
+                    >
+                      <Text style={[styles.segmentText, market.is_manual_override && styles.segmentTextActive]}>
+                        {t('common.manual_override')}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Manual Switch */}
+                  {market.is_manual_override && (
+                    <View style={styles.manualSwitchRow}>
+                      <Text style={styles.manualSwitchLabel}>{t('common.reverts_at_midnight')}</Text>
+                      <Switch
+                        value={market.is_currently_open}
+                        onValueChange={async (value) => {
+                          try {
+                            const updated = await updateMarketStatus(value, true);
+                            setMarket(updated);
+                          } catch (err) {
+                            Alert.alert('Error', 'Failed to override store status');
+                          }
+                        }}
+                        trackColor={{ false: '#444466', true: Colors.primaryDark }}
+                        thumbColor={market.is_currently_open ? Colors.success : Colors.textMuted}
+                      />
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {/* Inventory Assets Value Glow Card */}
+              {market && (
+                <View style={styles.assetsGlowCard}>
+                  <View style={[styles.assetsGlowInner, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                    <View style={styles.assetsIconWrapper}>
+                      <Ionicons name="calculator-outline" size={22} color={Colors.primary} />
+                    </View>
+                    <View style={[styles.assetsTextWrapper, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
+                      <Text style={styles.assetsLabel}>{t('dashboard.inventory_value', 'Total Inventory Assets Value')}</Text>
+                      <Text style={styles.assetsValue}>
+                        {formatPrice(totalAssetsValue)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* Sales Performance Card */}
+              {market && (
+                <View style={styles.analyticsCard}>
+                  <View style={[styles.analyticsHeader, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                    <Ionicons name="trending-up-outline" size={20} color={Colors.secondary} />
+                    <Text style={styles.analyticsTitle}>
+                      {t('dashboard.sales_performance', 'Sales Performance & Daily Insights')}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.analyticsDivider} />
+
+                  <View style={styles.trendRows}>
+                    {/* Daily Trend */}
+                    <View style={[styles.trendRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                      <View style={[styles.trendLabelCol, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
+                        <Text style={styles.trendLabel}>{t('dashboard.todays_sales', "TODAY'S SALES")}</Text>
+                        <Text style={styles.trendVal}>{formatPrice(stats.todaySales)}</Text>
+                      </View>
+                      
+                      <View style={[styles.trendBadge, stats.todaySales >= stats.yesterdaySales ? styles.trendBadgeUp : styles.trendBadgeDown, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                        <Ionicons 
+                          name={stats.todaySales >= stats.yesterdaySales ? 'trending-up' : 'trending-down'} 
+                          size={14} 
+                          color={stats.todaySales >= stats.yesterdaySales ? Colors.success : Colors.error} 
+                        />
+                        <Text style={[styles.trendBadgeText, { color: stats.todaySales >= stats.yesterdaySales ? Colors.success : Colors.error }]}>
+                          {stats.todaySales >= stats.yesterdaySales ? '+' : ''}{stats.dailyChange.toFixed(1)}%
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.trendRowDivider} />
+
+                    {/* Weekly Trend */}
+                    <View style={[styles.trendRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                      <View style={[styles.trendLabelCol, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
+                        <Text style={styles.trendLabel}>{t('dashboard.this_weeks_sales', "THIS WEEK'S SALES")}</Text>
+                        <Text style={styles.trendVal}>{formatPrice(stats.thisWeekSales)}</Text>
+                      </View>
+                      
+                      <View style={[styles.trendBadge, stats.thisWeekSales >= stats.lastWeekSales ? styles.trendBadgeUp : styles.trendBadgeDown, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                        <Ionicons 
+                          name={stats.thisWeekSales >= stats.lastWeekSales ? 'trending-up' : 'trending-down'} 
+                          size={14} 
+                          color={stats.thisWeekSales >= stats.lastWeekSales ? Colors.success : Colors.error} 
+                        />
+                        <Text style={[styles.trendBadgeText, { color: stats.thisWeekSales >= stats.lastWeekSales ? Colors.success : Colors.error }]}>
+                          {stats.thisWeekSales >= stats.lastWeekSales ? '+' : ''}{stats.weeklyChange.toFixed(1)}%
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Daily Dynamic Analysis Insights box */}
+                  <View style={styles.insightsBox}>
+                    <View style={[styles.insightsHeaderRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                      <Ionicons name="sparkles-outline" size={16} color={Colors.primary} />
+                      <Text style={styles.insightsHeaderTitle}>
+                        {t('dashboard.daily_summary_analysis', 'DAILY SUMMARY ANALYSIS')}
+                      </Text>
+                    </View>
+                    <Text style={[styles.insightsBodyText, { textAlign: isAr ? 'right' : 'left' }]}>
+                      {stats.summaryAnalysis}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Stats Summary cards */}
+              <View style={styles.statsRow}>
+                <View style={styles.statCard}>
+                  <Text style={[styles.statNumber, { color: Colors.secondary }]}>{market ? 1 : 0}</Text>
+                  <Text style={styles.statLabel}>{t('dashboard.store_active', 'Store Active')}</Text>
+                </View>
+                
+                <View style={styles.statCard}>
+                  <Text style={styles.statNumber}>{totalProducts}</Text>
+                  <Text style={styles.statLabel}>{t('dashboard.catalog_items', 'Catalog Items')}</Text>
+                </View>
+                
+                <View style={[styles.statCard, { borderColor: Colors.success }]}>
+                  <Text style={[styles.statNumber, { color: Colors.success }]}>{inStockCount}</Text>
+                  <Text style={styles.statLabel}>{t('dashboard.in_stock')}</Text>
+                </View>
+              </View>
+
+              {/* Deficiencies Warnings (Low Stock Button) */}
+              <TouchableOpacity
+                style={styles.lowStockWarningCard}
+                onPress={() => {
+                  setAnalyticsVisible(false);
+                  router.push('/(merchant)/low-stock');
+                }}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.lowStockInner, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                  <View style={styles.lowStockIconWrapper}>
+                    <Ionicons name="warning-outline" size={22} color={Colors.error} />
+                  </View>
+                  <View style={[styles.lowStockTextWrapper, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
+                    <Text style={styles.lowStockLabel}>
+                      {t('lowStock.title', 'Stock Deficiency Warnings')}
+                    </Text>
+                    <Text style={styles.lowStockSubText}>
+                      {isAr ? 'اضغط لعرض المنتجات منخفضة المخزون' : 'Tap to manage depleting inventory items'}
+                    </Text>
+                  </View>
+                  <Ionicons name={isAr ? 'chevron-back' : 'chevron-forward'} size={20} color={Colors.textMuted} />
+                </View>
+              </TouchableOpacity>
+
+            </ScrollView>
+          )}
+        </SafeAreaView>
+      </Modal>
+    </SafeAreaView>
+  );
+}

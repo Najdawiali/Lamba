@@ -21,13 +21,15 @@ import api, {
   getMyMarket, checkItemName, linkExistingItem, addNewItem,
   getCategories, CatalogItemMatch, getMyShops
 } from '../../services/api';
-import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
 
 export default function AddProductScreen() {
   const router = useRouter();
+  const Colors = useThemeColors();
   const params = useLocalSearchParams<{ barcode?: string }>();
   
   // Market setup check
@@ -332,6 +334,260 @@ export default function AddProductScreen() {
       setLoading(false);
     }
   };
+
+  const styles = useMemo(() => StyleSheet.create({
+  container: { flex: 1, backgroundColor: Colors.background },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,
+  },
+  backButton: {
+    width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.surface,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  headerTitle: { fontSize: 20, fontWeight: '600', color: Colors.textPrimary },
+  scroll: { padding: Spacing.xl, paddingBottom: Spacing.xxxl },
+  section: { width: '100%' },
+  label: {
+    ...Typography.label, color: Colors.textSecondary, marginBottom: Spacing.md,
+    fontSize: 14, fontWeight: '700', textTransform: 'uppercase'
+  },
+  searchRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.lg },
+  searchInput: {
+    flex: 1, height: 52, backgroundColor: Colors.surface, borderRadius: BorderRadius.md,
+    borderWidth: 1, borderColor: Colors.border, paddingHorizontal: Spacing.lg,
+    color: Colors.textPrimary, ...Typography.body,
+  },
+  searchBtn: {
+    width: 52, height: 52, backgroundColor: Colors.primary, borderRadius: BorderRadius.md,
+    justifyContent: 'center', alignItems: 'center', ...Shadows.small,
+  },
+  matchesWrapper: { marginBottom: Spacing.xl },
+  matchesHeading: { ...Typography.bodySmall, color: Colors.textSecondary, fontWeight: '700', marginBottom: Spacing.sm },
+  matchCard: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md, borderWidth: 1, borderColor: Colors.border,
+    padding: Spacing.md, marginBottom: Spacing.xs,
+  },
+  matchCardActive: { borderColor: Colors.secondary, backgroundColor: Colors.surfaceElevated, ...Shadows.small },
+  matchThumb: { width: 44, height: 44, borderRadius: BorderRadius.sm, marginRight: Spacing.md },
+  matchName: { ...Typography.body, color: Colors.textPrimary, fontWeight: '600' },
+  matchCategory: { ...Typography.caption, color: Colors.textMuted },
+  matchDesc: { ...Typography.bodySmall, color: Colors.textSecondary, fontSize: 11, marginTop: 2 },
+  linkConfigCard: {
+    backgroundColor: Colors.surfaceGlass, borderRadius: BorderRadius.xl,
+    padding: Spacing.xl, borderWidth: 1, borderColor: Colors.border,
+    ...Shadows.medium, marginBottom: Spacing.xl,
+  },
+  configHeading: { ...Typography.h3, color: Colors.textPrimary, marginBottom: Spacing.lg, textAlign: 'center' },
+  fieldGroup: { marginBottom: Spacing.lg },
+  configLabel: {
+    ...Typography.label, color: Colors.textSecondary, marginBottom: Spacing.xs,
+    textTransform: 'uppercase', fontSize: 11,
+  },
+  input: {
+    backgroundColor: Colors.surface, borderRadius: BorderRadius.md, borderWidth: 1,
+    borderColor: Colors.border, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,
+    color: Colors.textPrimary, ...Typography.body, height: 52,
+  },
+  multiline: { height: 80, paddingTop: Spacing.md },
+  submitBtn: {
+    width: '100%', height: 52, backgroundColor: Colors.primary, borderRadius: BorderRadius.md,
+    justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: Spacing.sm,
+    overflow: 'hidden', ...Shadows.small, marginTop: Spacing.sm,
+  },
+  gradientBtn: {
+    flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+    gap: Spacing.sm, width: '100%', height: '100%',
+  },
+  submitBtnText: { ...Typography.button, color: Colors.textOnPrimary },
+  buttonDisabled: { opacity: 0.6 },
+  fallbackBox: {
+    backgroundColor: 'rgba(255, 255, 255, 0.02)', borderRadius: BorderRadius.md,
+    borderWidth: 1, borderColor: Colors.border, padding: Spacing.xl,
+    alignItems: 'center', marginTop: Spacing.lg,
+  },
+  fallbackText: { ...Typography.bodySmall, color: Colors.textMuted, marginBottom: Spacing.sm },
+  fallbackBtn: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  fallbackBtnText: { ...Typography.label, color: Colors.primary, fontWeight: '700' },
+  newHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md },
+  cancelLink: { ...Typography.bodySmall, color: Colors.error, fontWeight: '600' },
+  card: {
+    backgroundColor: Colors.surfaceGlass, borderRadius: BorderRadius.xl,
+    padding: Spacing.xl, borderWidth: 1, borderColor: Colors.border, ...Shadows.medium,
+  },
+  photoPickerBtn: {
+    height: 120, backgroundColor: Colors.surface, borderWidth: 1, borderStyle: 'dashed',
+    borderColor: Colors.primary, borderRadius: BorderRadius.md, justifyContent: 'center',
+    alignItems: 'center', gap: Spacing.sm,
+  },
+  photoPickerText: { ...Typography.caption, color: Colors.textSecondary, fontWeight: '600' },
+  imagePreviewContainer: {
+    height: 150, borderRadius: BorderRadius.md, overflow: 'hidden', position: 'relative',
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  imagePreview: { width: '100%', height: '100%' },
+  removeImageBtn: {
+    position: 'absolute', top: Spacing.sm, right: Spacing.sm, width: 36, height: 36,
+    borderRadius: 18, backgroundColor: Colors.surfaceGlass, justifyContent: 'center',
+    alignItems: 'center', borderWidth: 1, borderColor: Colors.border,
+  },
+
+  // Categories Selector Horizontal Row
+  horizontalScroll: { paddingVertical: Spacing.xs },
+  categoryPill: {
+    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, borderRadius: BorderRadius.full,
+    backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, marginRight: Spacing.sm,
+  },
+  categoryPillActive: { backgroundColor: Colors.primary, borderColor: Colors.primaryLight },
+  categoryPillText: { ...Typography.bodySmall, color: Colors.textSecondary },
+  categoryPillTextActive: { color: Colors.textOnPrimary, fontWeight: '700' },
+
+  // Secondary Photo Upload Styling
+  secondaryScroll: { paddingVertical: Spacing.xs, flexDirection: 'row', gap: Spacing.md },
+  secThumbContainer: { position: 'relative', width: 80, height: 80, marginRight: Spacing.sm },
+  secThumb: { width: 80, height: 80, borderRadius: BorderRadius.md, borderWidth: 1, borderColor: Colors.border },
+  removeSecBtn: { position: 'absolute', top: -4, right: -4, zIndex: 5 },
+  addSecBtn: {
+    width: 80, height: 80, borderRadius: BorderRadius.md, borderWidth: 1, borderStyle: 'dashed',
+    borderColor: Colors.primary, justifyContent: 'center', alignItems: 'center', gap: 4,
+    backgroundColor: Colors.surface,
+  },
+  addSecText: { ...Typography.caption, color: Colors.primary, fontSize: 10, fontWeight: '600' },
+
+  // Segmented Tab Selector Styling
+  tabScroll: {
+    marginBottom: Spacing.lg,
+    maxHeight: 52,
+  },
+  tabScrollContainer: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  tabButton: {
+    paddingHorizontal: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    paddingVertical: 10,
+    borderRadius: BorderRadius.sm,
+    height: 42,
+  },
+  tabButtonActive: {
+    backgroundColor: Colors.surfaceElevated,
+    ...Shadows.small,
+  },
+  tabText: {
+    ...Typography.bodySmall,
+    color: Colors.textMuted,
+    fontWeight: '600',
+  },
+  tabTextActive: {
+    color: Colors.secondary,
+    fontWeight: '700',
+  },
+  
+  // Scanner styles
+  barcodeInputRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    alignItems: 'center',
+  },
+  inlineScanBtn: {
+    width: 52,
+    height: 52,
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scannerModalContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  scannerModalHeader: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 60 : 40,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  scannerCloseBtn: {
+    padding: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 20,
+  },
+  scannerModalTitle: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginLeft: 16,
+  },
+  scannerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scannerTargetBox: {
+    width: 280,
+    height: 180,
+    borderWidth: 2,
+    borderColor: Colors.secondary,
+    backgroundColor: 'transparent',
+    borderRadius: BorderRadius.md,
+  },
+  
+  // CSV Upload Styles
+  shopList: { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap', marginTop: Spacing.xs },
+  shopOption: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.xs,
+    backgroundColor: Colors.surface, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md, borderWidth: 1, borderColor: Colors.border,
+  },
+  shopOptionActive: { backgroundColor: Colors.primary, borderColor: Colors.primaryLight },
+  shopText: { ...Typography.body, color: Colors.textMuted },
+  shopTextActive: { color: Colors.textOnPrimary, fontWeight: '700' },
+  uploadArea: {
+    borderWidth: 2, borderColor: Colors.border, borderStyle: 'dashed',
+    borderRadius: BorderRadius.xl, padding: Spacing.xxxl, alignItems: 'center',
+    marginBottom: Spacing.xl, backgroundColor: Colors.surface,
+  },
+  uploadAreaDisabled: { opacity: 0.7 },
+  uploadIcon: {
+    width: 72, height: 72, borderRadius: 36, backgroundColor: Colors.surfaceElevated,
+    justifyContent: 'center', alignItems: 'center', marginBottom: Spacing.lg, ...Shadows.glow,
+  },
+  uploadTitle: { ...Typography.h3, color: Colors.textPrimary, marginBottom: Spacing.sm },
+  uploadText: { ...Typography.bodySmall, color: Colors.textMuted, textAlign: 'center' },
+  resultCard: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.lg,
+    marginBottom: Spacing.xl, borderWidth: 1, borderColor: Colors.success,
+  },
+  resultInfo: { flex: 1 },
+  resultTitle: { ...Typography.body, color: Colors.success, fontWeight: '600' },
+  resultDetail: { ...Typography.bodySmall, color: Colors.textSecondary, marginTop: 2 },
+  helpCard: {
+    backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.lg,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  helpTitle: { ...Typography.label, color: Colors.textSecondary, marginBottom: Spacing.md },
+  codeBlock: {
+    backgroundColor: Colors.background, borderRadius: BorderRadius.sm, padding: Spacing.md,
+  },
+  code: { fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 11, color: Colors.textMuted, lineHeight: 18 },
+}), [Colors]);
 
   if (loadingMarket) {
     return (
@@ -831,257 +1087,3 @@ export default function AddProductScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,
-  },
-  backButton: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.surface,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  headerTitle: { fontSize: 20, fontWeight: '600', color: Colors.textPrimary },
-  scroll: { padding: Spacing.xl, paddingBottom: Spacing.xxxl },
-  section: { width: '100%' },
-  label: {
-    ...Typography.label, color: Colors.textSecondary, marginBottom: Spacing.md,
-    fontSize: 14, fontWeight: '700', textTransform: 'uppercase'
-  },
-  searchRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.lg },
-  searchInput: {
-    flex: 1, height: 52, backgroundColor: Colors.surface, borderRadius: BorderRadius.md,
-    borderWidth: 1, borderColor: Colors.border, paddingHorizontal: Spacing.lg,
-    color: Colors.textPrimary, ...Typography.body,
-  },
-  searchBtn: {
-    width: 52, height: 52, backgroundColor: Colors.primary, borderRadius: BorderRadius.md,
-    justifyContent: 'center', alignItems: 'center', ...Shadows.small,
-  },
-  matchesWrapper: { marginBottom: Spacing.xl },
-  matchesHeading: { ...Typography.bodySmall, color: Colors.textSecondary, fontWeight: '700', marginBottom: Spacing.sm },
-  matchCard: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md, borderWidth: 1, borderColor: Colors.border,
-    padding: Spacing.md, marginBottom: Spacing.xs,
-  },
-  matchCardActive: { borderColor: Colors.secondary, backgroundColor: Colors.surfaceElevated, ...Shadows.small },
-  matchThumb: { width: 44, height: 44, borderRadius: BorderRadius.sm, marginRight: Spacing.md },
-  matchName: { ...Typography.body, color: Colors.textPrimary, fontWeight: '600' },
-  matchCategory: { ...Typography.caption, color: Colors.textMuted },
-  matchDesc: { ...Typography.bodySmall, color: Colors.textSecondary, fontSize: 11, marginTop: 2 },
-  linkConfigCard: {
-    backgroundColor: Colors.surfaceGlass, borderRadius: BorderRadius.xl,
-    padding: Spacing.xl, borderWidth: 1, borderColor: Colors.border,
-    ...Shadows.medium, marginBottom: Spacing.xl,
-  },
-  configHeading: { ...Typography.h3, color: Colors.textPrimary, marginBottom: Spacing.lg, textAlign: 'center' },
-  fieldGroup: { marginBottom: Spacing.lg },
-  configLabel: {
-    ...Typography.label, color: Colors.textSecondary, marginBottom: Spacing.xs,
-    textTransform: 'uppercase', fontSize: 11,
-  },
-  input: {
-    backgroundColor: Colors.surface, borderRadius: BorderRadius.md, borderWidth: 1,
-    borderColor: Colors.border, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,
-    color: Colors.textPrimary, ...Typography.body, height: 52,
-  },
-  multiline: { height: 80, paddingTop: Spacing.md },
-  submitBtn: {
-    width: '100%', height: 52, backgroundColor: Colors.primary, borderRadius: BorderRadius.md,
-    justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: Spacing.sm,
-    overflow: 'hidden', ...Shadows.small, marginTop: Spacing.sm,
-  },
-  gradientBtn: {
-    flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-    gap: Spacing.sm, width: '100%', height: '100%',
-  },
-  submitBtnText: { ...Typography.button, color: Colors.textOnPrimary },
-  buttonDisabled: { opacity: 0.6 },
-  fallbackBox: {
-    backgroundColor: 'rgba(255, 255, 255, 0.02)', borderRadius: BorderRadius.md,
-    borderWidth: 1, borderColor: Colors.border, padding: Spacing.xl,
-    alignItems: 'center', marginTop: Spacing.lg,
-  },
-  fallbackText: { ...Typography.bodySmall, color: Colors.textMuted, marginBottom: Spacing.sm },
-  fallbackBtn: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
-  fallbackBtnText: { ...Typography.label, color: Colors.primary, fontWeight: '700' },
-  newHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md },
-  cancelLink: { ...Typography.bodySmall, color: Colors.error, fontWeight: '600' },
-  card: {
-    backgroundColor: Colors.surfaceGlass, borderRadius: BorderRadius.xl,
-    padding: Spacing.xl, borderWidth: 1, borderColor: Colors.border, ...Shadows.medium,
-  },
-  photoPickerBtn: {
-    height: 120, backgroundColor: Colors.surface, borderWidth: 1, borderStyle: 'dashed',
-    borderColor: Colors.primary, borderRadius: BorderRadius.md, justifyContent: 'center',
-    alignItems: 'center', gap: Spacing.sm,
-  },
-  photoPickerText: { ...Typography.caption, color: Colors.textSecondary, fontWeight: '600' },
-  imagePreviewContainer: {
-    height: 150, borderRadius: BorderRadius.md, overflow: 'hidden', position: 'relative',
-    borderWidth: 1, borderColor: Colors.border,
-  },
-  imagePreview: { width: '100%', height: '100%' },
-  removeImageBtn: {
-    position: 'absolute', top: Spacing.sm, right: Spacing.sm, width: 36, height: 36,
-    borderRadius: 18, backgroundColor: Colors.surfaceGlass, justifyContent: 'center',
-    alignItems: 'center', borderWidth: 1, borderColor: Colors.border,
-  },
-
-  // Categories Selector Horizontal Row
-  horizontalScroll: { paddingVertical: Spacing.xs },
-  categoryPill: {
-    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, borderRadius: BorderRadius.full,
-    backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, marginRight: Spacing.sm,
-  },
-  categoryPillActive: { backgroundColor: Colors.primary, borderColor: Colors.primaryLight },
-  categoryPillText: { ...Typography.bodySmall, color: Colors.textSecondary },
-  categoryPillTextActive: { color: Colors.textOnPrimary, fontWeight: '700' },
-
-  // Secondary Photo Upload Styling
-  secondaryScroll: { paddingVertical: Spacing.xs, flexDirection: 'row', gap: Spacing.md },
-  secThumbContainer: { position: 'relative', width: 80, height: 80, marginRight: Spacing.sm },
-  secThumb: { width: 80, height: 80, borderRadius: BorderRadius.md, borderWidth: 1, borderColor: Colors.border },
-  removeSecBtn: { position: 'absolute', top: -4, right: -4, zIndex: 5 },
-  addSecBtn: {
-    width: 80, height: 80, borderRadius: BorderRadius.md, borderWidth: 1, borderStyle: 'dashed',
-    borderColor: Colors.primary, justifyContent: 'center', alignItems: 'center', gap: 4,
-    backgroundColor: Colors.surface,
-  },
-  addSecText: { ...Typography.caption, color: Colors.primary, fontSize: 10, fontWeight: '600' },
-
-  // Segmented Tab Selector Styling
-  tabScroll: {
-    marginBottom: Spacing.lg,
-    maxHeight: 52,
-  },
-  tabScrollContainer: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    padding: 4,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  tabButton: {
-    paddingHorizontal: Spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.xs,
-    paddingVertical: 10,
-    borderRadius: BorderRadius.sm,
-    height: 42,
-  },
-  tabButtonActive: {
-    backgroundColor: Colors.surfaceElevated,
-    ...Shadows.small,
-  },
-  tabText: {
-    ...Typography.bodySmall,
-    color: Colors.textMuted,
-    fontWeight: '600',
-  },
-  tabTextActive: {
-    color: Colors.secondary,
-    fontWeight: '700',
-  },
-  
-  // Scanner styles
-  barcodeInputRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    alignItems: 'center',
-  },
-  inlineScanBtn: {
-    width: 52,
-    height: 52,
-    backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.md,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scannerModalContainer: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-  scannerModalHeader: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 60 : 40,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  scannerCloseBtn: {
-    padding: 8,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 20,
-  },
-  scannerModalTitle: {
-    color: '#FFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginLeft: 16,
-  },
-  scannerOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scannerTargetBox: {
-    width: 280,
-    height: 180,
-    borderWidth: 2,
-    borderColor: Colors.secondary,
-    backgroundColor: 'transparent',
-    borderRadius: BorderRadius.md,
-  },
-  
-  // CSV Upload Styles
-  shopList: { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap', marginTop: Spacing.xs },
-  shopOption: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.xs,
-    backgroundColor: Colors.surface, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.md, borderWidth: 1, borderColor: Colors.border,
-  },
-  shopOptionActive: { backgroundColor: Colors.primary, borderColor: Colors.primaryLight },
-  shopText: { ...Typography.body, color: Colors.textMuted },
-  shopTextActive: { color: Colors.textOnPrimary, fontWeight: '700' },
-  uploadArea: {
-    borderWidth: 2, borderColor: Colors.border, borderStyle: 'dashed',
-    borderRadius: BorderRadius.xl, padding: Spacing.xxxl, alignItems: 'center',
-    marginBottom: Spacing.xl, backgroundColor: Colors.surface,
-  },
-  uploadAreaDisabled: { opacity: 0.7 },
-  uploadIcon: {
-    width: 72, height: 72, borderRadius: 36, backgroundColor: Colors.surfaceElevated,
-    justifyContent: 'center', alignItems: 'center', marginBottom: Spacing.lg, ...Shadows.glow,
-  },
-  uploadTitle: { ...Typography.h3, color: Colors.textPrimary, marginBottom: Spacing.sm },
-  uploadText: { ...Typography.bodySmall, color: Colors.textMuted, textAlign: 'center' },
-  resultCard: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
-    backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.lg,
-    marginBottom: Spacing.xl, borderWidth: 1, borderColor: Colors.success,
-  },
-  resultInfo: { flex: 1 },
-  resultTitle: { ...Typography.body, color: Colors.success, fontWeight: '600' },
-  resultDetail: { ...Typography.bodySmall, color: Colors.textSecondary, marginTop: 2 },
-  helpCard: {
-    backgroundColor: Colors.surface, borderRadius: BorderRadius.md, padding: Spacing.lg,
-    borderWidth: 1, borderColor: Colors.border,
-  },
-  helpTitle: { ...Typography.label, color: Colors.textSecondary, marginBottom: Spacing.md },
-  codeBlock: {
-    backgroundColor: Colors.background, borderRadius: BorderRadius.sm, padding: Spacing.md,
-  },
-  code: { fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 11, color: Colors.textMuted, lineHeight: 18 },
-});
