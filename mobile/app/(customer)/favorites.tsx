@@ -215,8 +215,8 @@ export default function FavoritesScreen() {
                 address: item.shop.address,
                 latitude: item.shop.latitude,
                 longitude: item.shop.longitude,
-                phone: null,
-                is_currently_open: true, // Defaulting to true for now since it's not in the response
+                phone: item.shop.phone ?? null,
+                is_currently_open: item.shop.is_currently_open,
               },
               distance_km: 0.0, // Distance can default to 0.0
               semantic_score: 1.0,
@@ -379,7 +379,7 @@ export default function FavoritesScreen() {
             <Ionicons name="storefront-outline" size={40} color={Colors.primary} />
           </View>
           <Text style={styles.emptyTitle}>
-            {isAr ? 'لا توجد متاجر مفضلة' : 'No favorite shops yet'}
+            {isAr ? 'قائمة المتاجر المفضلة قادمة قريباً' : 'Favorite shops list — coming soon'}
           </Text>
           <Text style={styles.emptyDesc}>
             {isAr

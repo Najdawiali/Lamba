@@ -1,4 +1,9 @@
-"""Customer V1 API — Near-market search, spatial queries, and shop categorized catalog."""
+"""Customer V1 API — Near-market search, spatial queries, and shop categorized catalog.
+
+Every endpoint that returns personalised data or mutates state requires an
+authenticated customer (`Depends(require_customer)`). Identity is taken from
+the JWT, never from the request body/query — preventing impersonation.
+"""
 
 import uuid
 import logging
@@ -13,6 +18,7 @@ from sqlalchemy.orm import selectinload, joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.api.auth import get_current_user, require_customer
 from app.models.market import Market
 from app.models.global_item import GlobalItem
 from app.models.market_item import MarketItem
@@ -20,7 +26,6 @@ from app.models.rating import Rating
 from app.models.user import User
 from app.models.search_alert import SearchAlert
 from app.models.search_history import SearchHistory
-import numpy as np
 from app.schemas.customer_v1 import (
     NearMarketResponse,
     CustomerItemResponse,
@@ -32,9 +37,8 @@ from app.schemas.customer_v1 import (
     CategoryNodeResponse,
     SearchAlertResponse,
     MarketItemDetailsResponse,
-    PurchaseRequest,
-    PurchaseResponse,
     SearchHistoryEntry,
+    SearchHistoryCreate,
 )
 from app.schemas.special_offer import CustomerSpecialOfferResponse
 
@@ -50,6 +54,7 @@ async def get_near_markets(
     latitude: float = Query(..., ge=-90.0, le=90.0, description="Latitude of user"),
     longitude: float = Query(..., ge=-180.0, le=180.0, description="Longitude of user"),
     radius_km: float = Query(5.0, gt=0.0, description="Proximity radius in kilometers"),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -119,6 +124,7 @@ async def get_near_markets(
                     latitude=float(lat),
                     longitude=float(lng),
                     distance_km=round(float(dist_km), 2),
+                    phone=market.phone,
                     is_currently_open=market.is_currently_open,
                     is_manual_override=market.is_manual_override,
                     override_set_at=market.override_set_at,
@@ -131,10 +137,10 @@ async def get_near_markets(
         return markets_list
         
     except Exception as e:
-        logger.error(f"Geospatial proximity query failed: {e}")
+        logger.error(f"Geospatial proximity query failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error occurred while executing the proximity search: {str(e)}",
+            detail="An error occurred while executing the proximity search.",
         )
 
 
@@ -142,12 +148,14 @@ async def get_near_markets(
 @router.get("/market/{market_id}/items", response_model=MarketCatalogResponse)
 async def get_market_catalog(
     market_id: uuid.UUID,
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Retrieve categorized inventory catalog for a target physical shop location.
-    Only returns active (in-stock status is True) items with actual inventory (stock_count > 0).
-    Dynamically groups active market inventory by item category.
+    Returns all merchant-active items (including zero-stock, so the customer app
+    can render an "Out of Stock" badge). The ``in_stock`` flag reflects real
+    availability (stock_count > 0) so the UI overlay activates correctly.
     """
     # Verify the market exists
     market_exists = await db.execute(select(Market).where(Market.id == market_id))
@@ -163,7 +171,8 @@ async def get_market_catalog(
     await check_and_update_markets_schedule(db, [market])
         
     # Join market_items and global_items for the target market
-    # Filter to only active and in-stock items
+    # Show all merchant-active items, including out-of-stock ones so the
+    # mobile "Out of Stock" overlay can actually trigger.
     query = (
         select(MarketItem, GlobalItem)
         .join(GlobalItem, MarketItem.item_id == GlobalItem.id)
@@ -174,7 +183,6 @@ async def get_market_catalog(
         .where(
             MarketItem.market_id == market_id,
             MarketItem.status == True,
-            MarketItem.stock_count > 0
         )
         .order_by(GlobalItem.name)
     )
@@ -197,7 +205,7 @@ async def get_market_catalog(
             category=category,
             image_url=gi.image_url,
             stock_count=mi.stock_count,
-            in_stock=mi.status,
+            in_stock=mi.stock_count > 0,
             price=float(mi.price) if mi.price is not None else None
         )
         
@@ -208,165 +216,16 @@ async def get_market_catalog(
     return catalog
 
 
-# ── POST /rate ──────────────────────────────────────────────────
-@router.post("/rate", response_model=RatingResponse, status_code=status.HTTP_201_CREATED)
-async def rate_market(
-    data: RatingCreate,
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Submit and persist a customer rating for a physical store location.
-    Validates that the target market and customer actually exist, then stores
-    the score (1-5) and optional written review.
-    """
-    # 1. Verify market exists
-    market_result = await db.execute(select(Market).where(Market.id == data.market_id))
-    if not market_result.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Shop location not found.",
-        )
-        
-    # 2. Verify customer exists
-    customer_result = await db.execute(select(User).where(User.id == data.customer_id))
-    customer = customer_result.scalar_one_or_none()
-    if not customer:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Customer account not found.",
-        )
-        
-    # Validate user type/role is customer (safeguard)
-    role = getattr(customer, "user_type", "customer")
-    if role != "customer":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only customer accounts can submit store reviews.",
-        )
-        
-    try:
-        # Create and persist Rating record
-        rating = Rating(
-            market_id=data.market_id,
-            customer_id=data.customer_id,
-            score=data.score,
-            review=data.review,
-            created_at=datetime.now(timezone.utc)
-        )
-        db.add(rating)
-        await db.flush()
-        
-        return RatingResponse(
-            status="completed rating",
-            stored_at=rating.created_at
-        )
-        
-    except Exception as e:
-        logger.error(f"Persisting market rating failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error occurred while saving the rating: {str(e)}",
-        )
-
-
-@router.post("/purchase", response_model=PurchaseResponse)
-async def purchase_item(
-    data: PurchaseRequest,
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Simulates a successful purchase, reduces item stock count in DB,
-    and resolves corresponding customer search alerts (Ticket 6.1 purchase verification).
-    """
-    try:
-        # 1. Fetch MarketItem and link to GlobalItem with row-level lock
-        result = await db.execute(
-            select(MarketItem, GlobalItem)
-            .join(GlobalItem, MarketItem.item_id == GlobalItem.id)
-            .where(MarketItem.id == data.market_item_id)
-            .with_for_update(of=MarketItem)
-        )
-        row = result.unique().first()
-        if not row:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Item not found.",
-            )
-        
-        market_item, global_item = row[0], row[1]
-        
-        if market_item.stock_count < data.quantity:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Insufficient stock. Available: {market_item.stock_count}",
-            )
-            
-        # Reduce stock
-        market_item.stock_count -= data.quantity
-        if market_item.stock_count <= 0:
-            market_item.stock_count = 0
-            market_item.status = False
-            
-        await db.flush()
-        
-        # 2. Query customer active search alerts to resolve matches
-        alerts_result = await db.execute(
-            select(SearchAlert).where(
-                SearchAlert.user_id == data.customer_id,
-                SearchAlert.is_active == True
-            )
-        )
-        alerts = alerts_result.scalars().all()
-        
-        resolved_count = 0
-        product_vec = np.array(global_item.text_embedding) if global_item.text_embedding else None
-        
-        for alert in alerts:
-            is_match = False
-            
-            # Substring/Token matching to avoid false positives (e.g. matching "tea" in "steak")
-            gi_name_lower = global_item.name.lower()
-            alert_query_lower = alert.query_text.lower()
-            
-            gi_words = set(gi_name_lower.split())
-            alert_words = set(alert_query_lower.split())
-            
-            if gi_name_lower == alert_query_lower or (gi_words and alert_words and alert_words.issubset(gi_words)):
-                is_match = True
-            elif product_vec is not None and alert.query_vector:
-                # Semantic cosine similarity comparison
-                alert_vec = np.array(alert.query_vector)
-                dot_val = np.dot(product_vec, alert_vec)
-                norm_p = np.linalg.norm(product_vec)
-                norm_a = np.linalg.norm(alert_vec)
-                similarity = dot_val / (norm_p * norm_a) if norm_p > 0 and norm_a > 0 else 0.0
-                
-                if similarity > 0.75:  # Epic 6 specification
-                    is_match = True
-                    
-            if is_match:
-                alert.is_active = False
-                resolved_count += 1
-                
-        await db.flush()
-        
-        return PurchaseResponse(
-            success=True,
-            message=f"Purchase completed. Resolving {resolved_count} active search intent alerts.",
-            resolved_alerts_count=resolved_count
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Purchase process failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred while executing the purchase.",
-        )
+# ── POST /purchase was removed ──────────────────────────────────
+# Lamba is a discovery app, not a storefront. The cart/purchase flow was
+# dead/fake (no cart state anywhere in the mobile app) and was a security
+# hole (no auth + free stock decrement). Repair alerts are handled by the
+# SearchAlert lifecycle instead. See backend alert_service for resolution.
 
 
 @router.get("/categories", response_model=List[CategoryNodeResponse])
 async def get_categories_tree(
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -401,15 +260,15 @@ async def get_categories_tree(
 
 @router.get("/alerts", response_model=List[SearchAlertResponse])
 async def get_customer_alerts(
-    user_id: uuid.UUID = Query(...),
+    user: User = Depends(require_customer),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Get all active and inactive search alerts for a customer to track notifications.
+    Get all active and inactive search alerts for the authenticated customer.
     """
     result = await db.execute(
         select(SearchAlert)
-        .where(SearchAlert.user_id == user_id)
+        .where(SearchAlert.user_id == user.id)
         .order_by(SearchAlert.created_at.desc())
     )
     alerts = result.scalars().all()
@@ -419,6 +278,7 @@ async def get_customer_alerts(
 @router.get("/item/{market_item_id}", response_model=MarketItemDetailsResponse)
 async def get_market_item_details(
     market_item_id: uuid.UUID,
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -526,6 +386,7 @@ async def get_market_item_details(
             "address": market.address,
             "latitude": lat,
             "longitude": lng,
+            "phone": market.phone,
             "business_nature": market.business_nature or "Grocery",
             "operating_hours": market.operating_hours,
             "employee_directory": formatted_employees if formatted_employees else None,
@@ -547,6 +408,7 @@ async def get_customer_offers(
     offer_type: Optional[str] = Query(None, description="Filter by BOGO or DISCOUNT"),
     max_distance_km: Optional[float] = Query(None, gt=0.0, description="Optional maximum distance filter in km"),
     category_id: Optional[uuid.UUID] = Query(None, description="Optional category filter ID"),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -557,7 +419,7 @@ async def get_customer_offers(
     Includes filters for name/description search, offer type, category, and maximum distance constraint.
     """
     from app.models.special_offer import SpecialOffer
-    from sqlalchemy import or_, text
+    from sqlalchemy import or_
     
     try:
         # Create user location WKTElement POINT
@@ -592,7 +454,6 @@ async def get_customer_offers(
             .where(
                 SpecialOffer.is_active == True,
                 MarketItem.status == True,
-                MarketItem.stock_count > 0
             )
         )
         
@@ -618,9 +479,9 @@ async def get_customer_offers(
         if category_id:
             stmt = stmt.where(GlobalItem.category_id == category_id)
             
-        # Order by computed score desc
-        stmt = stmt.order_by(text("sorting_score DESC"))
-        
+        # Order by computed score desc (use the labelled expression, not raw text())
+        stmt = stmt.order_by(score_expression.desc())
+
         result = await db.execute(stmt)
         rows = result.unique().all()
         
@@ -667,10 +528,10 @@ async def get_customer_offers(
         return offers_list
         
     except Exception as e:
-        logger.error(f"Failed to fetch special offers for customer: {e}")
+        logger.error(f"Failed to fetch special offers for customer: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error occurred while compiling special offers: {str(e)}",
+            detail="An error occurred while compiling special offers.",
         )
 
 
@@ -678,12 +539,16 @@ async def get_customer_offers(
 @router.post("/rating", response_model=RatingResponse)
 async def create_location_verified_rating(
     payload: RatingCreate,
+    user: User = Depends(require_customer),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Submits or updates a 1-to-5 star rating and optional review for a physical store/market.
-    Strictly verifies user's current coordinates using PostGIS ST_Distance to enforce geofence.
+    Identity is taken from the JWT (``user``), NOT the request body, so a caller cannot
+    rate on behalf of another customer. Strictly verifies the user's current coordinates
+    using PostGIS ST_Distance to enforce a 50 m geofence around the shop.
     """
+    customer_id = user.id
     try:
         # 1. Verify the market exists
         market_stmt = select(Market).where(Market.id == payload.market_id)
@@ -695,20 +560,17 @@ async def create_location_verified_rating(
                 detail="Shop location not found."
             )
 
-        # 2. Verify the customer exists
-        user_stmt = select(User).where(User.id == payload.customer_id)
-        user_result = await db.execute(user_stmt)
-        user = user_result.scalar_one_or_none()
-        if not user:
+        # 2. Defensive sanity check: if a legacy customer_id is supplied, it must match the JWT user
+        if payload.customer_id is not None and payload.customer_id != customer_id:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Customer profile not found."
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Customer identity in payload does not match the authenticated user.",
             )
 
         # 3. Check for existing rating (One-Review-Per-Customer-Per-Shop)
         existing_stmt = select(Rating).where(
             Rating.market_id == payload.market_id,
-            Rating.customer_id == payload.customer_id
+            Rating.customer_id == customer_id
         )
         existing_result = await db.execute(existing_stmt)
         existing_rating = existing_result.scalar_one_or_none()
@@ -717,15 +579,18 @@ async def create_location_verified_rating(
         point_wkt = WKTElement(f"POINT({payload.longitude} {payload.latitude})", srid=4326)
         geog_location = Market.location.cast(Geography)
         geog_point = func.cast(point_wkt, Geography)
-        
+
         distance_stmt = select(func.ST_Distance(geog_location, geog_point)).where(Market.id == payload.market_id)
         distance_result = await db.execute(distance_stmt)
         distance_meters = distance_result.scalar()
-        
+
         if distance_meters is None or distance_meters > 50.0:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Location verification failed. You must be physically at the shop (within 50 meters) to leave a verified review. Current calculated distance: {round(distance_meters, 1) if distance_meters is not None else 'unknown'} meters."
+                detail=(
+                    "Location verification failed. You must be physically at the shop "
+                    "(within 50 meters) to leave a verified review."
+                )
             )
 
         # 5. Insert or Update rating
@@ -736,27 +601,27 @@ async def create_location_verified_rating(
         else:
             new_rating = Rating(
                 market_id=payload.market_id,
-                customer_id=payload.customer_id,
+                customer_id=customer_id,
                 score=payload.score,
                 review=payload.review,
                 created_at=datetime.now(timezone.utc)
             )
             db.add(new_rating)
-            
+
         await db.commit()
-        
+
         return RatingResponse(
             status="completed rating",
             stored_at=datetime.now(timezone.utc)
         )
-        
+
     except HTTPException as he:
         raise he
     except Exception as e:
-        logger.error(f"Failed to submit rating: {e}")
+        logger.error(f"Failed to submit rating: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error occurred while storing your rating: {str(e)}"
+            detail="An error occurred while storing your rating."
         )
 
 
@@ -764,6 +629,7 @@ async def create_location_verified_rating(
 @router.get("/market/{market_id}/ratings", response_model=MarketRatingSummaryResponse)
 async def get_market_ratings(
     market_id: uuid.UUID,
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -782,23 +648,23 @@ async def get_market_ratings(
 
         # Query all ratings with joined customer profiles to fetch user names
         ratings_stmt = (
-            select(Rating, User.name)
+            select(Rating, User.full_name, User.email)
             .join(User, Rating.customer_id == User.id)
             .where(Rating.market_id == market_id)
             .order_by(Rating.created_at.desc())
         )
         ratings_result = await db.execute(ratings_stmt)
         rows = ratings_result.all()
-        
+
         ratings_list = []
         total_score = 0.0
-        
-        for rating, user_name in rows:
+
+        for rating, full_name, email in rows:
             total_score += rating.score
             ratings_list.append(
                 RatingDetailResponse(
                     id=rating.id,
-                    customer_name=user_name,
+                    customer_name=full_name or (email.split("@")[0] if email else "Anonymous"),
                     score=rating.score,
                     review=rating.review,
                     created_at=rating.created_at
@@ -817,108 +683,115 @@ async def get_market_ratings(
     except HTTPException as he:
         raise he
     except Exception as e:
-        logger.error(f"Failed to fetch market ratings: {e}")
+        logger.error(f"Failed to fetch market ratings: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error occurred while compiling store reviews: {str(e)}"
+            detail="An error occurred while compiling store reviews."
         )
 
 
 # ── GET /search-history ───────────────────────────────────────
 @router.get("/search-history", response_model=List[SearchHistoryEntry])
 async def get_search_history(
-    user_id: uuid.UUID = Query(..., description="User ID"),
     limit: int = Query(20, ge=1, le=50),
+    user: User = Depends(require_customer),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Retrieve the user's recent search history, newest first.
+    Retrieve the authenticated customer's recent search history, newest first.
     """
     try:
         result = await db.execute(
             select(SearchHistory)
-            .where(SearchHistory.user_id == user_id)
+            .where(SearchHistory.user_id == user.id)
             .order_by(SearchHistory.created_at.desc())
             .limit(limit)
         )
         return result.scalars().all()
     except Exception as e:
-        logger.error(f"Failed to fetch search history: {e}")
+        logger.error(f"Failed to fetch search history: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error occurred while fetching search history: {str(e)}"
+            detail="An error occurred while fetching search history."
         )
 
 
 # ── POST /search-history ──────────────────────────────────────
 @router.post("/search-history", response_model=SearchHistoryEntry, status_code=status.HTTP_201_CREATED)
 async def add_search_history(
-    user_id: uuid.UUID = Query(..., description="User ID"),
-    query_text: str = Query(..., min_length=1, max_length=500),
-    search_type: str = Query("text"),
-    result_count: int = Query(0, ge=0),
+    payload: SearchHistoryCreate,
+    user: User = Depends(require_customer),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Record a new search to the user's history. Deduplicates consecutive identical queries.
+    Record a new search to the authenticated customer's history.
+    Deduplicates consecutive identical queries (case-insensitive).
     """
+    query_text = (payload.query_text or "").strip()
+    if not query_text:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="query_text must not be empty.",
+        )
     try:
         # Check if the most recent entry has the same query
         last = await db.execute(
             select(SearchHistory)
-            .where(SearchHistory.user_id == user_id)
+            .where(SearchHistory.user_id == user.id)
             .order_by(SearchHistory.created_at.desc())
             .limit(1)
         )
         last_entry = last.scalar_one_or_none()
-        if last_entry and last_entry.query_text.lower().strip() == query_text.lower().strip():
+        if last_entry and last_entry.query_text.lower().strip() == query_text.lower():
             # Update the result count and timestamp of existing entry instead of creating duplicate
-            last_entry.result_count = result_count
+            last_entry.result_count = payload.result_count
             last_entry.created_at = datetime.now(timezone.utc)
-            last_entry.search_type = search_type
+            last_entry.search_type = payload.search_type
             await db.commit()
             await db.refresh(last_entry)
             return last_entry
 
         entry = SearchHistory(
-            user_id=user_id,
-            query_text=query_text.strip(),
-            search_type=search_type,
-            result_count=result_count,
+            user_id=user.id,
+            query_text=query_text,
+            search_type=payload.search_type,
+            result_count=payload.result_count,
             created_at=datetime.now(timezone.utc),
         )
         db.add(entry)
         await db.commit()
         await db.refresh(entry)
         return entry
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Failed to add search history: {e}")
+        logger.error(f"Failed to add search history: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error occurred while adding search history: {str(e)}"
+            detail="An error occurred while adding search history."
         )
 
 
 # ── DELETE /search-history ────────────────────────────────────
 @router.delete("/search-history", status_code=status.HTTP_204_NO_CONTENT)
 async def clear_search_history(
-    user_id: uuid.UUID = Query(..., description="User ID"),
+    user: User = Depends(require_customer),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Delete all search history entries for a user.
+    Delete all search history entries for the authenticated customer.
     """
     try:
         from sqlalchemy import delete as sql_delete
         await db.execute(
-            sql_delete(SearchHistory).where(SearchHistory.user_id == user_id)
+            sql_delete(SearchHistory).where(SearchHistory.user_id == user.id)
         )
         await db.commit()
     except Exception as e:
-        logger.error(f"Failed to clear search history: {e}")
+        logger.error(f"Failed to clear search history: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error occurred while clearing search history: {str(e)}"
+            detail="An error occurred while clearing search history."
         )
 
 

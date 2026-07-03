@@ -1,5 +1,4 @@
-<<<<<<< HEAD
-# 🦅 Eagle Vision — Hyper-Local Retail Discovery Platform
+# 🦅 Eagle Vision — Hyper-Local Retail Discovery Platform (Lamba)
 
 > Connect consumers with physical inventory in nearby shops using **semantic text search**, **visual image search**, and **geospatial proximity ranking**.
 
@@ -84,7 +83,7 @@ Once the containers are running and healthy (takes a few seconds on first boot t
 ```bash
 npm run backend:seed
 ```
-*This creates sample merchants, shops in Riyadh, and 12 products with auto-generated CLIP embeddings in Elasticsearch.*
+*This creates 22 sample merchants/markets around **As-Salt, Balqa, Jordan** (~32.04°N 35.73°E) and ~25 products per market (~550 MarketItems) with auto-generated CLIP/MiniLM embeddings in pgvector and Elasticsearch.*
 
 #### Step 3: Run Mobile on Expo Go
 Start the React Native app. This command **automatically detects your computer's local network IP** and configures the mobile client to point directly to your backend.
@@ -136,19 +135,36 @@ If your Wi-Fi router isolates devices (common on university, corporate, or publi
 
 You can also test the containerized FastAPI endpoints directly from your computer using `curl` or by visiting the interactive docs at `http://localhost:8000/docs`.
 
-### 1. Register a Customer
+### 1. Sign up a Customer
 ```bash
-curl -X POST http://localhost:8000/api/auth/register \
+# Sign-up triggers a mock SMS/email verification code (printed in the API logs).
+curl -X POST http://localhost:8000/api/v1/auth/signup \
   -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"test12345","full_name":"Test User","role":"customer"}'
+  -d '{"email":"test@example.com","password":"test12345","user_type":"customer","full_name":"Test User"}'
+
+# Verify with the 6-digit code from the API logs (replace <USER_ID> and <CODE>).
+curl -X POST http://localhost:8000/api/v1/auth/verify \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"<USER_ID>","verification_code":"<CODE>"}'
+
+# Sign in to obtain a JWT.
+curl -X POST http://localhost:8000/api/v1/auth/signin \
+  -H "Content-Type: application/json" \
+  -d '{"email_or_phone":"test@example.com","password":"test12345"}'
 ```
 
-### 2. Semantic text search
+### 2. Semantic text search (around the seeded markets in As-Salt)
 ```bash
-curl -X POST http://localhost:8000/api/search/text \
+curl -X POST http://localhost:8000/api/v1/search/hybrid \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <YOUR_JWT_TOKEN>" \
-  -d '{"query":"soothing herbal tea","latitude":24.7136,"longitude":46.6753,"radius_km":5.0}'
+  -d '{"query":"soothing herbal tea","latitude":32.0385,"longitude":35.7275,"filters":{"max_distance_km":5.0}}'
+```
+
+### 3. Nearby markets
+```bash
+curl -X GET "http://localhost:8000/api/v1/customer/near-markets?latitude=32.0385&longitude=35.7275&radius_km=5.0" \
+  -H "Authorization: Bearer <YOUR_JWT_TOKEN>"
 ```
 
 ---
@@ -159,8 +175,10 @@ Search results are dynamically ranked using a weighted combination of semantic r
 
 $$\text{hybrid\_score} = 0.7 \times \text{cosine\_similarity} + 0.3 \times \left(1 - \frac{\text{distance\_km}}{\text{max\_radius\_km}}\right)$$
 
-- **Semantic Score (70%)**: Cosine similarity between query embedding and product embedding in Elasticsearch.
+- **Semantic Score (70%)**: Cosine similarity between query embedding and product embedding (pgvector).
 - **Proximity Score (30%)**: Normalized inverse distance to the shop.
+
+> **Local shop search exception:** when the request includes `market_id` (a request scoped to a single shop), the geo-proximity term is meaningless, so the score collapses to **100% semantic** (`final_score = boosted_semantic_score`).
 
 ---
 
@@ -168,8 +186,8 @@ $$\text{hybrid\_score} = 0.7 \times \text{cosine\_similarity} + 0.3 \times \left
 
 1. **CLIP for Cross-Modal Search**: Both text and images are encoded into the same 512-dimensional vector space, enabling a photo of green tea to match the text "organic matcha green tea".
 2. **Elasticsearch over Dedicated Vector DB**: For MVP scale (<1M products), ES 8.x kNN with HNSW handles vector + geo + text filtering in a single query.
-3. **Embeddings in ES, Not PostgreSQL**: Product embeddings live in Elasticsearch to leverage native kNN with geo-distance pre-filtering. PostgreSQL handles relational data only.
-4. **Pre-filtering Strategy**: The `geo_distance` filter is applied DURING kNN graph traversal (pre-filter), not after, ensuring we always get `k` results within the radius.
+3. **Embeddings in pgvector (PostgreSQL)**: Product text & image embeddings live in PostgreSQL via `pgvector` (`GlobalItem.text_embedding` 384-d MiniLM, `image_embedding` 512-d CLIP). The hybrid query fuses cosine similarity, lexical ILIKE fallback, PostGIS geo-distance, and faceted filters in a single SQL statement. Elasticsearch is still kept in sync by the indexer service for auxiliary full-text/analytics, but the live customer-facing search reads pgvector.
+4. **Pre-filtering Strategy**: The PostGIS `ST_DWithin` filter is applied in the same query as the vector ranking, so only items within the requested radius are scored.
 
 ---
 
@@ -200,6 +218,3 @@ eagle_vision/
     ├── services/        # Central API Client (dynamic IP resolution)
     └── constants/       # Global styling theme system
 ```
-=======
-# Lamba
->>>>>>> abbfe9b0744d3ae75af90a508610c6ac1ccc053d

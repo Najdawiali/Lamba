@@ -36,6 +36,7 @@ class Market(Base):
     )
     operating_hours: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     employee_directory: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
     is_currently_open: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="true")
     is_manual_override: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="false")
     override_set_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

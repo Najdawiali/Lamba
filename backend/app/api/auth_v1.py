@@ -85,6 +85,7 @@ async def signup(data: SignUpRequest, db: AsyncSession = Depends(get_db)):
         phone_number=data.phone_number,
         password_hash=hash_password(data.password),
         user_type=data.user_type.value,
+        full_name=data.full_name,
         verified=False,
         verification_code=code,
     )

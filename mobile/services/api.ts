@@ -188,6 +188,7 @@ export interface SignInUserInfo {
   id: string;
   email: string | null;
   phone_number: string | null;
+  full_name: string | null;
   user_type: 'customer' | 'merchant';
   verified: boolean;
   created_at: string;
@@ -364,23 +365,6 @@ export async function linkBarcodeToMarket(itemId: string, price: number, stock: 
 }
 
 
-// ── Legacy Auth API (backward compat) ──────────────────────────
-export async function register(email: string, password: string, fullName: string, role: 'customer' | 'merchant'): Promise<TokenResponse> {
-  const { data } = await api.post<TokenResponse>('/api/auth/register', {
-    email, password, full_name: fullName, role,
-  });
-  await saveToken(data.access_token);
-  await saveUser(data.user);
-  return data;
-}
-
-export async function login(email: string, password: string): Promise<TokenResponse> {
-  const { data } = await api.post<TokenResponse>('/api/auth/login', { email, password });
-  await saveToken(data.access_token);
-  await saveUser(data.user);
-  return data;
-}
-
 export async function logout(): Promise<void> {
   await removeToken();
 }
@@ -530,38 +514,6 @@ export async function imageSearch(
   };
 }
 
-// ── Products API ───────────────────────────────────────────────
-export async function getShopProducts(shopId: string): Promise<ProductResponse[]> {
-  const { data } = await api.get<ProductResponse[]>(`/api/products/shop/${shopId}`);
-  return data;
-}
-
-export async function toggleStock(productId: string, inStock: boolean): Promise<ProductResponse> {
-  const { data } = await api.patch<ProductResponse>(`/api/products/${productId}/stock`, { in_stock: inStock });
-  return data;
-}
-
-export async function createProduct(product: {
-  shop_id: string; name: string; description?: string;
-  price?: number; category?: string; in_stock?: boolean;
-}): Promise<ProductResponse> {
-  const { data } = await api.post<ProductResponse>('/api/products/', product);
-  return data;
-}
-
-// ── Shops API ──────────────────────────────────────────────────
-export async function getMyShops(): Promise<any[]> {
-  const { data } = await api.get('/api/shops/mine');
-  return data;
-}
-
-export async function createShop(shop: {
-  name: string; address: string; latitude: number; longitude: number; phone?: string;
-}): Promise<any> {
-  const { data } = await api.post('/api/shops/', shop);
-  return data;
-}
-
 // ── V1 Customer API ─────────────────────────────────────────────
 export interface NearMarketResponse {
   id: string;
@@ -571,6 +523,7 @@ export interface NearMarketResponse {
   latitude: number;
   longitude: number;
   distance_km: number;
+  phone: string | null;
   is_currently_open: boolean;
   is_manual_override: boolean;
   override_set_at: string | null;
@@ -655,6 +608,7 @@ export interface ShopDetails {
   address: string;
   latitude: number;
   longitude: number;
+  phone: string | null;
   business_nature: string;
   operating_hours: Record<string, string> | null;
   employee_directory: string[] | null;
@@ -692,25 +646,6 @@ export async function getCategories(): Promise<CategoryNode[]> {
 export async function getCustomerAlerts(userId: string): Promise<AlertResponse[]> {
   const { data } = await api.get<AlertResponse[]>('/api/v1/customer/alerts', {
     params: { user_id: userId }
-  });
-  return data;
-}
-
-export interface PurchaseResponse {
-  success: boolean;
-  message: string;
-  resolved_alerts_count: number;
-}
-
-export async function purchaseItem(
-  customerId: string,
-  marketItemId: string,
-  quantity: number = 1
-): Promise<PurchaseResponse> {
-  const { data } = await api.post<PurchaseResponse>('/api/v1/customer/purchase', {
-    customer_id: customerId,
-    market_item_id: marketItemId,
-    quantity
   });
   return data;
 }
@@ -860,6 +795,7 @@ export interface ChatSession {
   updated_at: string;
   partner_name?: string;
   last_message?: string;
+  unread_count?: number;
 }
 
 export interface ChatMessage {
@@ -960,14 +896,17 @@ export async function addSearchHistory(
   searchType: string = 'text',
   resultCount: number = 0
 ): Promise<SearchHistoryEntry> {
-  const { data } = await api.post<SearchHistoryEntry>('/api/v1/customer/search-history', null, {
-    params: {
+  // Identity (user_id) is taken from the JWT on the server, but we still send
+  // it in the body for legacy clients; the body params beat long query strings.
+  const { data } = await api.post<SearchHistoryEntry>(
+    '/api/v1/customer/search-history',
+    {
       user_id: userId,
       query_text: queryText,
       search_type: searchType,
       result_count: resultCount,
     },
-  });
+  );
   return data;
 }
 

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Map Screen — Google Maps with nearby shop markers and interactive carousel.
  */
 
@@ -13,15 +13,31 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import * as Linking from 'expo-linking';
 import { Ionicons } from '@expo/vector-icons';
-import { getNearMarkets, NearMarketResponse } from '../../services/api';
-import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
-import { useTheme } from '../../context/ThemeContext';
-import { t } from '../../services/i18n';
-import { getMapStyle, calculateDistanceMeters } from '../../services/utils';
+import { getNearMarkets, NearMarketResponse } from '../../../services/api';
+import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
+import { useTheme } from '../../../context/ThemeContext';
+import { t } from '../../../services/i18n';
+import { getMapStyle, calculateDistanceMeters } from '../../../services/utils';
 
 const CARD_WIDTH = 280;
 const CARD_MARGIN = 10;
 const SNAP_INTERVAL = CARD_WIDTH + CARD_MARGIN * 2;
+
+// Default search radius (km) used by the map view — kept in sync with the
+// getNearMarkets(…, 10) call below so the visible region reflects the data.
+const MAP_RADIUS_KM = 10;
+
+/**
+ * Compute MapView latitude/longitude deltas for a given radius in km so the
+ * visible region actually encompasses the queried results (instead of a
+ * hardcoded 0.02° patch that drops most markers off-screen for a 10 km query).
+ */
+const regionDeltasForRadius = (radiusKm: number, latitude: number) => {
+  const safeRadius = Math.max(radiusKm, 0.5); // never collapse to a single point
+  const latitudeDelta = safeRadius / 111.0; // ~111 km per degree of latitude
+  const longitudeDelta = safeRadius / (111.0 * Math.max(Math.cos(latitude * Math.PI / 180), 0.1));
+  return { latitudeDelta, longitudeDelta };
+};
 
 export default function MapScreen() {
   const { colors: Colors, scheme } = useTheme();
@@ -103,19 +119,21 @@ export default function MapScreen() {
 
       if (mapRef.current && nearbyMarkets.length > 0) {
         setTimeout(() => {
+          const deltas = regionDeltasForRadius(MAP_RADIUS_KM, nearbyMarkets[0].latitude);
           mapRef.current?.animateToRegion({
             latitude: nearbyMarkets[0].latitude,
             longitude: nearbyMarkets[0].longitude,
-            latitudeDelta: 0.02,
-            longitudeDelta: 0.02,
+            latitudeDelta: deltas.latitudeDelta,
+            longitudeDelta: deltas.longitudeDelta,
           }, 500);
         }, 500);
       } else if (mapRef.current) {
         setTimeout(() => {
+          const deltas = regionDeltasForRadius(MAP_RADIUS_KM, coords.latitude);
           mapRef.current?.animateToRegion({
             ...coords,
-            latitudeDelta: 0.02,
-            longitudeDelta: 0.02,
+            latitudeDelta: deltas.latitudeDelta,
+            longitudeDelta: deltas.longitudeDelta,
           }, 500);
         }, 500);
       }
@@ -136,11 +154,12 @@ export default function MapScreen() {
     if (index !== focusedIndex && index >= 0 && index < markets.length) {
       setFocusedIndex(index);
       const market = markets[index];
+      const deltas = regionDeltasForRadius(MAP_RADIUS_KM, market.latitude);
       mapRef.current?.animateToRegion({
         latitude: market.latitude,
         longitude: market.longitude,
-        latitudeDelta: 0.02,
-        longitudeDelta: 0.02,
+        latitudeDelta: deltas.latitudeDelta,
+        longitudeDelta: deltas.longitudeDelta,
       }, 350);
     }
   }, [focusedIndex, markets]);
@@ -219,10 +238,11 @@ export default function MapScreen() {
         style={styles.recenterBtn}
         onPress={() => {
           if (userLocation) {
+            const deltas = regionDeltasForRadius(MAP_RADIUS_KM, userLocation.latitude);
             mapRef.current?.animateToRegion({
               ...userLocation,
-              latitudeDelta: 0.02,
-              longitudeDelta: 0.02,
+              latitudeDelta: deltas.latitudeDelta,
+              longitudeDelta: deltas.longitudeDelta,
             }, 500);
           }
         }}

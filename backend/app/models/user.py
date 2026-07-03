@@ -28,6 +28,7 @@ class User(Base):
     user_type: Mapped[str] = mapped_column(
         String(20), nullable=False  # 'customer' or 'merchant'
     )
+    full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     verified: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )

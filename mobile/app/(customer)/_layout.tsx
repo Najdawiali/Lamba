@@ -1,14 +1,14 @@
 /**
- * Customer Layout — Bottom tab navigation with 5 tabs.
- * Explore · Map · Offers · Messages · Profile
+ * Customer Layout — Stack wrapping the bottom Tabs and the detail screens.
  *
- * Favorites removed from tabs (moved to Profile screen).
- * Product detail and Shop catalog are hidden tab screens.
+ * The Tabs live in the `(tabs)` group so that pushing a detail screen
+ * (shop/[id], product/[id], favorites) stacks ON TOP of whichever tab is
+ * active. Pressing back from a detail screen returns you to the tab you came
+ * from (e.g. Map), instead of resetting to the Explore tab — which is what
+ * happened when these screens were registered as hidden Tabs.Screen entries.
  */
 
-import { Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { Typography } from '../../constants/theme';
+import { Stack } from 'expo-router';
 import { useThemeColors } from '../../context/ThemeContext';
 import { t } from '../../services/i18n';
 
@@ -16,75 +16,23 @@ export default function CustomerLayout() {
   const Colors = useThemeColors();
 
   return (
-    <Tabs
+    <Stack
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
-          backgroundColor: Colors.surface,
-          borderTopColor: Colors.border,
-          borderTopWidth: 1,
-          height: 85,
-          paddingBottom: 28,
-          paddingTop: 8,
-        },
-        tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: Colors.textMuted,
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        contentStyle: { backgroundColor: Colors.background },
+        animation: 'slide_from_right',
       }}
     >
-      <Tabs.Screen
-        name="search"
-        options={{
-          title: t('tabs.explore'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="compass-outline" size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="map"
-        options={{
-          title: t('tabs.map'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="map-outline" size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="offers"
-        options={{
-          title: t('tabs.offers'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="pricetag-outline" size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="inbox"
-        options={{
-          title: t('tabs.messages'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="chatbubbles-outline" size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: t('tabs.profile'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="favorites"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="product/[id]"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="favorites" options={{ headerShown: false }} />
+      <Stack.Screen
         name="shop/[id]"
-        options={{
-          href: null,
-        }}
+        options={{ headerShown: false, animation: 'slide_from_right' }}
       />
-    </Tabs>
+      <Stack.Screen
+        name="product/[id]"
+        options={{ headerShown: false, animation: 'slide_from_right' }}
+      />
+    </Stack>
   );
 }

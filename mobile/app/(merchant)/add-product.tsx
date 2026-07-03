@@ -19,7 +19,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import api, {
   getMyMarket, checkItemName, linkExistingItem, addNewItem,
-  getCategories, CatalogItemMatch, getMyShops
+  getCategories, CatalogItemMatch
 } from '../../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
@@ -94,15 +94,17 @@ export default function AddProductScreen() {
         const cats = await getCategories();
         setCategoriesTree(cats);
 
-        // Load shops for CSV upload
+        // Load the merchant's market for CSV upload (single-market model —
+          // the legacy getMyShops() hit the dead /api/shops/mine router).
         try {
-          const shopList = await getMyShops();
+          const myMarket = await getMyMarket();
+          const shopList = [myMarket];
           setShops(shopList);
           if (shopList.length > 0) {
             setSelectedShopId(shopList[0].id);
           }
         } catch (err) {
-          // Non-blocking catch
+          // Non-blocking catch — merchant just hasn't onboared yet
         }
       } catch (err: any) {
         Alert.alert(

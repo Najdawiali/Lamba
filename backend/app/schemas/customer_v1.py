@@ -14,6 +14,7 @@ class NearMarketResponse(BaseModel):
     latitude: float
     longitude: float
     distance_km: float
+    phone: Optional[str] = None
     is_currently_open: bool
     is_manual_override: bool
     override_set_at: Optional[datetime] = None
@@ -45,7 +46,8 @@ MarketCatalogResponse = Dict[str, List[CustomerItemResponse]]
 # ── Rating Schemas ──────────────────────────────────────────────
 class RatingCreate(BaseModel):
     market_id: uuid.UUID = Field(..., description="ID of the physical store/market to rate")
-    customer_id: uuid.UUID = Field(..., description="ID of the customer submitting the rating")
+    # customer_id is accepted for backwards compatibility but is validated against the JWT user
+    customer_id: Optional[uuid.UUID] = Field(None, description="Ignored — identity taken from the JWT")
     score: int = Field(..., ge=1, le=5, description="Rating score from 1 to 5")
     review: Optional[str] = Field(None, max_length=1000, description="Optional written review comment")
     latitude: float = Field(..., ge=-90.0, le=90.0, description="Latitude for location geofence validation")
@@ -99,6 +101,7 @@ class ShopDetails(BaseModel):
     address: str
     latitude: float
     longitude: float
+    phone: Optional[str] = None
     business_nature: Optional[str] = None
     operating_hours: Optional[Dict[str, Any]] = None
     employee_directory: Optional[List[str]] = None
@@ -127,18 +130,6 @@ class MarketItemDetailsResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class PurchaseRequest(BaseModel):
-    customer_id: uuid.UUID
-    market_item_id: uuid.UUID
-    quantity: int = Field(1, ge=1)
-
-
-class PurchaseResponse(BaseModel):
-    success: bool
-    message: str
-    resolved_alerts_count: int
-
-
 class SearchHistoryEntry(BaseModel):
     id: uuid.UUID
     query_text: str
@@ -147,5 +138,12 @@ class SearchHistoryEntry(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class SearchHistoryCreate(BaseModel):
+    """Body payload for POST /search-history (identity comes from the JWT)."""
+    query_text: str = Field(..., min_length=1, max_length=500)
+    search_type: str = Field("text")
+    result_count: int = Field(0, ge=0)
 
 

@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-from sqlalchemy import or_, desc
+from sqlalchemy import or_, desc, func
 import uuid
 from pydantic import BaseModel
 from datetime import datetime
@@ -33,11 +33,12 @@ class ChatSessionResponse(BaseModel):
     market_id: uuid.UUID
     created_at: datetime
     updated_at: datetime
-    
+
     # Optional fields for UI convenience
     partner_name: str | None = None
     last_message: str | None = None
-    
+    unread_count: int = 0
+
     class Config:
         from_attributes = True
 
@@ -108,17 +109,30 @@ async def list_chat_sessions(
         for s in sessions:
             r = ChatSessionResponse.model_validate(s)
             r.partner_name = s.market.name if s.market else "Unknown Market"
-            
+
             # Get last message
             msg_stmt = select(ChatMessage).where(ChatMessage.session_id == s.id).order_by(desc(ChatMessage.created_at)).limit(1)
             msg_res = await db.execute(msg_stmt)
             last_msg = msg_res.scalar_one_or_none()
             if last_msg:
                 r.last_message = last_msg.text
+
+            # Unread count = messages from the other side not yet read by this customer
+            unread_stmt = (
+                select(func.count(ChatMessage.id))
+                .where(
+                    ChatMessage.session_id == s.id,
+                    ChatMessage.sender_id != user.id,
+                    ChatMessage.is_read == False,
+                )
+            )
+            unread_res = await db.execute(unread_stmt)
+            r.unread_count = unread_res.scalar() or 0
+
             responses.append(r)
-            
+
         return responses
-        
+
     elif user.user_type == "merchant":
         # Find merchant's markets
         market_res = await db.execute(select(Market).where(Market.merchant_id == user.id))
@@ -134,15 +148,28 @@ async def list_chat_sessions(
         for s in sessions:
             r = ChatSessionResponse.model_validate(s)
             r.partner_name = s.customer.email or s.customer.phone_number or "Customer"
-            
+
             # Get last message
             msg_stmt = select(ChatMessage).where(ChatMessage.session_id == s.id).order_by(desc(ChatMessage.created_at)).limit(1)
             msg_res = await db.execute(msg_stmt)
             last_msg = msg_res.scalar_one_or_none()
             if last_msg:
                 r.last_message = last_msg.text
+
+            # Unread count = messages from the customer not yet read by this merchant
+            unread_stmt = (
+                select(func.count(ChatMessage.id))
+                .where(
+                    ChatMessage.session_id == s.id,
+                    ChatMessage.sender_id != user.id,
+                    ChatMessage.is_read == False,
+                )
+            )
+            unread_res = await db.execute(unread_stmt)
+            r.unread_count = unread_res.scalar() or 0
+
             responses.append(r)
-            
+
         return responses
     
     return []

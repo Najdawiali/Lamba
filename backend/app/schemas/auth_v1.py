@@ -18,6 +18,7 @@ class SignUpRequest(BaseModel):
     email: Optional[EmailStr] = None
     phone_number: Optional[str] = Field(None, min_length=8, max_length=20)
     password: str = Field(..., min_length=8, max_length=128)
+    full_name: Optional[str] = Field(None, max_length=255)
     user_type: UserType = UserType.customer
 
     @model_validator(mode="after")
@@ -58,6 +59,7 @@ class SignInUserInfo(BaseModel):
     id: uuid.UUID
     email: Optional[str] = None
     phone_number: Optional[str] = None
+    full_name: Optional[str] = None
     user_type: str
     verified: bool
     created_at: datetime

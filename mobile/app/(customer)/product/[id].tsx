@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
 import { useThemeColors } from '../../../context/ThemeContext';
 import {
-  getMarketItemDetails, getUser,
+  getMarketItemDetails,
   MarketItemDetailsResponse, isFavorite, addFavorite, removeFavorite
 } from '../../../services/api';
 import { t, i18n } from '../../../services/i18n';
@@ -30,7 +30,6 @@ export default function ProductDetailScreen() {
   
   const [product, setProduct] = useState<MarketItemDetailsResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [userId, setUserId] = useState<string | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isFav, setIsFav] = useState(false);
@@ -42,6 +41,11 @@ export default function ProductDetailScreen() {
   const [showHours, setShowHours] = useState(false);
 
   const loadProductDetails = async () => {
+    if (!id) {
+      setError(isAr ? 'تعذر استرداد تفاصيل المنتج. تحقق من الاتصال.' : 'Could not retrieve product listing. Check store connectivity.');
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -57,14 +61,7 @@ export default function ProductDetailScreen() {
 
   useEffect(() => {
     (async () => {
-      setProduct(null); 
-      try {
-        const currentUser = await getUser();
-        if (currentUser) setUserId(currentUser.id);
-      } catch (err) {
-        console.error('Failed to resolve active session:', err);
-      }
-      
+      setProduct(null);
       try {
         const fav = await isFavorite(id);
         setIsFav(fav);
@@ -95,8 +92,9 @@ export default function ProductDetailScreen() {
   const handleShare = async () => {
     if (!product) return;
     try {
+      const priceLabel = product.price != null && product.price > 0 ? formatPrice(product.price) : '';
       await Share.share({
-        message: t('product.share_text', { name: product.name, shop: product.shop.name, price: product.price }),
+        message: t('product.share_text', { name: product.name, shop: product.shop.name, price: priceLabel }),
       });
     } catch (err) {
       console.error(err);
@@ -238,10 +236,13 @@ export default function ProductDetailScreen() {
             </View>
           </SafeAreaView>
 
-          {/* Stock availability badge */}
+          {/* Stock availability badge — coarse levels only, no exact counts, so
+              competitors can't read merchant inventory levels from the customer app. */}
           <View style={[styles.stockBadge, { backgroundColor: product.in_stock ? Colors.success : Colors.error }]}>
             <Text style={styles.stockText}>
-              {product.in_stock ? `${t('product.in_stock')} (${product.stock_count})` : t('product.out_of_stock')}
+              {product.in_stock
+                ? (product.stock_count <= 5 ? t('product.low_stock', 'Low Stock') : t('product.in_stock', 'In Stock'))
+                : t('product.out_of_stock', 'Out of Stock')}
             </Text>
           </View>
         </View>
@@ -256,7 +257,6 @@ export default function ProductDetailScreen() {
           ) : (
             <Text style={styles.priceFree}>{t('product.price_request')}</Text>
           )}
-          
           {!!product.category && (
             <View style={styles.categoryBadge}>
               <Text style={styles.categoryText}>{product.category}</Text>

@@ -82,7 +82,10 @@ export const setCurrency = async (code: string): Promise<void> => {
   }
 };
 
-// Exchange rates relative to JOD (Base currency)
+// Exchange rates relative to JOD (Base currency).
+// Approximate static rates — for an MVP without a live FX feed. Every code
+// listed in LOCALE_CURRENCY_MAP must appear here so a user selecting that
+// currency never silently gets the base rate (1.0).
 const EXCHANGE_RATES_FROM_JOD: Record<string, number> = {
   JOD: 1.00,
   SAR: 5.29,
@@ -91,6 +94,13 @@ const EXCHANGE_RATES_FROM_JOD: Record<string, number> = {
   USD: 1.41,
   EUR: 1.31,
   EGP: 67.00,
+  BHD: 0.53,
+  QAR: 5.22,
+  OMR: 0.54,
+  LBP: 63850.00,
+  IQD: 1847.00,
+  ILS: 5.15,
+  GBP: 1.11,
 };
 
 /**
@@ -102,9 +112,14 @@ export const formatPrice = (amount: number | string | null | undefined): string 
   if (amount === null || amount === undefined || amount === '') return `0.00 ${_currentCurrency}`;
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
   if (isNaN(num)) return `0.00 ${_currentCurrency}`;
-  
-  const rate = EXCHANGE_RATES_FROM_JOD[_currentCurrency] || 1;
-  const convertedAmount = num * rate;
+  if (!isFinite(num)) return `0.00 ${_currentCurrency}`; // guards Infinity from divide-by-0 callers
+
+  const rate = EXCHANGE_RATES_FROM_JOD[_currentCurrency];
+  if (rate === undefined) {
+    // Unknown currency — don't silently mis-convert; fall back to the base.
+    console.warn(`No exchange rate for currency "${_currentCurrency}", falling back to JOD`);
+  }
+  const convertedAmount = num * (rate ?? 1);
 
   return `${convertedAmount.toFixed(2)} ${_currentCurrency}`;
 };

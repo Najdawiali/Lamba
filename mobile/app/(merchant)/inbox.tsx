@@ -141,7 +141,7 @@ export default function MerchantInboxScreen() {
             <Text style={styles.lastMessage} numberOfLines={2}>
               {item.last_message || t('inbox.tap_to_view', 'Tap to view conversation')}
             </Text>
-            {item.unread_count > 0 && (
+            {(item.unread_count ?? 0) > 0 && (
               <View style={styles.unreadBadge}>
                 <Text style={styles.unreadBadgeText}>{item.unread_count}</Text>
               </View>
