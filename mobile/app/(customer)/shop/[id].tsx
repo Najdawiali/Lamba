@@ -27,6 +27,13 @@ export default function ShopCatalogScreen() {
 
   useEffect(() => {
     (async () => {
+      // Guard: a /market/<id>/items call with an undefined id hits the backend
+      // and produces a 422 (uuid cast) error — fail gracefully instead.
+      if (!id) {
+        setError(t('common.error', 'Failed to load catalog'));
+        setLoading(false);
+        return;
+      }
       try {
         setLoading(true);
         const data = await getMarketCatalog(id);
@@ -163,9 +170,8 @@ export default function ShopCatalogScreen() {
                   )}
                 </View>
 
-                <View style={styles.cardInfo}>
+<View style={styles.cardInfo}>
                   <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
-                  
                   <View style={styles.priceRow}>
                     {item.price != null && item.price > 0 ? (
                       <Text style={styles.priceText}>
@@ -174,9 +180,8 @@ export default function ShopCatalogScreen() {
                     ) : (
                       <Text style={styles.priceFree}>{t('product.price_request', 'Price on request')}</Text>
                     )}
-                    
                     {item.in_stock && (
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         style={styles.quickAddBtn}
                         onPress={() => router.push(`/(customer)/product/${item.market_item_id}`)}
                       >

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Customer Special Offers Discovery Screen
  * Displays hyper-local BOGO and Discount promotions sorted dynamically by score.
  * Features search, categories, offer type, and distance filters.
@@ -16,12 +16,12 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   getCustomerSpecialOffers, getCategories, CategoryNode,
   CustomerSpecialOfferResponse, CustomerOffersFilters
-} from '../../services/api';
-import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
-import { useThemeColors } from '../../context/ThemeContext';
-import { t, i18n } from '../../services/i18n';
-import { getCurrencyCode, formatPrice } from '../../services/currency';
-import { resolveImageUrl } from '../../services/utils';
+} from '../../../services/api';
+import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
+import { useThemeColors } from '../../../context/ThemeContext';
+import { t, i18n } from '../../../services/i18n';
+import { getCurrencyCode, formatPrice } from '../../../services/currency';
+import { resolveImageUrl } from '../../../services/utils';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
 const DEFAULT_COORDS = { latitude: 24.7136, longitude: 46.6753 }; // Riyadh Fallback
@@ -554,7 +554,7 @@ export default function CustomerOffersScreen() {
           source={
             item.image_url
               ? { uri: resolveImageUrl(item.image_url) }
-              : require('../../assets/icon.png')
+              : require('../../../assets/icon.png')
           }
           style={styles.cardImage}
         />
@@ -568,7 +568,7 @@ export default function CustomerOffersScreen() {
               <Text style={styles.priceText}>
                 {formatPrice(item.price)}
               </Text>
-              {item.discount_percentage != null && item.discount_percentage > 0 && (
+              {item.discount_percentage != null && item.discount_percentage > 0 && item.discount_percentage < 100 && (
                 <Text style={styles.originalPriceText}>
                   {formatPrice(item.price / (1 - item.discount_percentage / 100))}
                 </Text>

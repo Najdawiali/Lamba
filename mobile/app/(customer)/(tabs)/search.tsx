@@ -1,8 +1,8 @@
-/**
+﻿/**
  * Search Screen — Explore (Eagle Vision) Redesigned.
  *
  * Features:
- *  - Header: Hamburger menu, 'Lamba' wordmark, Avatar
+ *  - Header: Profile menu button, 'Lamba' wordmark, Avatar
  *  - Search Bar: Full width, pill shaped, integrated camera/image icons. Filter outside.
  *  - Content Feed: Suggestions, Nearby Markets, Hot Deals, Recently Viewed.
  *  - Search Results: Full screen results when search is active.
@@ -23,12 +23,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   textSearch, imageSearch, getCategories, getUser,
-  SearchResultItem, SearchFilters, getSearchHistory, addSearchHistory, clearSearchHistory, SearchHistoryEntry
-} from '../../services/api';
-import ProductCard from '../../components/ProductCard';
-import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
-import { useThemeColors } from '../../context/ThemeContext';
-import { t } from '../../services/i18n';
+  getNearMarkets, getCustomerSpecialOffers,
+  SearchResultItem, SearchFilters, getSearchHistory, addSearchHistory, clearSearchHistory, SearchHistoryEntry,
+  NearMarketResponse, CustomerSpecialOfferResponse,
+} from '../../../services/api';
+import ProductCard from '../../../components/ProductCard';
+import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
+import { useThemeColors } from '../../../context/ThemeContext';
+import { t } from '../../../services/i18n';
+import { formatPrice } from '../../../services/currency';
 
 export default function SearchScreen() {
   const Colors = useThemeColors();
@@ -66,6 +69,11 @@ export default function SearchScreen() {
 
   const searchInputRef = useRef<TextInput>(null);
 
+  // Explore feed: real nearby markets & hot deals (previously hardcoded
+  // dummy cards with "Supermarket N" / "Special Offer N" / "12.00 SAR").
+  const [exploreMarkets, setExploreMarkets] = useState<NearMarketResponse[]>([]);
+  const [exploreDeals, setExploreDeals] = useState<CustomerSpecialOfferResponse[]>([]);
+
   const initPermissionsAndData = async () => {
     try {
       setLocationStatus('loading');
@@ -83,9 +91,29 @@ export default function SearchScreen() {
           if (address && address[0]) {
             const detectedCity = address[0].city || address[0].region || address[0].subregion || '';
             console.log('Detected user city:', detectedCity);
+            // Wire the detected city into the filters so the City field is
+            // pre-populated instead of being silently discarded.
+            if (detectedCity) {
+              setFilterCity(detectedCity);
+            }
           }
         } catch (geoErr) {
           console.log('Reverse geocoding failed:', geoErr);
+        }
+
+        // Pull real nearby markets + active special offers for the Explore feed.
+        try {
+          const [markets, deals] = await Promise.all([
+            getNearMarkets(coords.latitude, coords.longitude, 10),
+            getCustomerSpecialOffers(coords.latitude, coords.longitude).catch((e) => {
+              console.warn('Explore: getCustomerSpecialOffers failed', e);
+              return [] as CustomerSpecialOfferResponse[];
+            }),
+          ]);
+          setExploreMarkets(markets || []);
+          setExploreDeals((deals || []).slice(0, 10));
+        } catch (exploreErr) {
+          console.warn('Explore feed load failed:', exploreErr);
         }
       } else {
         setLocationStatus('denied');
@@ -422,7 +450,13 @@ export default function SearchScreen() {
   // ── Rendering components ──────────────────────────────────
   const renderHeader = () => (
     <View style={styles.header}>
-      <View style={styles.iconButton} />
+      <TouchableOpacity
+        style={styles.iconButton}
+        activeOpacity={0.7}
+        onPress={() => router.push('/(customer)/profile')}
+      >
+        <Ionicons name="menu" size={24} color={Colors.textPrimary} />
+      </TouchableOpacity>
       <Text style={styles.headerTitle}>Lamba</Text>
       <TouchableOpacity style={styles.avatarButton} onPress={() => router.push('/(customer)/profile')}>
         <LinearGradient
@@ -541,15 +575,24 @@ export default function SearchScreen() {
           <Text style={styles.sectionTitle}>{t('explore.nearby_markets')}</Text>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
-          {[1, 2, 3].map((_, i) => (
-            <TouchableOpacity key={i} style={styles.marketCard} activeOpacity={0.8} onPress={() => router.push('/(customer)/map')}>
-              <View style={styles.marketImagePlaceholder}>
-                <Ionicons name="storefront-outline" size={32} color={Colors.primary} />
-              </View>
-              <Text style={styles.marketName} numberOfLines={1}>Supermarket {i+1}</Text>
-              <Text style={styles.marketDistance}>1.{i} km</Text>
-            </TouchableOpacity>
-          ))}
+          {exploreMarkets.length === 0 ? (
+            <Text style={[styles.marketName, { color: Colors.textMuted, padding: Spacing.md }]}>{t('common.no_items', 'No nearby markets found.')}</Text>
+          ) : (
+            exploreMarkets.map((m) => (
+              <TouchableOpacity
+                key={m.id}
+                style={styles.marketCard}
+                activeOpacity={0.8}
+                onPress={() => router.push(`/(customer)/shop/${m.id}`)}
+              >
+                <View style={styles.marketImagePlaceholder}>
+                  <Ionicons name="storefront-outline" size={32} color={Colors.primary} />
+                </View>
+                <Text style={styles.marketName} numberOfLines={1}>{m.name}</Text>
+                <Text style={styles.marketDistance}>{m.distance_km.toFixed(1)} {t('common.km')}</Text>
+              </TouchableOpacity>
+            ))
+          )}
         </ScrollView>
       </View>
 
@@ -559,18 +602,30 @@ export default function SearchScreen() {
           <Text style={styles.sectionTitle}>{t('explore.hot_deals')}</Text>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
-          {[1, 2, 3].map((_, i) => (
-            <TouchableOpacity key={i} style={styles.dealCard} activeOpacity={0.8} onPress={() => router.push('/(customer)/offers')}>
-              <View style={styles.dealImagePlaceholder}>
-                <View style={styles.dealBadge}>
-                  <Text style={styles.dealBadgeText}>-20%</Text>
-                </View>
-                <Ionicons name="pricetag-outline" size={32} color={Colors.secondary} />
-              </View>
-              <Text style={styles.dealName} numberOfLines={1}>Special Offer {i+1}</Text>
-              <Text style={styles.dealPrice}>12.00 SAR</Text>
-            </TouchableOpacity>
-          ))}
+          {exploreDeals.length === 0 ? (
+            <Text style={[styles.dealName, { color: Colors.textMuted, padding: Spacing.md }]}>{t('common.no_items', 'No active offers right now.')}</Text>
+          ) : (
+            exploreDeals.map((deal) => {
+              const discount = deal.discount_percentage ?? 0;
+              return (
+                <TouchableOpacity
+                  key={deal.id}
+                  style={styles.dealCard}
+                  activeOpacity={0.8}
+                  onPress={() => router.push(`/(customer)/product/${deal.market_item_id}`)}
+                >
+                  <View style={styles.dealImagePlaceholder}>
+                    <View style={styles.dealBadge}>
+                      <Text style={styles.dealBadgeText}>-{discount}%</Text>
+                    </View>
+                    <Ionicons name="pricetag-outline" size={32} color={Colors.secondary} />
+                  </View>
+                  <Text style={styles.dealName} numberOfLines={1}>{deal.product_name}</Text>
+                  <Text style={styles.dealPrice}>{formatPrice(deal.price)}</Text>
+                </TouchableOpacity>
+              );
+            })
+          )}
         </ScrollView>
       </View>
 

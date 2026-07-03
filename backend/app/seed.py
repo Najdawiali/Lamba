@@ -918,15 +918,27 @@ def _build_products():
 PRODUCTS = _build_products()
 
 
-async def seed():
-    """Populate the database and Elasticsearch with sample data."""
+async def seed(reset: bool = False):
+    """Populate the database and Elasticsearch with sample data.
 
-    # Drop and recreate tables
-    async with engine.begin() as conn:
-        logger.info("Dropping existing database tables...")
-        await conn.run_sync(Base.metadata.drop_all)
-        logger.info("Recreating database tables...")
-        await conn.run_sync(Base.metadata.create_all)
+    By default this is now NON-destructive: it relies on idempotent upserts
+    (the existing ``existing = select(...)`` checks) so re-running the seeder
+    no longer wipes real users, ratings, chats, and search history.
+
+    Pass ``reset=True`` (or ``--reset`` on the CLI) to recreate the schema —
+    only intended for fresh dev databases.
+    """
+
+    if reset:
+        async with engine.begin() as conn:
+            logger.info("Reset mode: dropping existing database tables...")
+            await conn.run_sync(Base.metadata.drop_all)
+            logger.info("Recreating database tables...")
+            await conn.run_sync(Base.metadata.create_all)
+    else:
+        # Ensure the schema exists (idempotent) without wiping existing data
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
 
     # Load embedding models
     embedding_service.load_model()
@@ -1018,6 +1030,7 @@ async def seed():
                     name=s["name"],
                     business_nature=s["business_nature"],
                     address=s["address"],
+                    phone=s.get("phone"),
                     operating_hours=s["operating_hours"],
                     employee_directory=s["employee_directory"],
                     location=WKTElement(f"POINT({s['longitude']} {s['latitude']})", srid=4326),
@@ -1078,15 +1091,17 @@ async def seed():
                 db.add(gi)
                 await db.flush()
 
-                # Seed mock primary and secondary product images
+                # No on-disk mock images are generated, so leave image_url=None to let the
+                # React Native app render its placeholder instead of a broken
+                # image (the legacy /uploads/mock_*.jpg paths returned 404).
                 primary_image = ProductImage(
                     global_item_id=gi.id,
-                    image_url=f"/uploads/mock_primary_{gi.id}.jpg",
+                    image_url=None,
                     is_primary=True
                 )
                 secondary_image = ProductImage(
                     global_item_id=gi.id,
-                    image_url=f"/uploads/mock_secondary_{gi.id}.jpg",
+                    image_url=None,
                     is_primary=False
                 )
                 db.add_all([primary_image, secondary_image])
@@ -1142,4 +1157,6 @@ async def seed():
 
 
 if __name__ == "__main__":
-    asyncio.run(seed())
+    import sys
+    reset = "--reset" in sys.argv
+    asyncio.run(seed(reset=reset))

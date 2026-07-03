@@ -4,19 +4,6 @@ from app.schemas.user import (
     UserResponse,
     TokenResponse,
 )
-from app.schemas.shop import ShopCreate, ShopUpdate, ShopResponse
-from app.schemas.product import (
-    ProductCreate,
-    ProductUpdate,
-    ProductResponse,
-    StockToggle,
-)
-from app.schemas.search import (
-    TextSearchRequest,
-    ImageSearchRequest,
-    SearchResultItem,
-    SearchResponse,
-)
 from app.schemas.special_offer import (
     SpecialOfferCreate,
     SpecialOfferUpdate,
@@ -26,8 +13,5 @@ from app.schemas.special_offer import (
 
 __all__ = [
     "UserCreate", "UserLogin", "UserResponse", "TokenResponse",
-    "ShopCreate", "ShopUpdate", "ShopResponse",
-    "ProductCreate", "ProductUpdate", "ProductResponse", "StockToggle",
-    "TextSearchRequest", "ImageSearchRequest", "SearchResultItem", "SearchResponse",
     "SpecialOfferCreate", "SpecialOfferUpdate", "SpecialOfferResponse", "CustomerSpecialOfferResponse",
 ]

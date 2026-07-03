@@ -472,7 +472,6 @@ export default function DashboardScreen() {
   productInfo: { flex: 1, marginRight: Spacing.md },
   productName: { fontSize: 17, fontWeight: '600', color: Colors.textPrimary },
   categoryLabel: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
-  priceText: { fontSize: 15, fontWeight: '600', color: Colors.secondary, marginTop: 4 },
   stockCountText: { fontSize: 13, color: Colors.textSecondary, marginTop: 2 },
   stockControl: { alignItems: 'center' },
   stockToggleLabel: { fontSize: 12, color: Colors.textSecondary, marginBottom: 4 },

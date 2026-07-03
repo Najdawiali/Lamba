@@ -9,14 +9,16 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status, File, Form, UploadFile
 from geoalchemy2.elements import WKTElement
 from geoalchemy2 import Geometry, Geography
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.api.auth import get_current_user
 from app.models.market import Market
 from app.models.global_item import GlobalItem
 from app.models.market_item import MarketItem
+from app.models.user import User
 from app.models.search_alert import SearchAlert
 from app.schemas.search_v1 import (
     HybridSearchRequest,
@@ -64,7 +66,6 @@ async def _execute_hybrid_vector_query(
     # Build lexical match conditions and score boosts for exact matches
     lexical_cond = None
     if lexical_queries:
-        from sqlalchemy import or_
         conds = []
         for q in lexical_queries:
             if q and q.strip():
@@ -100,12 +101,22 @@ async def _execute_hybrid_vector_query(
         # Global Search: (0.7 * semantic) + (0.3 * proximity)
         final_score_expr = (0.7 * boosted_semantic_score_expr) + (0.3 * proximity_score_expr)
         
-    # Build core SQL statement
-    where_cond = (semantic_score_expr >= min_similarity) & (semantic_score_expr <= max_similarity)
+    # Build core SQL statement.
+    # The semantic match requires the embedding column to be present AND the
+    # similarity to fall in [min_similarity, max_similarity]. Pure lexical
+    # matches (rows with a NULL embedding) must still surface — therefore the
+    # ``embedding_col IS NOT NULL`` filter is scoped to the semantic branch
+    # only, not applied globally.
+    semantic_cond = (
+        embedding_col.is_not(None)
+        & (semantic_score_expr >= min_similarity)
+        & (semantic_score_expr <= max_similarity)
+    )
     if lexical_cond is not None:
-        from sqlalchemy import or_
-        where_cond = or_(where_cond, lexical_cond)
-        
+        where_cond = or_(semantic_cond, lexical_cond)
+    else:
+        where_cond = semantic_cond
+
     stmt = (
         select(
             MarketItem,
@@ -124,10 +135,7 @@ async def _execute_hybrid_vector_query(
             selectinload(GlobalItem.category_rel),
             selectinload(GlobalItem.images)
         )
-        .where(
-            embedding_col.is_not(None),
-            where_cond
-        )
+        .where(where_cond)
     )
     
     # Apply standard status/stock filters
@@ -220,25 +228,27 @@ def _filter_top_five_unless_accuracy_above_80(results: List[HybridSearchResultIt
 @router.post("/hybrid", response_model=HybridSearchResponse)
 async def hybrid_search(
     request: HybridSearchRequest,
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Perform hybrid vector search combining semantic text embeddings (pgvector)
     and metric geographical proximity (PostGIS) with advanced faceted filtering.
     Falls back to semantic proximity recommendations if zero exact results are found.
+    The authenticated user (from the JWT) is the owner of any cached alert.
     """
     try:
         # Generate 384-dimensional normalized text vector
         query_vec = embedding_service.encode_text_384(request.query_text).tolist()
-        
+
         # Translate query in both directions to match lexically across languages
         from app.services.translation import translate_ar_to_en, translate_en_to_ar
         original_query = request.query_text
         query_en = translate_ar_to_en(original_query)
         query_ar = translate_en_to_ar(original_query)
-        
+
         lexical_queries = list(set(filter(None, [original_query, query_en, query_ar])))
-        
+
         # 1. Exact Matches search (cosine similarity >= 0.65 or exact lexical match)
         results = await _execute_hybrid_vector_query(
             query_vec=query_vec,
@@ -251,16 +261,16 @@ async def hybrid_search(
             filters=request.filters,
             lexical_queries=lexical_queries
         )
-        
+
         search_mode = "exact_matches"
         action = None
-        
+
         if results:
             results = _filter_top_five_unless_accuracy_above_80(results)
             found = True
         else:
             found = False
-        
+
         # 2. recommendations Fallback loop if zero exact matches
         if not results:
             results = await _execute_hybrid_vector_query(
@@ -283,12 +293,16 @@ async def hybrid_search(
             else:
                 found = False
                 action = "request_more_details"
-                
-                # 3. Create SearchAlert to cache failed search query for customer notifications
-                user_id = request.user_id
-                if user_id:
+
+                # 3. Cache a SearchAlert — dedup on (user_id, query_text) to avoid table bloat
+                existing_alert_stmt = select(SearchAlert).where(
+                    SearchAlert.user_id == user.id,
+                    func.lower(SearchAlert.query_text) == request.query_text.lower().strip(),
+                )
+                existing_alert = (await db.execute(existing_alert_stmt)).scalar_one_or_none()
+                if not existing_alert:
                     alert = SearchAlert(
-                        user_id=user_id,
+                        user_id=user.id,
                         query_text=request.query_text,
                         query_vector=query_vec,
                         latitude=request.latitude,
@@ -297,20 +311,20 @@ async def hybrid_search(
                     )
                     db.add(alert)
                     await db.flush()
-                    logger.info(f"[SEARCH ALERT ENGINE] Cached search alert for user={user_id} term='{request.query_text}'")
-            
+                    logger.info(f"[SEARCH ALERT ENGINE] Cached search alert for user={user.id} term='{request.query_text}'")
+
         return HybridSearchResponse(
             found=found,
             action=action,
             search_mode=search_mode,
             results=results
         )
-        
+
     except Exception as e:
-        logger.error(f"Hybrid search failed: {e}")
+        logger.error(f"Hybrid search failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error occurred during search execution: {str(e)}",
+            detail="An error occurred during search execution.",
         )
 
 
@@ -329,6 +343,7 @@ async def image_search(
     business_nature: Optional[str] = Form(None),
     category_id: Optional[uuid.UUID] = Form(None),
     city: Optional[str] = Form(None),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -360,6 +375,10 @@ async def image_search(
 
         results = []
         vlm_query = None
+        # Tracks whether the returned matches came from the CLIP cross-modal fallback
+        # (VLM failed/unavailable) so the client can surface them as recommendations
+        # instead of misleading "exact" matches.
+        used_clip_fallback = False
 
         # 1. Gemma VLM Brand & Label Recognition
         if embedding_service.gemma_processor is not None and embedding_service.gemma_model is not None:
@@ -367,16 +386,16 @@ async def image_search(
             vlm_query = embedding_service.identify_product_from_image(image_bytes)
             if vlm_query and vlm_query.strip():
                 logger.info(f"[IMAGE SEARCH] VLM identified: '{vlm_query}'. Executing text hybrid search.")
-                
+
                 # Generate 384-dimensional normalized text vector
                 query_vector = embedding_service.encode_text_384(vlm_query).tolist()
-                
+
                 # Get bidirectional translations for exact lexical matching
                 from app.services.translation import translate_ar_to_en, translate_en_to_ar
                 query_en = translate_ar_to_en(vlm_query)
                 query_ar = translate_en_to_ar(vlm_query)
                 lexical_queries = list(set(filter(None, [vlm_query, query_en, query_ar])))
-                
+
                 results = await _execute_hybrid_vector_query(
                     query_vec=query_vector,
                     embedding_col=GlobalItem.text_embedding,
@@ -395,7 +414,7 @@ async def image_search(
                 logger.info(f"[IMAGE SEARCH] VLM search for '{vlm_query}' returned 0 results. Falling back to raw CLIP.")
             else:
                 logger.info("[IMAGE SEARCH] VLM query not available. Executing raw CLIP search.")
-                
+
             query_vector = embedding_service.encode_image_bytes(image_bytes).tolist()
             results = await _execute_hybrid_vector_query(
                 query_vec=query_vector,
@@ -407,21 +426,23 @@ async def image_search(
                 limit=limit,
                 filters=filters
             )
-        
+            used_clip_fallback = bool(results)
+
         results = _filter_top_five_unless_accuracy_above_80(results)
-        
+
+        search_mode = "image_clip_fallback" if used_clip_fallback else "exact_matches"
         return HybridSearchResponse(
             found=len(results) > 0,
             action=None if len(results) > 0 else "request_more_details",
-            search_mode="exact_matches",
+            search_mode=search_mode,
             results=results
         )
-        
+
     except Exception as e:
-        logger.error(f"Hybrid image search failed: {e}")
+        logger.error(f"Hybrid image search failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error occurred during visual search: {str(e)}",
+            detail="An error occurred during visual search.",
         )
 
 
@@ -429,6 +450,7 @@ async def image_search(
 @router.post("/double-check", response_model=HybridSearchResponse)
 async def double_check_search(
     request: DoubleCheckSearchRequest,
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -470,8 +492,8 @@ async def double_check_search(
         )
         
     except Exception as e:
-        logger.error(f"Fallback double-check search failed: {e}")
+        logger.error(f"Fallback double-check search failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error occurred during refined search execution: {str(e)}",
+            detail="An error occurred during refined search execution.",
         )

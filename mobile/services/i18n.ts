@@ -63,8 +63,50 @@ export const toggleLanguage = async () => {
   }
 };
 
-// Expose standard translation function
-export const t = (key: string, options?: any) => i18n.t(key, options);
+// Expose standard translation function.
+// Supports an optional fallback string (commonly used as
+// `t('search.filters', 'Filters')`). i18n-js's own fallback machinery only
+// honours the locale JSON, so without this wrapper the "fallback" would be
+// silently passed as interpolation options and missing keys would render as
+// the raw key string on screen.
+//
+// Signature variants:
+//   t(key)                                   — translate
+//   t(key, optionsObject)                    — translate with interpolation
+//   t(key, fallbackString)                   — translate with fallback
+//   t(key, fallbackString, optionsObject)    — translate with fallback + interpolation
+export function t(key: string, second?: any, third?: any): string {
+  let fallback: string | null = null;
+  let options: any = undefined;
+
+  if (second !== undefined) {
+    if (typeof second === 'string') {
+      fallback = second;
+      options = third;
+    } else {
+      // Object form: t(key, options)
+      options = second;
+    }
+  }
+
+  const value = i18n.t(key, options);
+  // Detect i18n-js "missing translation" outcomes:
+  //   - the key path itself (some configs)
+  //   - the placeholder `'[missing "locale.key" translation]'`
+  //   - undefined/null/empty
+  // In any of those cases, honour the caller-supplied fallback so the UI never
+  // shows raw key paths or "[missing ...]" placeholder strings.
+  const isMissing =
+    value === key ||
+    value === undefined ||
+    value === null ||
+    value === '' ||
+    (typeof value === 'string' && value.startsWith('[missing '));
+  if (isMissing && fallback) {
+    return fallback;
+  }
+  return value as string;
+}
 
 // Reactive RTL check — re-evaluates on every call (not a static const)
 export const isRTL = (): boolean => i18n.locale.includes('ar');

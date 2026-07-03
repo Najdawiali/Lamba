@@ -220,18 +220,6 @@ export default function ProductCard({ item }: Props) {
     fontSize: 9,
     fontWeight: '700',
   },
-  quickAddBtn: {
-    position: 'absolute',
-    bottom: Spacing.sm,
-    right: Spacing.sm,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...Shadows.small,
-  },
   }), [Colors]);
   const [isFav, setIsFav] = useState(false);
   const scorePercent = Math.round(item.hybrid_score * 100);
@@ -388,18 +376,6 @@ export default function ProductCard({ item }: Props) {
             </TouchableOpacity>
           </View>
         </View>
-
-        {/* Quick-Add Button */}
-        <TouchableOpacity
-          style={styles.quickAddBtn}
-          onPress={() => {
-            favPressedRef.current = true;
-            Alert.alert(t('product.added_to_cart'));
-          }}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="add" size={18} color={Colors.textOnPrimary} />
-        </TouchableOpacity>
       </TouchableOpacity>
   );
 

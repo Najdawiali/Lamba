@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Customer Profile Screen — Account info, settings, search alerts, and logout.
  * Premium dark UI with glassmorphic cards.
  * 
@@ -22,13 +22,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { getUser, saveUser, logout, getCustomerAlerts, AlertResponse } from '../../services/api';
-import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
-import { useThemeColors } from '../../context/ThemeContext';
-import { t, i18n, toggleLanguage } from '../../services/i18n';
+import { getUser, saveUser, logout, getCustomerAlerts, AlertResponse } from '../../../services/api';
+import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
+import { useThemeColors } from '../../../context/ThemeContext';
+import { t, i18n, toggleLanguage } from '../../../services/i18n';
 // currency removed
 import Constants from 'expo-constants';
-import ThemePreferenceRow from '../../components/ThemePreferenceRow';
+import ThemePreferenceRow from '../../../components/ThemePreferenceRow';
 
 // ── Notification Preferences (persisted locally) ──────────────
 import * as SecureStore from 'expo-secure-store';

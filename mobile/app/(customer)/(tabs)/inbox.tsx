@@ -1,13 +1,13 @@
-import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+﻿import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getChatSessions, getChatMessages, sendChatMessage, getUser, ChatSession, ChatMessage } from '../../services/api';
-import { Spacing, Typography, BorderRadius, Shadows } from '../../constants/theme';
-import { useThemeColors } from '../../context/ThemeContext';
-import { t, i18n } from '../../services/i18n';
-import { formatRelativeTime } from '../../services/utils';
+import { getChatSessions, getChatMessages, sendChatMessage, getUser, ChatSession, ChatMessage } from '../../../services/api';
+import { Spacing, Typography, BorderRadius, Shadows } from '../../../constants/theme';
+import { useThemeColors } from '../../../context/ThemeContext';
+import { t, i18n } from '../../../services/i18n';
+import { formatRelativeTime } from '../../../services/utils';
 
 export default function CustomerInboxScreen() {
   const Colors = useThemeColors();
@@ -273,7 +273,9 @@ export default function CustomerInboxScreen() {
   };
 
   const renderSessionCard = ({ item }: { item: ChatSession }) => {
-    const hasUnread = item.last_message && item.last_message.length > 0 && Math.random() > 0.5; // Simulate unread
+    // Unread badge — driven by the backend's real per-session unread_count
+    // (messages from the other party not yet marked is_read), NOT a placeholder.
+    const hasUnread = (item.unread_count ?? 0) > 0;
 
     return (
       <TouchableOpacity

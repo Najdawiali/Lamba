@@ -47,6 +47,8 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("ALTER TABLE markets ADD COLUMN IF NOT EXISTS is_currently_open BOOLEAN DEFAULT TRUE;"))
         await conn.execute(text("ALTER TABLE markets ADD COLUMN IF NOT EXISTS is_manual_override BOOLEAN DEFAULT FALSE;"))
         await conn.execute(text("ALTER TABLE markets ADD COLUMN IF NOT EXISTS override_set_at TIMESTAMP WITH TIME ZONE;"))
+        await conn.execute(text("ALTER TABLE markets ADD COLUMN IF NOT EXISTS phone VARCHAR(40);"))
+        await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name VARCHAR(255);"))
         # Enforce unique constraint on ratings to prevent duplicate customer reviews per shop
         await conn.execute(text("ALTER TABLE ratings DROP CONSTRAINT IF EXISTS uq_customer_market;"))
         await conn.execute(text("ALTER TABLE ratings ADD CONSTRAINT uq_customer_market UNIQUE (customer_id, market_id);"))
