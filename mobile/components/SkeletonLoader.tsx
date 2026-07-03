@@ -3,9 +3,10 @@
  * Replaces plain ActivityIndicator with premium skeleton UI.
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import { View, Animated, StyleSheet, ViewStyle } from 'react-native';
-import { Colors, BorderRadius, Spacing } from '../constants/theme';
+import { BorderRadius, Spacing } from '../constants/theme';
+import { useThemeColors } from '../context/ThemeContext';
 
 interface SkeletonProps {
   width?: number | string;
@@ -14,7 +15,49 @@ interface SkeletonProps {
   style?: ViewStyle;
 }
 
+function useSkeletonStyles() {
+  const Colors = useThemeColors();
+  return useMemo(() => StyleSheet.create({
+    base: {
+      backgroundColor: Colors.surfaceElevated,
+    },
+    card: {
+      flexDirection: 'row',
+      backgroundColor: Colors.surface,
+      borderRadius: BorderRadius.lg,
+      marginBottom: Spacing.md,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      overflow: 'hidden',
+      minHeight: 115,
+    },
+    cardContent: {
+      flex: 1,
+      padding: Spacing.md,
+      justifyContent: 'center',
+    },
+    listItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: Spacing.md,
+      gap: Spacing.md,
+    },
+    listItemContent: {
+      flex: 1,
+    },
+    statCard: {
+      backgroundColor: Colors.surface,
+      borderRadius: BorderRadius.md,
+      padding: Spacing.lg,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      flex: 1,
+    },
+  }), [Colors]);
+}
+
 function SkeletonPulse({ width = '100%', height = 16, borderRadius = BorderRadius.sm, style }: SkeletonProps) {
+  const styles = useSkeletonStyles();
   const opacity = useRef(new Animated.Value(0.3)).current;
 
   useEffect(() => {
@@ -41,6 +84,7 @@ function SkeletonPulse({ width = '100%', height = 16, borderRadius = BorderRadiu
 
 /** Skeleton card for product lists */
 export function SkeletonCard() {
+  const styles = useSkeletonStyles();
   return (
     <View style={styles.card}>
       <SkeletonPulse width={100} height={115} borderRadius={0} />
@@ -56,6 +100,7 @@ export function SkeletonCard() {
 
 /** Skeleton list item (single row) */
 export function SkeletonListItem() {
+  const styles = useSkeletonStyles();
   return (
     <View style={styles.listItem}>
       <SkeletonPulse width={40} height={40} borderRadius={20} />
@@ -69,6 +114,7 @@ export function SkeletonListItem() {
 
 /** Skeleton stat card for dashboard */
 export function SkeletonStatCard() {
+  const styles = useSkeletonStyles();
   return (
     <View style={styles.statCard}>
       <SkeletonPulse width="60%" height={12} />
@@ -87,43 +133,5 @@ export function SkeletonProductGrid({ count = 4 }: { count?: number }) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  base: {
-    backgroundColor: Colors.surfaceElevated,
-  },
-  card: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg,
-    marginBottom: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    overflow: 'hidden',
-    minHeight: 115,
-  },
-  cardContent: {
-    flex: 1,
-    padding: Spacing.md,
-    justifyContent: 'center',
-  },
-  listItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: Spacing.md,
-    gap: Spacing.md,
-  },
-  listItemContent: {
-    flex: 1,
-  },
-  statCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    flex: 1,
-  },
-});
 
 export default SkeletonPulse;

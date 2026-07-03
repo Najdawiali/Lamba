@@ -76,10 +76,10 @@ export const formatRelativeTime = (dateString: string, isAr: boolean): string =>
   });
 };
 
-// ── Dark Map Style ────────────────────────────────────────────
+// ── Map Styles ────────────────────────────────────────────────
 /**
- * Shared dark map style for react-native-maps.
- * Previously duplicated in search.tsx and map.tsx.
+ * Shared map styles for react-native-maps (Google provider).
+ * Choose based on the active color scheme: dark surfaces vs. light.
  */
 export const darkMapStyle: any[] = [
   { elementType: 'geometry', stylers: [{ color: '#0A0A1A' }] },
@@ -94,3 +94,21 @@ export const darkMapStyle: any[] = [
   { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#12122A' }] },
   { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#2A2A4A' }] },
 ];
+
+export const lightMapStyle: any[] = [
+  { elementType: 'geometry', stylers: [{ color: '#F5F6FB' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#4A4E6A' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#FFFFFF' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#FFFFFF' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#E3E5F0' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#EDEFF6' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#C9E3F0' }] },
+  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#EEF0F8' }] },
+  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#7A7E9C' }] },
+  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#EEF0F8' }] },
+  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#E3E5F0' }] },
+];
+
+/** Empty array = use the platform's default (light) Google Maps styling. */
+export const getMapStyle = (scheme: 'light' | 'dark'): any[] =>
+  scheme === 'dark' ? darkMapStyle : lightMapStyle;

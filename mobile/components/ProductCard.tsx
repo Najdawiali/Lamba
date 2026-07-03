@@ -6,12 +6,13 @@
  * Includes interactive Rating triggers for hyper-local shops.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SearchResultItem, isFavorite, addFavorite, removeFavorite, startChatSession } from '../services/api';
-import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../constants/theme';
+import { Spacing, BorderRadius, Typography, Shadows } from '../constants/theme';
+import { useThemeColors } from '../context/ThemeContext';
 import { t, i18n } from '../services/i18n';
 import { resolveImageUrl } from '../services/utils';
 import { formatPrice } from '../services/currency';
@@ -22,181 +23,9 @@ interface Props {
 
 export default function ProductCard({ item }: Props) {
   const router = useRouter();
-  const [isFav, setIsFav] = useState(false);
-  const scorePercent = Math.round(item.hybrid_score * 100);
-  const favPressedRef = useRef(false);
+  const Colors = useThemeColors();
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const fav = await isFavorite(item.product_id);
-        if (!cancelled) setIsFav(fav);
-      } catch (err) {
-        console.error('Failed to load favorite state in card:', err);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [item.product_id]);
-
-  const handleToggleFavorite = async () => {
-    try {
-      if (isFav) {
-        await removeFavorite(item.product_id);
-        setIsFav(false);
-        Alert.alert(
-          t('favorites.removed'),
-          `"${item.product_name}" ${t('favorites.removed_desc')}`
-        );
-      } else {
-        await addFavorite(item.product_id);
-        setIsFav(true);
-        Alert.alert(
-          t('favorites.added'),
-          `"${item.product_name}" ${t('favorites.added_desc')}`
-        );
-      }
-    } catch (err) {
-      console.error('Failed to toggle favorite in card:', err);
-    }
-  };
-
-
-
-  return (
-      <TouchableOpacity
-        style={styles.card}
-        activeOpacity={0.7}
-        onPress={() => {
-          if (favPressedRef.current) { favPressedRef.current = false; return; }
-          router.push(`/(customer)/product/${item.product_id}`);
-        }}
-      >
-        {/* Image */}
-        <View style={styles.imageContainer}>
-          {item.image_url ? (
-            <Image source={{ uri: resolveImageUrl(item.image_url) }} style={styles.image} />
-          ) : (
-            <View style={styles.imagePlaceholder}>
-              <Ionicons name="cube-outline" size={28} color={Colors.textMuted} />
-            </View>
-          )}
-          {/* Score Badge */}
-          <View style={[styles.scoreBadge, { backgroundColor: scorePercent >= 70 ? Colors.success : scorePercent >= 40 ? Colors.warning : Colors.textMuted }]}>
-            <Text style={scorePercent >= 70 ? styles.scoreTextDark : styles.scoreText}>{scorePercent}%</Text>
-          </View>
-          {/* Heart Button */}
-          <TouchableOpacity
-            style={styles.favBtn}
-            activeOpacity={0.8}
-            onPress={() => {
-            favPressedRef.current = true;
-            handleToggleFavorite();
-          }}
-          >
-            <Ionicons
-              name={isFav ? "heart" : "heart-outline"}
-              size={15}
-              color={isFav ? Colors.accent : Colors.textOnPrimary}
-            />
-          </TouchableOpacity>
-        </View>
-
-        {/* Content */}
-        <View style={styles.content}>
-          {/* Product Name & Stock */}
-          <View style={styles.nameRow}>
-            <Text style={styles.name} numberOfLines={1}>{item.product_name}</Text>
-            <View style={[styles.stockDot, { backgroundColor: item.in_stock ? Colors.inStock : Colors.outOfStock }]} />
-          </View>
-
-          {/* Description */}
-          {!!item.description && (
-            <Text style={styles.description} numberOfLines={2}>{item.description}</Text>
-          )}
-
-          {/* Meta Row */}
-          <View style={styles.metaRow}>
-            {/* Price */}
-            {item.price != null && item.price > 0 && (
-              <Text style={styles.price}>
-                {formatPrice(item.price)}
-              </Text>
-            )}
-
-            {/* Category */}
-            {!!item.category && (
-              <View style={styles.categoryBadge}>
-                <Text style={styles.categoryText}>{item.category}</Text>
-              </View>
-            )}
-          </View>
-
-          {/* Shop Details Row */}
-          <View style={styles.shopDetailsRow}>
-            <Ionicons name="storefront-outline" size={13} color={Colors.textMuted} />
-            <Text style={styles.shopName} numberOfLines={1}>{item.shop.name}</Text>
-            <View style={[
-              styles.shopStatusMiniBadge,
-              {
-                backgroundColor: item.shop.is_currently_open ? Colors.successBg : Colors.errorBg,
-                borderColor: item.shop.is_currently_open ? Colors.successBorder : Colors.errorBorder,
-              }
-            ]}>
-              <View style={[styles.statusDotMini, { backgroundColor: item.shop.is_currently_open ? Colors.success : Colors.error }]} />
-              <Text style={[styles.shopStatusMiniText, { color: item.shop.is_currently_open ? Colors.success : Colors.error }]}>
-                {item.shop.is_currently_open ? t('common.open') : t('common.closed')}
-              </Text>
-            </View>
-          </View>
-
-          {/* Actions/Pills Row */}
-          <View style={styles.pillRow}>
-            {/* Distance Pill */}
-            <View style={styles.distancePill}>
-              <Ionicons name="navigate-outline" size={11} color={Colors.secondary} />
-              <Text style={styles.distanceText}>
-                {item.distance_km.toFixed(1)} {t('common.km')}
-              </Text>
-            </View>
-
-
-            {/* Chat / Message Shop Pill */}
-            <TouchableOpacity
-              style={[styles.ratePill, styles.chatPill]}
-              onPress={async () => {
-                try {
-                  const session = await startChatSession(item.shop.id);
-                  router.push(`/(customer)/inbox?sessionId=${session.id}` as any);
-                } catch (err) {
-                  console.error('Failed to start chat:', err);
-                  Alert.alert('Error', 'Could not open chat with this store.');
-                }
-              }}
-              activeOpacity={0.6}
-            >
-              <Ionicons name="chatbubbles" size={11} color={Colors.primary} />
-              <Text style={[styles.rateText, { color: Colors.primary }]}>{t('inbox.title')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Quick-Add Button */}
-        <TouchableOpacity
-          style={styles.quickAddBtn}
-          onPress={() => {
-            favPressedRef.current = true;
-            Alert.alert(t('product.added_to_cart'));
-          }}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="add" size={18} color={Colors.textOnPrimary} />
-        </TouchableOpacity>
-      </TouchableOpacity>
-  );
-}
-
-const styles = StyleSheet.create({
+  const styles = useMemo(() => StyleSheet.create({
   card: {
     flexDirection: 'row',
     backgroundColor: Colors.surfaceElevated,
@@ -403,4 +232,175 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...Shadows.small,
   },
-});
+  }), [Colors]);
+  const [isFav, setIsFav] = useState(false);
+  const scorePercent = Math.round(item.hybrid_score * 100);
+  const favPressedRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const fav = await isFavorite(item.product_id);
+        if (!cancelled) setIsFav(fav);
+      } catch (err) {
+        console.error('Failed to load favorite state in card:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [item.product_id]);
+
+  const handleToggleFavorite = async () => {
+    try {
+      if (isFav) {
+        await removeFavorite(item.product_id);
+        setIsFav(false);
+        Alert.alert(
+          t('favorites.removed'),
+          `"${item.product_name}" ${t('favorites.removed_desc')}`
+        );
+      } else {
+        await addFavorite(item.product_id);
+        setIsFav(true);
+        Alert.alert(
+          t('favorites.added'),
+          `"${item.product_name}" ${t('favorites.added_desc')}`
+        );
+      }
+    } catch (err) {
+      console.error('Failed to toggle favorite in card:', err);
+    }
+  };
+
+  return (
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.7}
+        onPress={() => {
+          if (favPressedRef.current) { favPressedRef.current = false; return; }
+          router.push(`/(customer)/product/${item.product_id}`);
+        }}
+      >
+        {/* Image */}
+        <View style={styles.imageContainer}>
+          {item.image_url ? (
+            <Image source={{ uri: resolveImageUrl(item.image_url) }} style={styles.image} />
+          ) : (
+            <View style={styles.imagePlaceholder}>
+              <Ionicons name="cube-outline" size={28} color={Colors.textMuted} />
+            </View>
+          )}
+          {/* Score Badge */}
+          <View style={[styles.scoreBadge, { backgroundColor: scorePercent >= 70 ? Colors.success : scorePercent >= 40 ? Colors.warning : Colors.textMuted }]}>
+            <Text style={scorePercent >= 70 ? styles.scoreTextDark : styles.scoreText}>{scorePercent}%</Text>
+          </View>
+          {/* Heart Button */}
+          <TouchableOpacity
+            style={styles.favBtn}
+            activeOpacity={0.8}
+            onPress={() => {
+            favPressedRef.current = true;
+            handleToggleFavorite();
+          }}
+          >
+            <Ionicons
+              name={isFav ? "heart" : "heart-outline"}
+              size={15}
+              color={isFav ? Colors.accent : Colors.textOnPrimary}
+            />
+          </TouchableOpacity>
+        </View>
+
+        {/* Content */}
+        <View style={styles.content}>
+          {/* Product Name & Stock */}
+          <View style={styles.nameRow}>
+            <Text style={styles.name} numberOfLines={1}>{item.product_name}</Text>
+            <View style={[styles.stockDot, { backgroundColor: item.in_stock ? Colors.inStock : Colors.outOfStock }]} />
+          </View>
+
+          {/* Description */}
+          {!!item.description && (
+            <Text style={styles.description} numberOfLines={2}>{item.description}</Text>
+          )}
+
+          {/* Meta Row */}
+          <View style={styles.metaRow}>
+            {/* Price */}
+            {item.price != null && item.price > 0 && (
+              <Text style={styles.price}>
+                {formatPrice(item.price)}
+              </Text>
+            )}
+
+            {/* Category */}
+            {!!item.category && (
+              <View style={styles.categoryBadge}>
+                <Text style={styles.categoryText}>{item.category}</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Shop Details Row */}
+          <View style={styles.shopDetailsRow}>
+            <Ionicons name="storefront-outline" size={13} color={Colors.textMuted} />
+            <Text style={styles.shopName} numberOfLines={1}>{item.shop.name}</Text>
+            <View style={[
+              styles.shopStatusMiniBadge,
+              {
+                backgroundColor: item.shop.is_currently_open ? Colors.successBg : Colors.errorBg,
+                borderColor: item.shop.is_currently_open ? Colors.successBorder : Colors.errorBorder,
+              }
+            ]}>
+              <View style={[styles.statusDotMini, { backgroundColor: item.shop.is_currently_open ? Colors.success : Colors.error }]} />
+              <Text style={[styles.shopStatusMiniText, { color: item.shop.is_currently_open ? Colors.success : Colors.error }]}>
+                {item.shop.is_currently_open ? t('common.open') : t('common.closed')}
+              </Text>
+            </View>
+          </View>
+
+          {/* Actions/Pills Row */}
+          <View style={styles.pillRow}>
+            {/* Distance Pill */}
+            <View style={styles.distancePill}>
+              <Ionicons name="navigate-outline" size={11} color={Colors.secondary} />
+              <Text style={styles.distanceText}>
+                {item.distance_km.toFixed(1)} {t('common.km')}
+              </Text>
+            </View>
+
+            {/* Chat / Message Shop Pill */}
+            <TouchableOpacity
+              style={[styles.ratePill, styles.chatPill]}
+              onPress={async () => {
+                try {
+                  const session = await startChatSession(item.shop.id);
+                  router.push(`/(customer)/inbox?sessionId=${session.id}` as any);
+                } catch (err) {
+                  console.error('Failed to start chat:', err);
+                  Alert.alert('Error', 'Could not open chat with this store.');
+                }
+              }}
+              activeOpacity={0.6}
+            >
+              <Ionicons name="chatbubbles" size={11} color={Colors.primary} />
+              <Text style={[styles.rateText, { color: Colors.primary }]}>{t('inbox.title')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Quick-Add Button */}
+        <TouchableOpacity
+          style={styles.quickAddBtn}
+          onPress={() => {
+            favPressedRef.current = true;
+            Alert.alert(t('product.added_to_cart'));
+          }}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="add" size={18} color={Colors.textOnPrimary} />
+        </TouchableOpacity>
+      </TouchableOpacity>
+  );
+
+}

@@ -311,7 +311,16 @@
     "notif_messages": "الرسائل",
     "notif_messages_desc": "ردود المتاجر على محادثاتك",
     "notif_saved": "تم حفظ تفضيلات الإشعارات",
-    "notif_saved_desc": "سيتم تطبيق إعداداتك فوراً."
+    "notif_saved_desc": "سيتم تطبيق إعداداتك فوراً.",
+    "appearance": "المظهر",
+    "appearance_desc": "اختر شكل تطبيق لمبة",
+    "theme_system": "حسب النظام",
+    "theme_system_desc": "اتبع إعداد جهازك",
+    "theme_light": "فاتح",
+    "theme_light_desc": "أسطح فاتحة ونصوص داكنة",
+    "theme_dark": "داكن",
+    "theme_dark_desc": "أسطح داكنة أنيقة",
+    "theme_saved": "تم تحديث السمة"
   },
   "product": {
     "details": "تفاصيل المنتج",

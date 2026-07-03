@@ -13,7 +13,7 @@
  * - Logout: confirmation dialog → clears session → redirects to gateway
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView,
   Modal, FlatList, ActivityIndicator, TextInput, Switch
@@ -23,10 +23,12 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { getUser, saveUser, logout, getCustomerAlerts, AlertResponse } from '../../services/api';
-import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n, toggleLanguage } from '../../services/i18n';
 // currency removed
 import Constants from 'expo-constants';
+import ThemePreferenceRow from '../../components/ThemePreferenceRow';
 
 // ── Notification Preferences (persisted locally) ──────────────
 import * as SecureStore from 'expo-secure-store';
@@ -196,6 +198,7 @@ const TERMS_OF_SERVICE_AR = `آخر تحديث: يونيو ٢٠٢٦
 للأسئلة حول هذه الشروط: legal@lamba.app`;
 
 export default function CustomerProfileScreen() {
+  const Colors = useThemeColors();
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [loadingUser, setLoadingUser] = useState(true);
@@ -335,6 +338,295 @@ export default function CustomerProfileScreen() {
   const initials = mainText ? mainText.charAt(0).toUpperCase() : 'L';
   const isAr = i18n.locale.includes('ar');
 
+  const styles = useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: Colors.background,
+    },
+    scroll: {
+      paddingHorizontal: Spacing.xl,
+      paddingBottom: Spacing.xxxl,
+    },
+    header: {
+      paddingVertical: Spacing.lg,
+    },
+    headerTitle: {
+      ...Typography.h1,
+      color: Colors.textPrimary,
+    },
+
+    // Profile Card
+    profileCard: {
+      backgroundColor: Colors.surface,
+      borderRadius: BorderRadius.xl,
+      padding: Spacing.xl,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: Colors.border,
+      marginBottom: Spacing.lg,
+      ...Shadows.medium,
+    },
+    avatarWrapper: {
+      position: 'relative',
+      marginBottom: Spacing.md,
+    },
+    avatar: {
+      width: 72,
+      height: 72,
+      borderRadius: 36,
+      justifyContent: 'center',
+      alignItems: 'center',
+      ...Shadows.glow,
+    },
+    cameraOverlay: {
+      position: 'absolute',
+      bottom: 0,
+      right: 0,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: Colors.surfaceElevated,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 2,
+      borderColor: Colors.surface,
+    },
+    avatarText: {
+      fontSize: 28,
+      fontWeight: '700',
+      color: Colors.textOnPrimary,
+    },
+    displayNameH2: {
+      ...Typography.h2,
+      color: Colors.textPrimary,
+      marginBottom: 2,
+    },
+    displayEmail: {
+      ...Typography.body,
+      color: Colors.textSecondary,
+      marginBottom: Spacing.sm,
+    },
+    roleBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.xs,
+      paddingVertical: Spacing.xs,
+      paddingHorizontal: Spacing.md,
+      borderRadius: BorderRadius.full,
+      backgroundColor: Colors.primary,
+      borderWidth: 0,
+      marginBottom: Spacing.sm,
+    },
+    roleBadgeText: {
+      ...Typography.caption,
+      color: Colors.textOnPrimary,
+      fontWeight: '700',
+    },
+    memberSince: {
+      ...Typography.caption,
+      color: Colors.textMuted,
+    },
+
+    // Settings
+    sectionCard: {
+      backgroundColor: Colors.surface,
+      borderRadius: BorderRadius.xl,
+      padding: Spacing.lg,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      marginBottom: Spacing.lg,
+    },
+    sectionTitle: {
+      ...Typography.label,
+      color: Colors.textMuted,
+      textTransform: 'uppercase',
+      marginBottom: Spacing.md,
+    },
+    menuItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: Spacing.md,
+      gap: Spacing.md,
+    },
+    menuIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    menuContent: {
+      flex: 1,
+    },
+    menuLabel: {
+      ...Typography.body,
+      color: Colors.textPrimary,
+      fontWeight: '500',
+    },
+    menuValue: {
+      ...Typography.bodySmall,
+      color: Colors.textMuted,
+      marginTop: 1,
+    },
+
+    // Logout
+    logoutButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: Spacing.sm,
+      paddingVertical: Spacing.lg,
+      backgroundColor: 'rgba(226, 75, 74, 0.06)',
+      borderRadius: BorderRadius.xl,
+      borderWidth: 1,
+      borderColor: 'rgba(226, 75, 74, 0.15)',
+      marginBottom: Spacing.lg,
+    },
+    logoutText: {
+      ...Typography.button,
+      color: Colors.error,
+    },
+    footer: {
+      ...Typography.caption,
+      color: Colors.textMuted,
+      textAlign: 'center',
+    },
+
+    // Modal styling (shared)
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(10, 10, 26, 0.65)',
+      justifyContent: 'flex-end',
+    },
+    modalContainer: {
+      height: '75%',
+      backgroundColor: Colors.background,
+      borderTopLeftRadius: BorderRadius.xl,
+      borderTopRightRadius: BorderRadius.xl,
+      borderWidth: 1,
+      borderColor: Colors.border,
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: Spacing.xl,
+      borderBottomWidth: 1,
+      borderColor: Colors.border,
+    },
+    modalTitle: { ...Typography.h2, color: Colors.textPrimary },
+    closeBtn: { padding: Spacing.xs },
+    modalLoading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    loadingText: { ...Typography.bodySmall, color: Colors.textMuted, marginTop: Spacing.md },
+
+    // Alerts list
+    alertsList: { padding: Spacing.xl, paddingBottom: Spacing.xxxl },
+    alertCard: {
+      backgroundColor: Colors.surfaceElevated,
+      borderRadius: BorderRadius.lg,
+      padding: Spacing.md,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      marginBottom: Spacing.md,
+    },
+    alertHeaderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      gap: Spacing.md,
+    },
+    alertTextGroup: { flex: 1 },
+    alertQueryText: { ...Typography.body, color: Colors.textPrimary, fontWeight: '700' },
+    alertDate: { ...Typography.caption, color: Colors.textMuted, marginTop: 4 },
+    alertGeoText: { ...Typography.caption, color: Colors.textSecondary, marginTop: Spacing.sm, fontStyle: 'italic' },
+    statusBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: Spacing.sm,
+      paddingVertical: 4,
+      borderRadius: BorderRadius.full,
+    },
+    statusText: { ...Typography.caption, fontWeight: '700', fontSize: 10 },
+    emptyAlerts: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: Spacing.xl },
+    emptyAlertsTitle: { ...Typography.h3, color: Colors.textSecondary, marginTop: Spacing.lg },
+    emptyAlertsText: { ...Typography.bodySmall, color: Colors.textMuted, textAlign: 'center', marginTop: Spacing.sm, lineHeight: 20 },
+
+    // Edit Profile modal
+    editProfileBody: {
+      padding: Spacing.xl,
+    },
+    inputLabel: {
+      ...Typography.body,
+      color: Colors.textSecondary,
+      marginBottom: Spacing.sm,
+      fontWeight: '600',
+    },
+    textInput: {
+      backgroundColor: Colors.surfaceElevated,
+      borderRadius: BorderRadius.lg,
+      padding: Spacing.md,
+      ...Typography.body,
+      color: Colors.textPrimary,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      marginBottom: Spacing.xl,
+    },
+    saveButton: {
+      backgroundColor: Colors.primary,
+      borderRadius: BorderRadius.lg,
+      paddingVertical: Spacing.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    saveButtonText: {
+      ...Typography.button,
+      color: Colors.textOnPrimary,
+      fontWeight: '700',
+    },
+
+    // Notification Preferences modal
+    notifBody: {
+      padding: Spacing.xl,
+    },
+    notifRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: Colors.surfaceElevated,
+      borderRadius: BorderRadius.lg,
+      padding: Spacing.md,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      marginBottom: Spacing.md,
+    },
+    notifTextGroup: {
+      flex: 1,
+      marginRight: Spacing.md,
+    },
+    notifLabel: {
+      ...Typography.body,
+      color: Colors.textPrimary,
+      fontWeight: '600',
+    },
+    notifDesc: {
+      ...Typography.caption,
+      color: Colors.textMuted,
+      marginTop: 2,
+    },
+
+    // Legal text modals
+    legalBody: {
+      padding: Spacing.xl,
+      paddingBottom: Spacing.xxxl,
+    },
+    legalText: {
+      ...Typography.body,
+      color: Colors.textSecondary,
+      lineHeight: 22,
+    },
+  }), [Colors]);
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -451,6 +743,9 @@ export default function CustomerProfileScreen() {
             <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
           </TouchableOpacity>
         </View>
+
+        {/* Appearance — theme picker */}
+        <ThemePreferenceRow />
 
         {/* About Section */}
         <View style={styles.sectionCard}>
@@ -704,292 +999,3 @@ export default function CustomerProfileScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  scroll: {
-    paddingHorizontal: Spacing.xl,
-    paddingBottom: Spacing.xxxl,
-  },
-  header: {
-    paddingVertical: Spacing.lg,
-  },
-  headerTitle: {
-    ...Typography.h1,
-    color: Colors.textPrimary,
-  },
-
-  // Profile Card
-  profileCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.xl,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: Spacing.lg,
-    ...Shadows.medium,
-  },
-  avatarWrapper: {
-    position: 'relative',
-    marginBottom: Spacing.md,
-  },
-  avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...Shadows.glow,
-  },
-  cameraOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: Colors.surfaceElevated,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: Colors.surface,
-  },
-  avatarText: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: Colors.textOnPrimary,
-  },
-  displayNameH2: {
-    ...Typography.h2,
-    color: Colors.textPrimary,
-    marginBottom: 2,
-  },
-  displayEmail: {
-    ...Typography.body,
-    color: Colors.textSecondary,
-    marginBottom: Spacing.sm,
-  },
-  roleBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.md,
-    borderRadius: BorderRadius.full,
-    backgroundColor: Colors.primary,
-    borderWidth: 0,
-    marginBottom: Spacing.sm,
-  },
-  roleBadgeText: {
-    ...Typography.caption,
-    color: Colors.textOnPrimary,
-    fontWeight: '700',
-  },
-  memberSince: {
-    ...Typography.caption,
-    color: Colors.textMuted,
-  },
-
-  // Settings
-  sectionCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: Spacing.lg,
-  },
-  sectionTitle: {
-    ...Typography.label,
-    color: Colors.textMuted,
-    textTransform: 'uppercase',
-    marginBottom: Spacing.md,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.md,
-    gap: Spacing.md,
-  },
-  menuIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  menuContent: {
-    flex: 1,
-  },
-  menuLabel: {
-    ...Typography.body,
-    color: Colors.textPrimary,
-    fontWeight: '500',
-  },
-  menuValue: {
-    ...Typography.bodySmall,
-    color: Colors.textMuted,
-    marginTop: 1,
-  },
-
-  // Logout
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.sm,
-    paddingVertical: Spacing.lg,
-    backgroundColor: 'rgba(226, 75, 74, 0.06)',
-    borderRadius: BorderRadius.xl,
-    borderWidth: 1,
-    borderColor: 'rgba(226, 75, 74, 0.15)',
-    marginBottom: Spacing.lg,
-  },
-  logoutText: {
-    ...Typography.button,
-    color: Colors.error,
-  },
-  footer: {
-    ...Typography.caption,
-    color: Colors.textMuted,
-    textAlign: 'center',
-  },
-
-  // Modal styling (shared)
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(10, 10, 26, 0.65)',
-    justifyContent: 'flex-end',
-  },
-  modalContainer: {
-    height: '75%',
-    backgroundColor: Colors.background,
-    borderTopLeftRadius: BorderRadius.xl,
-    borderTopRightRadius: BorderRadius.xl,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: Spacing.xl,
-    borderBottomWidth: 1,
-    borderColor: Colors.border,
-  },
-  modalTitle: { ...Typography.h2, color: Colors.textPrimary },
-  closeBtn: { padding: Spacing.xs },
-  modalLoading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { ...Typography.bodySmall, color: Colors.textMuted, marginTop: Spacing.md },
-
-  // Alerts list
-  alertsList: { padding: Spacing.xl, paddingBottom: Spacing.xxxl },
-  alertCard: {
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: Spacing.md,
-  },
-  alertHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: Spacing.md,
-  },
-  alertTextGroup: { flex: 1 },
-  alertQueryText: { ...Typography.body, color: Colors.textPrimary, fontWeight: '700' },
-  alertDate: { ...Typography.caption, color: Colors.textMuted, marginTop: 4 },
-  alertGeoText: { ...Typography.caption, color: Colors.textSecondary, marginTop: Spacing.sm, fontStyle: 'italic' },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 4,
-    borderRadius: BorderRadius.full,
-  },
-  statusText: { ...Typography.caption, fontWeight: '700', fontSize: 10 },
-  emptyAlerts: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: Spacing.xl },
-  emptyAlertsTitle: { ...Typography.h3, color: Colors.textSecondary, marginTop: Spacing.lg },
-  emptyAlertsText: { ...Typography.bodySmall, color: Colors.textMuted, textAlign: 'center', marginTop: Spacing.sm, lineHeight: 20 },
-
-  // Edit Profile modal
-  editProfileBody: {
-    padding: Spacing.xl,
-  },
-  inputLabel: {
-    ...Typography.body,
-    color: Colors.textSecondary,
-    marginBottom: Spacing.sm,
-    fontWeight: '600',
-  },
-  textInput: {
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    ...Typography.body,
-    color: Colors.textPrimary,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: Spacing.xl,
-  },
-  saveButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.lg,
-    paddingVertical: Spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveButtonText: {
-    ...Typography.button,
-    color: Colors.textOnPrimary,
-    fontWeight: '700',
-  },
-
-  // Notification Preferences modal
-  notifBody: {
-    padding: Spacing.xl,
-  },
-  notifRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: Spacing.md,
-  },
-  notifTextGroup: {
-    flex: 1,
-    marginRight: Spacing.md,
-  },
-  notifLabel: {
-    ...Typography.body,
-    color: Colors.textPrimary,
-    fontWeight: '600',
-  },
-  notifDesc: {
-    ...Typography.caption,
-    color: Colors.textMuted,
-    marginTop: 2,
-  },
-
-  // Legal text modals
-  legalBody: {
-    padding: Spacing.xl,
-    paddingBottom: Spacing.xxxl,
-  },
-  legalText: {
-    ...Typography.body,
-    color: Colors.textSecondary,
-    lineHeight: 22,
-  },
-});

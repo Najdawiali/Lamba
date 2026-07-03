@@ -18,11 +18,13 @@ import {
   deleteSpecialOffer, getMarketItems, addNewItem, getMyMarket,
   SpecialOfferResponse, MarketItemDashboardResponse
 } from '../../services/api';
-import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
 import { resolveImageUrl } from '../../services/utils';
 
 export default function MerchantOffersScreen() {
+  const Colors = useThemeColors();
   const isAr = i18n.locale.includes('ar');
   const [offers, setOffers] = useState<SpecialOfferResponse[]>([]);
   const [products, setProducts] = useState<MarketItemDashboardResponse[]>([]);
@@ -383,379 +385,7 @@ export default function MerchantOffersScreen() {
     );
   }, [isAr, handleToggleActive, handleDeleteOffer]);
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </View>
-    );
-  }
-
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>{isAr ? 'العروض الخاصة' : 'Special Offers'}</Text>
-          <Text style={styles.headerSubtitle}>
-            {isAr ? 'إدارة وتنشيط حملات الترويج لمنتجاتك' : 'Manage and activate product promotions'}
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => setAddModalVisible(true)}
-        >
-          <Ionicons name="add" size={22} color={Colors.background} />
-          <Text style={styles.addButtonText}>{isAr ? 'عرض جديد' : 'New Offer'}</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Main List */}
-      <FlatList
-        data={offers}
-        keyExtractor={(item) => item.id}
-        renderItem={renderOfferItem}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={Colors.primary}
-          />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="pricetags-outline" size={60} color={Colors.textMuted} />
-            <Text style={styles.emptyTitle}>{isAr ? 'لا توجد عروض ترويجية' : 'No Active Promotions'}</Text>
-            <Text style={styles.emptySubtitle}>
-              {isAr ? 'ابدأ بإضافة أول عرض مميز لجذب المزيد من الزبائن!' : 'Add your first special offer to attract more customers!'}
-            </Text>
-            <TouchableOpacity
-              style={styles.emptyButton}
-              onPress={() => setAddModalVisible(true)}
-            >
-              <Text style={styles.emptyButtonText}>{isAr ? 'إنشاء أول عرض' : 'Create First Offer'}</Text>
-            </TouchableOpacity>
-          </View>
-        }
-      />
-
-      {/* Add Offer Modal */}
-      <Modal
-        visible={addModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => {
-          setAddModalVisible(false);
-          setShowSelector(false);
-          setSelectorSearch('');
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, showSelector && styles.modalContentFullHeight]}>
-            {showSelector ? (
-              <View style={{ flex: 1, paddingBottom: Spacing.xl }}>
-                <View style={styles.modalHeader}>
-                  <TouchableOpacity
-                    onPress={() => {
-                      setShowSelector(false);
-                      setSelectorSearch('');
-                    }}
-                    style={styles.closeButton}
-                  >
-                    <Ionicons name={isAr ? "arrow-forward" : "arrow-back"} size={22} color={Colors.textPrimary} />
-                  </TouchableOpacity>
-                  <Text style={styles.modalTitle}>
-                    {isAr ? 'اختر منتجاً للعرض' : 'Select Product for Offer'}
-                  </Text>
-                  <View style={{ width: 24 }} />
-                </View>
-
-                {/* Search box for filtering products list */}
-                <View style={styles.searchBarInlineContainer}>
-                  <Ionicons name="search-outline" size={18} color={Colors.textMuted} style={styles.searchIconInline} />
-                  <TextInput
-                    style={styles.searchBarInline}
-                    placeholder={isAr ? 'البحث بالاسم أو القسم...' : 'Search by name or category...'}
-                    placeholderTextColor={Colors.textMuted}
-                    value={selectorSearch}
-                    onChangeText={setSelectorSearch}
-                  />
-                  {selectorSearch.length > 0 && (
-                    <TouchableOpacity onPress={() => setSelectorSearch('')} style={styles.clearSearchBtnInline}>
-                      <Ionicons name="close-circle" size={16} color={Colors.textMuted} />
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                <FlatList
-                  data={filteredProducts}
-                  keyExtractor={(item) => item.id}
-                  contentContainerStyle={styles.selectorListInline}
-                  ListEmptyComponent={
-                    <View style={styles.emptySelector}>
-                      <Ionicons name="cube-outline" size={40} color={Colors.textMuted} />
-                      <Text style={styles.emptySelectorText}>
-                        {isAr ? 'لا توجد منتجات مطابقة.' : 'No matching products found.'}
-                      </Text>
-                    </View>
-                  }
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={styles.selectorItemRow}
-                      onPress={() => {
-                        setSelectedProduct(item);
-                        setShowSelector(false);
-                        setSelectorSearch('');
-                      }}
-                    >
-                      <Image
-                        source={
-                          item.image_url
-                            ? { uri: resolveImageUrl(item.image_url) }
-                            : require('../../assets/icon.png')
-                        }
-                        style={styles.selectorItemImage}
-                      />
-                      <View style={{ flex: 1, marginHorizontal: Spacing.md }}>
-                        <Text style={styles.selectorItemName} numberOfLines={1}>{item.name}</Text>
-                        <Text style={styles.selectorItemCategory}>{item.category || (isAr ? 'غير مصنف' : 'Uncategorized')}</Text>
-                        <Text style={styles.selectorItemPrice}>
-                          {item.price} {isAr ? 'ر.س' : 'SAR'}
-                        </Text>
-                      </View>
-                      <Ionicons name={isAr ? "chevron-back" : "chevron-forward"} size={18} color={Colors.textMuted} />
-                    </TouchableOpacity>
-                  )}
-                />
-              </View>
-            ) : (
-              <>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>{isAr ? 'إنشاء عرض خاص جديد' : 'Create Special Offer'}</Text>
-                  <TouchableOpacity
-                    onPress={() => {
-                      setAddModalVisible(false);
-                      setFormMode('catalog');
-                      setSelectedProduct(null);
-                      setNewItemName('');
-                      setNewItemPrice('');
-                      setNewItemBarcode('');
-                      setNewItemImageUri(null);
-                    }}
-                    style={styles.closeButton}
-                  >
-                    <Ionicons name="close" size={24} color={Colors.textPrimary} />
-                  </TouchableOpacity>
-                </View>
-
-                <ScrollView contentContainerStyle={styles.modalForm} showsVerticalScrollIndicator={false}>
-                  {/* Segmented/Tab Selector for Dual Mode */}
-                  <View style={styles.segmentContainer}>
-                    <TouchableOpacity
-                      style={[styles.segmentBtn, formMode === 'catalog' && styles.segmentActiveBtn]}
-                      onPress={() => setFormMode('catalog')}
-                    >
-                      <Text style={[styles.segmentBtnText, formMode === 'catalog' && styles.segmentActiveBtnText]}>
-                        {t('offers.choose_catalog')}
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.segmentBtn, formMode === 'new' && styles.segmentActiveBtn]}
-                      onPress={() => setFormMode('new')}
-                    >
-                      <Text style={[styles.segmentBtnText, formMode === 'new' && styles.segmentActiveBtnText]}>
-                        {t('offers.create_new')}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {formMode === 'catalog' ? (
-                    <View>
-                      {/* Product Picker Button */}
-                      <Text style={styles.inputLabel}>{isAr ? 'المنتج المستهدف' : 'Target Product'}</Text>
-                      <TouchableOpacity
-                        style={styles.productPicker}
-                        onPress={() => setShowSelector(true)}
-                      >
-                        {selectedProduct ? (
-                          <View style={styles.selectedProductRow}>
-                            <Image
-                              source={
-                                selectedProduct.image_url
-                                  ? { uri: resolveImageUrl(selectedProduct.image_url) }
-                                  : require('../../assets/icon.png')
-                              }
-                              style={styles.miniProductImage}
-                            />
-                            <View style={{ flex: 1, marginHorizontal: Spacing.sm }}>
-                              <Text style={styles.selectedProductName} numberOfLines={1}>
-                                {selectedProduct.name}
-                              </Text>
-                              <Text style={styles.selectedProductPrice}>
-                                {selectedProduct.price} {isAr ? 'ر.س' : 'SAR'}
-                              </Text>
-                            </View>
-                            <Ionicons name="swap-horizontal-outline" size={20} color={Colors.primary} />
-                          </View>
-                        ) : (
-                          <View style={styles.pickerPlaceholder}>
-                            <Ionicons name="cube-outline" size={20} color={Colors.textMuted} />
-                            <Text style={styles.pickerPlaceholderText}>
-                              {isAr ? 'اختر منتجاً من الكتالوج...' : 'Choose a product from catalog...'}
-                            </Text>
-                            <Ionicons name="chevron-down" size={18} color={Colors.textMuted} />
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <View style={styles.newProductFieldsContainer}>
-                      {/* Brand-New Product Fields */}
-                      <Text style={styles.inputLabel}>{t('addProduct.product_name')}</Text>
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder={isAr ? 'اسم المنتج الجديد...' : 'New product name...'}
-                        placeholderTextColor={Colors.textMuted}
-                        value={newItemName}
-                        onChangeText={setNewItemName}
-                      />
-
-                      <Text style={styles.inputLabel}>{t('addProduct.price')}</Text>
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder="e.g. 5.99"
-                        placeholderTextColor={Colors.textMuted}
-                        keyboardType="numeric"
-                        value={newItemPrice}
-                        onChangeText={setNewItemPrice}
-                      />
-
-                      <Text style={styles.inputLabel}>{t('addProduct.barcode')} ({isAr ? 'اختياري' : 'Optional'})</Text>
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder={isAr ? 'اكتب الباركود الخاص بالمنتج...' : 'Type product barcode...'}
-                        placeholderTextColor={Colors.textMuted}
-                        value={newItemBarcode}
-                        onChangeText={setNewItemBarcode}
-                      />
-
-                      <Text style={styles.inputLabel}>{t('offers.product_picture')}</Text>
-                      {newItemImageUri ? (
-                        <View style={styles.previewImageContainer}>
-                          <Image source={{ uri: newItemImageUri }} style={styles.previewImage} />
-                          <TouchableOpacity style={styles.clearImageBtn} onPress={() => setNewItemImageUri(null)}>
-                            <Ionicons name="close-circle" size={24} color={Colors.error} />
-                          </TouchableOpacity>
-                        </View>
-                      ) : (
-                        <TouchableOpacity style={styles.imagePickerBtn} onPress={pickNewItemImage}>
-                          <Ionicons name="camera-outline" size={26} color={Colors.primary} />
-                          <Text style={styles.imagePickerText}>{t('offers.select_image')}</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  )}
-
-                  {/* Offer Type Selection */}
-                  <Text style={styles.inputLabel}>{isAr ? 'نوع العرض الخاص' : 'Offer Type'}</Text>
-                  <View style={styles.typeButtonsRow}>
-                    <TouchableOpacity
-                      style={[
-                        styles.typeOptionButton,
-                        offerType === 'BOGO' && styles.typeOptionActiveBogo
-                      ]}
-                      onPress={() => setOfferType('BOGO')}
-                    >
-                      <Ionicons
-                        name="gift-outline"
-                        size={18}
-                        color={offerType === 'BOGO' ? Colors.background : Colors.textSecondary}
-                      />
-                      <Text style={[
-                        styles.typeOptionText,
-                        offerType === 'BOGO' && styles.typeOptionTextActiveBogo
-                      ]}>
-                        {isAr ? 'اشترِ واحداً واحصل على الثاني مجاناً' : 'Buy 1 Get 1 Free'}
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.typeOptionButton,
-                        offerType === 'DISCOUNT' && styles.typeOptionActiveDiscount
-                      ]}
-                      onPress={() => setOfferType('DISCOUNT')}
-                    >
-                      <Ionicons
-                        name="pricetag-outline"
-                        size={18}
-                        color={offerType === 'DISCOUNT' ? Colors.textOnPrimary : Colors.textSecondary}
-                      />
-                      <Text style={[
-                        styles.typeOptionText,
-                        offerType === 'DISCOUNT' && styles.typeOptionTextActiveDiscount
-                      ]}>
-                        {isAr ? 'نسبة تخفيض مئوية' : 'Percentage Discount'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Percentage input (Conditional) */}
-                  {offerType === 'DISCOUNT' && (
-                    <View>
-                      <Text style={styles.inputLabel}>{isAr ? 'نسبة الخصم المئوية (%)' : 'Discount Percentage (%)'}</Text>
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder="e.g. 20, 50, 75"
-                        placeholderTextColor={Colors.textMuted}
-                        keyboardType="numeric"
-                        value={discountPercentage}
-                        onChangeText={setDiscountPercentage}
-                      />
-                    </View>
-                  )}
-
-                  {/* Description Input */}
-                  <Text style={styles.inputLabel}>{isAr ? 'تفاصيل العرض (اختياري)' : 'Offer Description (Optional)'}</Text>
-                  <TextInput
-                    style={[styles.textInput, styles.textArea]}
-                    placeholder={isAr ? 'اكتب شروط أو تفاصيل العرض...' : 'Write custom rules or promotion details...'}
-                    placeholderTextColor={Colors.textMuted}
-                    multiline={true}
-                    numberOfLines={3}
-                    value={description}
-                    onChangeText={setDescription}
-                  />
-
-                  {/* Submit Buttons */}
-                  <TouchableOpacity
-                    style={styles.submitButton}
-                    onPress={handleCreateOffer}
-                    disabled={submitting}
-                  >
-                    {submitting ? (
-                      <ActivityIndicator color={Colors.background} size="small" />
-                    ) : (
-                      <>
-                        <Ionicons name="checkmark-circle-outline" size={20} color={Colors.background} />
-                        <Text style={styles.submitButtonText}>
-                          {isAr ? 'تأكيد ونشر العرض' : 'Confirm and Publish Offer'}
-                        </Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                </ScrollView>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
+  const styles = useMemo(() => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
@@ -1220,4 +850,376 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 2,
   },
-});
+}), [Colors]);
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.headerTitle}>{isAr ? 'العروض الخاصة' : 'Special Offers'}</Text>
+          <Text style={styles.headerSubtitle}>
+            {isAr ? 'إدارة وتنشيط حملات الترويج لمنتجاتك' : 'Manage and activate product promotions'}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => setAddModalVisible(true)}
+        >
+          <Ionicons name="add" size={22} color={Colors.background} />
+          <Text style={styles.addButtonText}>{isAr ? 'عرض جديد' : 'New Offer'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Main List */}
+      <FlatList
+        data={offers}
+        keyExtractor={(item) => item.id}
+        renderItem={renderOfferItem}
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={Colors.primary}
+          />
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Ionicons name="pricetags-outline" size={60} color={Colors.textMuted} />
+            <Text style={styles.emptyTitle}>{isAr ? 'لا توجد عروض ترويجية' : 'No Active Promotions'}</Text>
+            <Text style={styles.emptySubtitle}>
+              {isAr ? 'ابدأ بإضافة أول عرض مميز لجذب المزيد من الزبائن!' : 'Add your first special offer to attract more customers!'}
+            </Text>
+            <TouchableOpacity
+              style={styles.emptyButton}
+              onPress={() => setAddModalVisible(true)}
+            >
+              <Text style={styles.emptyButtonText}>{isAr ? 'إنشاء أول عرض' : 'Create First Offer'}</Text>
+            </TouchableOpacity>
+          </View>
+        }
+      />
+
+      {/* Add Offer Modal */}
+      <Modal
+        visible={addModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => {
+          setAddModalVisible(false);
+          setShowSelector(false);
+          setSelectorSearch('');
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, showSelector && styles.modalContentFullHeight]}>
+            {showSelector ? (
+              <View style={{ flex: 1, paddingBottom: Spacing.xl }}>
+                <View style={styles.modalHeader}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowSelector(false);
+                      setSelectorSearch('');
+                    }}
+                    style={styles.closeButton}
+                  >
+                    <Ionicons name={isAr ? "arrow-forward" : "arrow-back"} size={22} color={Colors.textPrimary} />
+                  </TouchableOpacity>
+                  <Text style={styles.modalTitle}>
+                    {isAr ? 'اختر منتجاً للعرض' : 'Select Product for Offer'}
+                  </Text>
+                  <View style={{ width: 24 }} />
+                </View>
+
+                {/* Search box for filtering products list */}
+                <View style={styles.searchBarInlineContainer}>
+                  <Ionicons name="search-outline" size={18} color={Colors.textMuted} style={styles.searchIconInline} />
+                  <TextInput
+                    style={styles.searchBarInline}
+                    placeholder={isAr ? 'البحث بالاسم أو القسم...' : 'Search by name or category...'}
+                    placeholderTextColor={Colors.textMuted}
+                    value={selectorSearch}
+                    onChangeText={setSelectorSearch}
+                  />
+                  {selectorSearch.length > 0 && (
+                    <TouchableOpacity onPress={() => setSelectorSearch('')} style={styles.clearSearchBtnInline}>
+                      <Ionicons name="close-circle" size={16} color={Colors.textMuted} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                <FlatList
+                  data={filteredProducts}
+                  keyExtractor={(item) => item.id}
+                  contentContainerStyle={styles.selectorListInline}
+                  ListEmptyComponent={
+                    <View style={styles.emptySelector}>
+                      <Ionicons name="cube-outline" size={40} color={Colors.textMuted} />
+                      <Text style={styles.emptySelectorText}>
+                        {isAr ? 'لا توجد منتجات مطابقة.' : 'No matching products found.'}
+                      </Text>
+                    </View>
+                  }
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.selectorItemRow}
+                      onPress={() => {
+                        setSelectedProduct(item);
+                        setShowSelector(false);
+                        setSelectorSearch('');
+                      }}
+                    >
+                      <Image
+                        source={
+                          item.image_url
+                            ? { uri: resolveImageUrl(item.image_url) }
+                            : require('../../assets/icon.png')
+                        }
+                        style={styles.selectorItemImage}
+                      />
+                      <View style={{ flex: 1, marginHorizontal: Spacing.md }}>
+                        <Text style={styles.selectorItemName} numberOfLines={1}>{item.name}</Text>
+                        <Text style={styles.selectorItemCategory}>{item.category || (isAr ? 'غير مصنف' : 'Uncategorized')}</Text>
+                        <Text style={styles.selectorItemPrice}>
+                          {item.price} {isAr ? 'ر.س' : 'SAR'}
+                        </Text>
+                      </View>
+                      <Ionicons name={isAr ? "chevron-back" : "chevron-forward"} size={18} color={Colors.textMuted} />
+                    </TouchableOpacity>
+                  )}
+                />
+              </View>
+            ) : (
+              <>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>{isAr ? 'إنشاء عرض خاص جديد' : 'Create Special Offer'}</Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setAddModalVisible(false);
+                      setFormMode('catalog');
+                      setSelectedProduct(null);
+                      setNewItemName('');
+                      setNewItemPrice('');
+                      setNewItemBarcode('');
+                      setNewItemImageUri(null);
+                    }}
+                    style={styles.closeButton}
+                  >
+                    <Ionicons name="close" size={24} color={Colors.textPrimary} />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView contentContainerStyle={styles.modalForm} showsVerticalScrollIndicator={false}>
+                  {/* Segmented/Tab Selector for Dual Mode */}
+                  <View style={styles.segmentContainer}>
+                    <TouchableOpacity
+                      style={[styles.segmentBtn, formMode === 'catalog' && styles.segmentActiveBtn]}
+                      onPress={() => setFormMode('catalog')}
+                    >
+                      <Text style={[styles.segmentBtnText, formMode === 'catalog' && styles.segmentActiveBtnText]}>
+                        {t('offers.choose_catalog')}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.segmentBtn, formMode === 'new' && styles.segmentActiveBtn]}
+                      onPress={() => setFormMode('new')}
+                    >
+                      <Text style={[styles.segmentBtnText, formMode === 'new' && styles.segmentActiveBtnText]}>
+                        {t('offers.create_new')}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {formMode === 'catalog' ? (
+                    <View>
+                      {/* Product Picker Button */}
+                      <Text style={styles.inputLabel}>{isAr ? 'المنتج المستهدف' : 'Target Product'}</Text>
+                      <TouchableOpacity
+                        style={styles.productPicker}
+                        onPress={() => setShowSelector(true)}
+                      >
+                        {selectedProduct ? (
+                          <View style={styles.selectedProductRow}>
+                            <Image
+                              source={
+                                selectedProduct.image_url
+                                  ? { uri: resolveImageUrl(selectedProduct.image_url) }
+                                  : require('../../assets/icon.png')
+                              }
+                              style={styles.miniProductImage}
+                            />
+                            <View style={{ flex: 1, marginHorizontal: Spacing.sm }}>
+                              <Text style={styles.selectedProductName} numberOfLines={1}>
+                                {selectedProduct.name}
+                              </Text>
+                              <Text style={styles.selectedProductPrice}>
+                                {selectedProduct.price} {isAr ? 'ر.س' : 'SAR'}
+                              </Text>
+                            </View>
+                            <Ionicons name="swap-horizontal-outline" size={20} color={Colors.primary} />
+                          </View>
+                        ) : (
+                          <View style={styles.pickerPlaceholder}>
+                            <Ionicons name="cube-outline" size={20} color={Colors.textMuted} />
+                            <Text style={styles.pickerPlaceholderText}>
+                              {isAr ? 'اختر منتجاً من الكتالوج...' : 'Choose a product from catalog...'}
+                            </Text>
+                            <Ionicons name="chevron-down" size={18} color={Colors.textMuted} />
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={styles.newProductFieldsContainer}>
+                      {/* Brand-New Product Fields */}
+                      <Text style={styles.inputLabel}>{t('addProduct.product_name')}</Text>
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder={isAr ? 'اسم المنتج الجديد...' : 'New product name...'}
+                        placeholderTextColor={Colors.textMuted}
+                        value={newItemName}
+                        onChangeText={setNewItemName}
+                      />
+
+                      <Text style={styles.inputLabel}>{t('addProduct.price')}</Text>
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder="e.g. 5.99"
+                        placeholderTextColor={Colors.textMuted}
+                        keyboardType="numeric"
+                        value={newItemPrice}
+                        onChangeText={setNewItemPrice}
+                      />
+
+                      <Text style={styles.inputLabel}>{t('addProduct.barcode')} ({isAr ? 'اختياري' : 'Optional'})</Text>
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder={isAr ? 'اكتب الباركود الخاص بالمنتج...' : 'Type product barcode...'}
+                        placeholderTextColor={Colors.textMuted}
+                        value={newItemBarcode}
+                        onChangeText={setNewItemBarcode}
+                      />
+
+                      <Text style={styles.inputLabel}>{t('offers.product_picture')}</Text>
+                      {newItemImageUri ? (
+                        <View style={styles.previewImageContainer}>
+                          <Image source={{ uri: newItemImageUri }} style={styles.previewImage} />
+                          <TouchableOpacity style={styles.clearImageBtn} onPress={() => setNewItemImageUri(null)}>
+                            <Ionicons name="close-circle" size={24} color={Colors.error} />
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <TouchableOpacity style={styles.imagePickerBtn} onPress={pickNewItemImage}>
+                          <Ionicons name="camera-outline" size={26} color={Colors.primary} />
+                          <Text style={styles.imagePickerText}>{t('offers.select_image')}</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Offer Type Selection */}
+                  <Text style={styles.inputLabel}>{isAr ? 'نوع العرض الخاص' : 'Offer Type'}</Text>
+                  <View style={styles.typeButtonsRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.typeOptionButton,
+                        offerType === 'BOGO' && styles.typeOptionActiveBogo
+                      ]}
+                      onPress={() => setOfferType('BOGO')}
+                    >
+                      <Ionicons
+                        name="gift-outline"
+                        size={18}
+                        color={offerType === 'BOGO' ? Colors.background : Colors.textSecondary}
+                      />
+                      <Text style={[
+                        styles.typeOptionText,
+                        offerType === 'BOGO' && styles.typeOptionTextActiveBogo
+                      ]}>
+                        {isAr ? 'اشترِ واحداً واحصل على الثاني مجاناً' : 'Buy 1 Get 1 Free'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.typeOptionButton,
+                        offerType === 'DISCOUNT' && styles.typeOptionActiveDiscount
+                      ]}
+                      onPress={() => setOfferType('DISCOUNT')}
+                    >
+                      <Ionicons
+                        name="pricetag-outline"
+                        size={18}
+                        color={offerType === 'DISCOUNT' ? Colors.textOnPrimary : Colors.textSecondary}
+                      />
+                      <Text style={[
+                        styles.typeOptionText,
+                        offerType === 'DISCOUNT' && styles.typeOptionTextActiveDiscount
+                      ]}>
+                        {isAr ? 'نسبة تخفيض مئوية' : 'Percentage Discount'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Percentage input (Conditional) */}
+                  {offerType === 'DISCOUNT' && (
+                    <View>
+                      <Text style={styles.inputLabel}>{isAr ? 'نسبة الخصم المئوية (%)' : 'Discount Percentage (%)'}</Text>
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder="e.g. 20, 50, 75"
+                        placeholderTextColor={Colors.textMuted}
+                        keyboardType="numeric"
+                        value={discountPercentage}
+                        onChangeText={setDiscountPercentage}
+                      />
+                    </View>
+                  )}
+
+                  {/* Description Input */}
+                  <Text style={styles.inputLabel}>{isAr ? 'تفاصيل العرض (اختياري)' : 'Offer Description (Optional)'}</Text>
+                  <TextInput
+                    style={[styles.textInput, styles.textArea]}
+                    placeholder={isAr ? 'اكتب شروط أو تفاصيل العرض...' : 'Write custom rules or promotion details...'}
+                    placeholderTextColor={Colors.textMuted}
+                    multiline={true}
+                    numberOfLines={3}
+                    value={description}
+                    onChangeText={setDescription}
+                  />
+
+                  {/* Submit Buttons */}
+                  <TouchableOpacity
+                    style={styles.submitButton}
+                    onPress={handleCreateOffer}
+                    disabled={submitting}
+                  >
+                    {submitting ? (
+                      <ActivityIndicator color={Colors.background} size="small" />
+                    ) : (
+                      <>
+                        <Ionicons name="checkmark-circle-outline" size={20} color={Colors.background} />
+                        <Text style={styles.submitButtonText}>
+                          {isAr ? 'تأكيد ونشر العرض' : 'Confirm and Publish Offer'}
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </ScrollView>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}

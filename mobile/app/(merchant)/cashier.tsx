@@ -4,17 +4,91 @@
  * Premium dark layout matching the merchant theme.
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
 
 export default function CashierScreen() {
   const router = useRouter();
+  const Colors = useThemeColors();
   const isAr = i18n.locale.includes('ar');
+
+  const styles = useMemo(() => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  header: {
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
+    borderBottomWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: Spacing.xl,
+  },
+  headerTitle: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  headerSubtitle: {
+    ...Typography.caption,
+    color: Colors.textMuted,
+    marginTop: 6,
+    lineHeight: 16,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: 24,
+    gap: Spacing.lg,
+  },
+  actionCard: {
+    backgroundColor: Colors.surfaceGlass,
+    borderRadius: BorderRadius.xl,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    minHeight: 96,
+    overflow: 'hidden',
+    ...Shadows.medium,
+  },
+  cardInner: {
+    padding: Spacing.lg,
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  iconWrapper: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  primaryIconBg: {
+    backgroundColor: 'rgba(108, 99, 255, 0.12)',
+  },
+  secondaryIconBg: {
+    backgroundColor: 'rgba(0, 217, 166, 0.12)',
+  },
+  textWrapper: {
+    flex: 1,
+    gap: 4,
+  },
+  cardTitle: {
+    ...Typography.h3,
+    color: Colors.textPrimary,
+  },
+  cardDescription: {
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
+    lineHeight: 18,
+  },
+
+}), [Colors]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -105,75 +179,3 @@ export default function CashierScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  header: {
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.lg,
-    borderBottomWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: Spacing.xl,
-  },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  headerSubtitle: {
-    ...Typography.caption,
-    color: Colors.textMuted,
-    marginTop: 6,
-    lineHeight: 16,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: Spacing.xl,
-    paddingBottom: 24,
-    gap: Spacing.lg,
-  },
-  actionCard: {
-    backgroundColor: Colors.surfaceGlass,
-    borderRadius: BorderRadius.xl,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    minHeight: 96,
-    overflow: 'hidden',
-    ...Shadows.medium,
-  },
-  cardInner: {
-    padding: Spacing.lg,
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  iconWrapper: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  primaryIconBg: {
-    backgroundColor: 'rgba(108, 99, 255, 0.12)',
-  },
-  secondaryIconBg: {
-    backgroundColor: 'rgba(0, 217, 166, 0.12)',
-  },
-  textWrapper: {
-    flex: 1,
-    gap: 4,
-  },
-  cardTitle: {
-    ...Typography.h3,
-    color: Colors.textPrimary,
-  },
-  cardDescription: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
-    lineHeight: 18,
-  },
-
-});

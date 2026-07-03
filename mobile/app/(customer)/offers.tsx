@@ -4,7 +4,7 @@
  * Features search, categories, offer type, and distance filters.
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, Image, Alert, ScrollView, RefreshControl
@@ -17,7 +17,8 @@ import {
   getCustomerSpecialOffers, getCategories, CategoryNode,
   CustomerSpecialOfferResponse, CustomerOffersFilters
 } from '../../services/api';
-import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
 import { getCurrencyCode, formatPrice } from '../../services/currency';
 import { resolveImageUrl } from '../../services/utils';
@@ -26,6 +27,394 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
 const DEFAULT_COORDS = { latitude: 24.7136, longitude: 46.6753 }; // Riyadh Fallback
 
 export default function CustomerOffersScreen() {
+  const Colors = useThemeColors();
+  const styles = useMemo(() => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  warningBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.warning,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    gap: Spacing.sm,
+  },
+  warningText: {
+    ...Typography.bodySmall,
+    color: Colors.background,
+    fontWeight: '700',
+    flex: 1,
+  },
+  header: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
+    backgroundColor: Colors.surface,
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    ...Typography.h1,
+    color: Colors.textPrimary,
+  },
+  headerSubtitle: {
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  infoButton: {
+    padding: 6,
+  },
+  infoBox: {
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginTop: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  infoBoxTitle: {
+    ...Typography.label,
+    color: Colors.primaryLight,
+    marginBottom: Spacing.xs,
+  },
+  infoBoxBody: {
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  searchBarContainer: {
+    flexDirection: 'row',
+    marginVertical: Spacing.md,
+    gap: Spacing.sm,
+  },
+  searchBox: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    height: 48,
+    gap: Spacing.sm,
+  },
+  searchInput: {
+    flex: 1,
+    color: Colors.textPrimary,
+    ...Typography.body,
+  },
+  filterButton: {
+    width: 48,
+    height: 48,
+    backgroundColor: Colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  filterButtonActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primaryLight,
+  },
+  categoryScroll: {
+    marginBottom: Spacing.md,
+  },
+  categoryScrollContent: {
+    gap: Spacing.sm,
+    paddingRight: Spacing.lg,
+  },
+  categoryPill: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  categoryPillActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primaryLight,
+  },
+  categoryPillText: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    fontWeight: '600',
+  },
+  categoryPillTextActive: {
+    color: Colors.textOnPrimary,
+  },
+
+  // Filters Tray Styling
+  filtersTray: {
+    backgroundColor: Colors.surfaceElevated,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    padding: Spacing.lg,
+    ...Shadows.medium,
+  },
+  trayTitle: {
+    ...Typography.h3,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.md,
+  },
+  trayLabel: {
+    ...Typography.label,
+    color: Colors.textSecondary,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  trayPillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  trayPill: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  trayPillActive: {
+    backgroundColor: Colors.secondary,
+    borderColor: Colors.secondaryLight,
+  },
+  trayPillText: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    fontWeight: '600',
+  },
+  trayPillTextActive: {
+    color: Colors.background,
+    fontWeight: '700',
+  },
+  trayActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: Spacing.xl,
+    gap: Spacing.md,
+  },
+  trayClearBtn: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+  },
+  trayClearText: {
+    ...Typography.button,
+    color: Colors.textSecondary,
+  },
+  trayApplyBtn: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+  },
+  trayApplyText: {
+    ...Typography.button,
+    color: Colors.textOnPrimary,
+  },
+
+  // Grid/Cards Styling
+  listContent: {
+    padding: Spacing.md,
+    paddingBottom: Spacing.xxl,
+  },
+  columnWrapper: {
+    justifyContent: 'space-between',
+  },
+  offerCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    width: '48.5%',
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: 'hidden',
+    ...Shadows.small,
+  },
+  cardBadge: {
+    position: 'absolute',
+    top: Spacing.sm,
+    left: Spacing.sm,
+    zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.full,
+  },
+  cardBadgeBogo: {
+    backgroundColor: Colors.secondary,
+  },
+  cardBadgeDiscount: {
+    backgroundColor: Colors.primary,
+  },
+  cardBadgeText: {
+    ...Typography.caption,
+    fontSize: 9,
+    fontWeight: '800',
+    marginLeft: 3,
+  },
+  cardBadgeTextBogo: {
+    color: Colors.background,
+  },
+  cardBadgeTextDiscount: {
+    color: Colors.textOnPrimary,
+  },
+  cardImage: {
+    width: '100%',
+    height: 120,
+    backgroundColor: Colors.surfaceElevated,
+  },
+  cardInfo: {
+    padding: Spacing.sm,
+  },
+  productName: {
+    ...Typography.label,
+    color: Colors.textPrimary,
+  },
+  categoryName: {
+    ...Typography.caption,
+    fontSize: 10,
+    color: Colors.textMuted,
+    marginTop: 1,
+    textTransform: 'uppercase',
+  },
+  priceText: {
+    ...Typography.h3,
+    color: Colors.secondary,
+  },
+  originalPriceText: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    textDecorationLine: 'line-through',
+  },
+  descriptionText: {
+    ...Typography.bodySmall,
+    fontSize: 11,
+    color: Colors.textSecondary,
+    fontStyle: 'italic',
+    marginTop: Spacing.xs,
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: Colors.divider,
+    marginVertical: Spacing.sm,
+  },
+  shopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  shopName: {
+    ...Typography.bodySmall,
+    fontSize: 12,
+    color: Colors.textSecondary,
+    flex: 1,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: Spacing.sm,
+  },
+  metricPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,217,166,0.1)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.full,
+    gap: 2,
+  },
+  metricText: {
+    ...Typography.caption,
+    fontSize: 10,
+    color: Colors.secondaryLight,
+    fontWeight: '600',
+  },
+  scorePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,181,69,0.1)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.full,
+    gap: 2,
+  },
+  scoreText: {
+    ...Typography.caption,
+    fontSize: 10,
+    color: Colors.warning,
+    fontWeight: '600',
+  },
+
+  // Empty State
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.xxxl,
+    width: '100%',
+  },
+  emptyTitle: {
+    ...Typography.h2,
+    color: Colors.textSecondary,
+    marginTop: Spacing.md,
+  },
+  emptySubtitle: {
+    ...Typography.body,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    marginTop: Spacing.sm,
+    paddingHorizontal: Spacing.xxl,
+  },
+  resetButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginTop: Spacing.xl,
+  },
+  resetButtonText: {
+    ...Typography.button,
+    color: Colors.textOnPrimary,
+  },
+  shopStatusMiniBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 1,
+    paddingHorizontal: 6,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+  },
+  statusDotMini: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  shopStatusMiniText: {
+    fontSize: 9,
+    fontWeight: '700',
+  },
+}), [Colors]);
+
   const router = useRouter();
   const isAr = i18n.locale.includes('ar');
 
@@ -420,390 +809,3 @@ export default function CustomerOffersScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  warningBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.warning,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    gap: Spacing.sm,
-  },
-  warningText: {
-    ...Typography.bodySmall,
-    color: Colors.background,
-    fontWeight: '700',
-    flex: 1,
-  },
-  header: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.divider,
-    backgroundColor: Colors.surface,
-  },
-  headerTitleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    ...Typography.h1,
-    color: Colors.textPrimary,
-  },
-  headerSubtitle: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  infoButton: {
-    padding: 6,
-  },
-  infoBox: {
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    marginTop: Spacing.sm,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  infoBoxTitle: {
-    ...Typography.label,
-    color: Colors.primaryLight,
-    marginBottom: Spacing.xs,
-  },
-  infoBoxBody: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  searchBarContainer: {
-    flexDirection: 'row',
-    marginVertical: Spacing.md,
-    gap: Spacing.sm,
-  },
-  searchBox: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surfaceElevated,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: BorderRadius.md,
-    paddingHorizontal: Spacing.md,
-    height: 48,
-    gap: Spacing.sm,
-  },
-  searchInput: {
-    flex: 1,
-    color: Colors.textPrimary,
-    ...Typography.body,
-  },
-  filterButton: {
-    width: 48,
-    height: 48,
-    backgroundColor: Colors.surfaceElevated,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: BorderRadius.md,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  filterButtonActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primaryLight,
-  },
-  categoryScroll: {
-    marginBottom: Spacing.md,
-  },
-  categoryScrollContent: {
-    gap: Spacing.sm,
-    paddingRight: Spacing.lg,
-  },
-  categoryPill: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.full,
-    backgroundColor: Colors.surfaceElevated,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  categoryPillActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primaryLight,
-  },
-  categoryPillText: {
-    ...Typography.caption,
-    color: Colors.textSecondary,
-    fontWeight: '600',
-  },
-  categoryPillTextActive: {
-    color: Colors.textOnPrimary,
-  },
-
-  // Filters Tray Styling
-  filtersTray: {
-    backgroundColor: Colors.surfaceElevated,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    padding: Spacing.lg,
-    ...Shadows.medium,
-  },
-  trayTitle: {
-    ...Typography.h3,
-    color: Colors.textPrimary,
-    marginBottom: Spacing.md,
-  },
-  trayLabel: {
-    ...Typography.label,
-    color: Colors.textSecondary,
-    marginTop: Spacing.md,
-    marginBottom: Spacing.sm,
-  },
-  trayPillsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-  },
-  trayPill: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.full,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  trayPillActive: {
-    backgroundColor: Colors.secondary,
-    borderColor: Colors.secondaryLight,
-  },
-  trayPillText: {
-    ...Typography.caption,
-    color: Colors.textSecondary,
-    fontWeight: '600',
-  },
-  trayPillTextActive: {
-    color: Colors.background,
-    fontWeight: '700',
-  },
-  trayActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: Spacing.xl,
-    gap: Spacing.md,
-  },
-  trayClearBtn: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-  },
-  trayClearText: {
-    ...Typography.button,
-    color: Colors.textSecondary,
-  },
-  trayApplyBtn: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.md,
-  },
-  trayApplyText: {
-    ...Typography.button,
-    color: Colors.textOnPrimary,
-  },
-
-  // Grid/Cards Styling
-  listContent: {
-    padding: Spacing.md,
-    paddingBottom: Spacing.xxl,
-  },
-  columnWrapper: {
-    justifyContent: 'space-between',
-  },
-  offerCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    width: '48.5%',
-    marginBottom: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    overflow: 'hidden',
-    ...Shadows.small,
-  },
-  cardBadge: {
-    position: 'absolute',
-    top: Spacing.sm,
-    left: Spacing.sm,
-    zIndex: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 4,
-    borderRadius: BorderRadius.full,
-  },
-  cardBadgeBogo: {
-    backgroundColor: Colors.secondary,
-  },
-  cardBadgeDiscount: {
-    backgroundColor: Colors.primary,
-  },
-  cardBadgeText: {
-    ...Typography.caption,
-    fontSize: 9,
-    fontWeight: '800',
-    marginLeft: 3,
-  },
-  cardBadgeTextBogo: {
-    color: Colors.background,
-  },
-  cardBadgeTextDiscount: {
-    color: Colors.textOnPrimary,
-  },
-  cardImage: {
-    width: '100%',
-    height: 120,
-    backgroundColor: Colors.surfaceElevated,
-  },
-  cardInfo: {
-    padding: Spacing.sm,
-  },
-  productName: {
-    ...Typography.label,
-    color: Colors.textPrimary,
-  },
-  categoryName: {
-    ...Typography.caption,
-    fontSize: 10,
-    color: Colors.textMuted,
-    marginTop: 1,
-    textTransform: 'uppercase',
-  },
-  priceText: {
-    ...Typography.h3,
-    color: Colors.secondary,
-  },
-  originalPriceText: {
-    ...Typography.caption,
-    color: Colors.textSecondary,
-    textDecorationLine: 'line-through',
-  },
-  descriptionText: {
-    ...Typography.bodySmall,
-    fontSize: 11,
-    color: Colors.textSecondary,
-    fontStyle: 'italic',
-    marginTop: Spacing.xs,
-  },
-  cardDivider: {
-    height: 1,
-    backgroundColor: Colors.divider,
-    marginVertical: Spacing.sm,
-  },
-  shopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  shopName: {
-    ...Typography.bodySmall,
-    fontSize: 12,
-    color: Colors.textSecondary,
-    flex: 1,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: Spacing.sm,
-  },
-  metricPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,217,166,0.1)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: BorderRadius.full,
-    gap: 2,
-  },
-  metricText: {
-    ...Typography.caption,
-    fontSize: 10,
-    color: Colors.secondaryLight,
-    fontWeight: '600',
-  },
-  scorePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,181,69,0.1)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: BorderRadius.full,
-    gap: 2,
-  },
-  scoreText: {
-    ...Typography.caption,
-    fontSize: 10,
-    color: Colors.warning,
-    fontWeight: '600',
-  },
-
-  // Empty State
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing.xxxl,
-    width: '100%',
-  },
-  emptyTitle: {
-    ...Typography.h2,
-    color: Colors.textSecondary,
-    marginTop: Spacing.md,
-  },
-  emptySubtitle: {
-    ...Typography.body,
-    color: Colors.textMuted,
-    textAlign: 'center',
-    marginTop: Spacing.sm,
-    paddingHorizontal: Spacing.xxl,
-  },
-  resetButton: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.md,
-    marginTop: Spacing.xl,
-  },
-  resetButtonText: {
-    ...Typography.button,
-    color: Colors.textOnPrimary,
-  },
-  shopStatusMiniBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 1,
-    paddingHorizontal: 6,
-    borderRadius: BorderRadius.full,
-    borderWidth: 1,
-  },
-  statusDotMini: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-  },
-  shopStatusMiniText: {
-    fontSize: 9,
-    fontWeight: '700',
-  },
-});

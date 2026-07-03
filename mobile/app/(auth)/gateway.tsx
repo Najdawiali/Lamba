@@ -12,164 +12,23 @@
  * - Footer: version string
  */
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { useThemeColors } from '../../context/ThemeContext';
 import { t, toggleLanguage, i18n } from '../../services/i18n';
 
 const { width } = Dimensions.get('window');
 
 export default function AuthGatewayScreen() {
-  const router = useRouter();
-  const isAr = i18n.locale.includes('ar');
+  const Colors = useThemeColors();
 
-  // Entrance animations
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideCustomer = useRef(new Animated.Value(40)).current;
-  const slideSeller = useRef(new Animated.Value(40)).current;
-
-  useEffect(() => {
-    Animated.sequence([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      Animated.stagger(150, [
-        Animated.spring(slideCustomer, {
-          toValue: 0,
-          tension: 60,
-          friction: 9,
-          useNativeDriver: true,
-        }),
-        Animated.spring(slideSeller, {
-          toValue: 0,
-          tension: 60,
-          friction: 9,
-          useNativeDriver: true,
-        }),
-      ]),
-    ]).start();
-  }, []);
-
-  const navigateToLogin = (role: 'customer' | 'merchant') => {
-    router.push({ pathname: '/(auth)/login', params: { role } });
-  };
-
-  const navigateToRegister = () => {
-    // Unified registration — no role pre-set, user picks on step 1
-    router.push({ pathname: '/(auth)/register' });
-  };
-
-  return (
-    <View style={styles.container}>
-      {/* Premium Ambient Background Glows */}
-      <View style={styles.glowOrb1} />
-      <View style={styles.glowOrb2} />
-      <View style={styles.glowOrb3} />
-
-
-
-      {/* Top Welcome / Branding Section — centered at ~40% from top */}
-      <Animated.View style={[styles.heroSection, { opacity: fadeAnim }]}>
-        <LinearGradient
-          colors={[Colors.primary, Colors.secondary]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.logoContainer}
-        >
-          <Ionicons name="eye" size={48} color={Colors.textOnPrimary} />
-        </LinearGradient>
-
-        <Text style={styles.title}>{t('gateway.welcome')}</Text>
-        <View style={styles.taglineWrapper}>
-          <Text style={styles.tagline}>
-            {t('gateway.choose_role')}
-          </Text>
-        </View>
-
-        {/* Language Switcher — centered pill between tagline and cards */}
-        <TouchableOpacity style={styles.langButton} onPress={toggleLanguage} activeOpacity={0.7}>
-          <Text style={styles.langText}>{isAr ? 'EN' : 'ع'}</Text>
-        </TouchableOpacity>
-      </Animated.View>
-
-      {/* Role Selection Cards — stacked with 16px gap */}
-      <View style={styles.cardsSection}>
-        {/* ── Customer Card ─────────────────────────────── */}
-        <Animated.View style={{ transform: [{ translateY: slideCustomer }], opacity: fadeAnim }}>
-          <TouchableOpacity
-            style={styles.roleCard}
-            onPress={() => navigateToLogin('customer')}
-            activeOpacity={0.85}
-          >
-            <View style={[styles.roleIconCircle, { backgroundColor: Colors.primary }]}>
-              <Ionicons name="cart-outline" size={24} color={Colors.textOnPrimary} />
-            </View>
-
-            <View style={styles.roleCardContent}>
-              <Text style={styles.roleCardTitle}>
-                {t('gateway.shop_with')}
-              </Text>
-              <Text style={styles.roleCardDesc}>
-                {t('gateway.discover_desc')}
-              </Text>
-            </View>
-
-            <Ionicons name="chevron-forward" size={20} color={Colors.textSecondary} />
-          </TouchableOpacity>
-        </Animated.View>
-
-        {/* 16px gap between cards (handled by cardsSection gap) */}
-
-        {/* ── Seller Card ───────────────────────────────── */}
-        <Animated.View style={{ transform: [{ translateY: slideSeller }], opacity: fadeAnim }}>
-          <TouchableOpacity
-            style={styles.roleCard}
-            onPress={() => navigateToLogin('merchant')}
-            activeOpacity={0.85}
-          >
-            <View style={[styles.roleIconCircle, { backgroundColor: Colors.secondary }]}>
-              <Ionicons name="storefront-outline" size={24} color={Colors.textOnPrimary} />
-            </View>
-
-            <View style={styles.roleCardContent}>
-              <Text style={styles.roleCardTitle}>
-                {t('gateway.sell_with')}
-              </Text>
-              <Text style={styles.roleCardDesc}>
-                {t('gateway.manage_desc')}
-              </Text>
-            </View>
-
-            <Ionicons name="chevron-forward" size={20} color={Colors.textSecondary} />
-          </TouchableOpacity>
-        </Animated.View>
-
-        {/* Unified Registration Link */}
-        <TouchableOpacity
-          style={styles.unifiedRegisterLink}
-          onPress={navigateToRegister}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.unifiedRegisterText}>
-            {t('gateway.new_to_lamba')}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Footer Branding */}
-      <Text style={styles.footerText}>Lamba v1.2.0 • Secure & Hyper-local</Text>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
+  const styles = useMemo(() => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
@@ -313,4 +172,146 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     color: Colors.textMuted,
   },
-});
+  }), [Colors]);
+  const router = useRouter();
+  const isAr = i18n.locale.includes('ar');
+
+  // Entrance animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideCustomer = useRef(new Animated.Value(40)).current;
+  const slideSeller = useRef(new Animated.Value(40)).current;
+
+  useEffect(() => {
+    Animated.sequence([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.stagger(150, [
+        Animated.spring(slideCustomer, {
+          toValue: 0,
+          tension: 60,
+          friction: 9,
+          useNativeDriver: true,
+        }),
+        Animated.spring(slideSeller, {
+          toValue: 0,
+          tension: 60,
+          friction: 9,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+  }, []);
+
+  const navigateToLogin = (role: 'customer' | 'merchant') => {
+    router.push({ pathname: '/(auth)/login', params: { role } });
+  };
+
+  const navigateToRegister = () => {
+    // Unified registration — no role pre-set, user picks on step 1
+    router.push({ pathname: '/(auth)/register' });
+  };
+
+  return (
+    <View style={styles.container}>
+      {/* Premium Ambient Background Glows */}
+      <View style={styles.glowOrb1} />
+      <View style={styles.glowOrb2} />
+      <View style={styles.glowOrb3} />
+
+      {/* Top Welcome / Branding Section — centered at ~40% from top */}
+      <Animated.View style={[styles.heroSection, { opacity: fadeAnim }]}>
+        <LinearGradient
+          colors={[Colors.primary, Colors.secondary]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.logoContainer}
+        >
+          <Ionicons name="eye" size={48} color={Colors.textOnPrimary} />
+        </LinearGradient>
+
+        <Text style={styles.title}>{t('gateway.welcome')}</Text>
+        <View style={styles.taglineWrapper}>
+          <Text style={styles.tagline}>
+            {t('gateway.choose_role')}
+          </Text>
+        </View>
+
+        {/* Language Switcher — centered pill between tagline and cards */}
+        <TouchableOpacity style={styles.langButton} onPress={toggleLanguage} activeOpacity={0.7}>
+          <Text style={styles.langText}>{isAr ? 'EN' : 'ع'}</Text>
+        </TouchableOpacity>
+      </Animated.View>
+
+      {/* Role Selection Cards — stacked with 16px gap */}
+      <View style={styles.cardsSection}>
+        {/* ── Customer Card ─────────────────────────────── */}
+        <Animated.View style={{ transform: [{ translateY: slideCustomer }], opacity: fadeAnim }}>
+          <TouchableOpacity
+            style={styles.roleCard}
+            onPress={() => navigateToLogin('customer')}
+            activeOpacity={0.85}
+          >
+            <View style={[styles.roleIconCircle, { backgroundColor: Colors.primary }]}>
+              <Ionicons name="cart-outline" size={24} color={Colors.textOnPrimary} />
+            </View>
+
+            <View style={styles.roleCardContent}>
+              <Text style={styles.roleCardTitle}>
+                {t('gateway.shop_with')}
+              </Text>
+              <Text style={styles.roleCardDesc}>
+                {t('gateway.discover_desc')}
+              </Text>
+            </View>
+
+            <Ionicons name="chevron-forward" size={20} color={Colors.textSecondary} />
+          </TouchableOpacity>
+        </Animated.View>
+
+        {/* 16px gap between cards (handled by cardsSection gap) */}
+
+        {/* ── Seller Card ───────────────────────────────── */}
+        <Animated.View style={{ transform: [{ translateY: slideSeller }], opacity: fadeAnim }}>
+          <TouchableOpacity
+            style={styles.roleCard}
+            onPress={() => navigateToLogin('merchant')}
+            activeOpacity={0.85}
+          >
+            <View style={[styles.roleIconCircle, { backgroundColor: Colors.secondary }]}>
+              <Ionicons name="storefront-outline" size={24} color={Colors.textOnPrimary} />
+            </View>
+
+            <View style={styles.roleCardContent}>
+              <Text style={styles.roleCardTitle}>
+                {t('gateway.sell_with')}
+              </Text>
+              <Text style={styles.roleCardDesc}>
+                {t('gateway.manage_desc')}
+              </Text>
+            </View>
+
+            <Ionicons name="chevron-forward" size={20} color={Colors.textSecondary} />
+          </TouchableOpacity>
+        </Animated.View>
+
+        {/* Unified Registration Link */}
+        <TouchableOpacity
+          style={styles.unifiedRegisterLink}
+          onPress={navigateToRegister}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.unifiedRegisterText}>
+            {t('gateway.new_to_lamba')}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Footer Branding */}
+      <Text style={styles.footerText}>Lamba v1.2.0 • Secure & Hyper-local</Text>
+    </View>
+  );
+
+}

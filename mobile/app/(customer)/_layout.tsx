@@ -8,10 +8,12 @@
 
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Typography } from '../../constants/theme';
+import { Typography } from '../../constants/theme';
+import { useThemeColors } from '../../context/ThemeContext';
 import { t } from '../../services/i18n';
 
 export default function CustomerLayout() {
+  const Colors = useThemeColors();
 
   return (
     <Tabs

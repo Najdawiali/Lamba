@@ -9,7 +9,7 @@
  *  - Location Denied: Empty state.
  */
 
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   FlatList, ActivityIndicator, Keyboard, ScrollView, Platform, Alert, Image, KeyboardAvoidingView, Modal
@@ -26,10 +26,12 @@ import {
   SearchResultItem, SearchFilters, getSearchHistory, addSearchHistory, clearSearchHistory, SearchHistoryEntry
 } from '../../services/api';
 import ProductCard from '../../components/ProductCard';
-import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { useThemeColors } from '../../context/ThemeContext';
 import { t } from '../../services/i18n';
 
 export default function SearchScreen() {
+  const Colors = useThemeColors();
   const router = useRouter();
 
   // ── Search State ──────────────────────────────────────────
@@ -205,7 +207,219 @@ export default function SearchScreen() {
     else Linking.openSettings();
   };
 
-  // ── Rendering components ──────────────────────────────
+  const styles = useMemo(() => StyleSheet.create({
+    container: { flex: 1, backgroundColor: Colors.background },
+    safeArea: { flex: 1 },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: Spacing.lg,
+      paddingVertical: Spacing.sm,
+    },
+    iconButton: {
+      width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start'
+    },
+    headerTitle: {
+      ...Typography.h3,
+      color: Colors.textPrimary,
+    },
+    avatarButton: {
+      width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-end'
+    },
+    avatarGradient: {
+      width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center'
+    },
+    avatarText: {
+      fontSize: 14, fontWeight: '700', color: Colors.textOnPrimary
+    },
+    searchWrapper: {
+      paddingHorizontal: Spacing.lg,
+      paddingBottom: Spacing.md,
+      zIndex: 100,
+    },
+    searchContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.sm,
+      zIndex: 1000,
+      elevation: 10,
+    },
+    searchBar: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      height: 52,
+      backgroundColor: Colors.surfaceElevated,
+      borderRadius: 26,
+      paddingHorizontal: Spacing.lg,
+    },
+    searchIcon: { marginRight: Spacing.xs },
+    searchInput: {
+      flex: 1,
+      color: Colors.textPrimary,
+      ...Typography.body,
+      height: '100%',
+    },
+    clearIcon: { padding: Spacing.xs },
+    searchDivider: {
+      width: 1, height: 24, backgroundColor: Colors.border, marginHorizontal: Spacing.sm
+    },
+    cameraIcon: { padding: Spacing.xs, marginRight: 2 },
+    imageIcon: { padding: Spacing.xs },
+    filterButton: {
+      width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.surfaceElevated,
+      justifyContent: 'center', alignItems: 'center',
+    },
+    queryImageContainer: {
+      width: 28, height: 28, borderRadius: 14, position: 'relative', marginRight: Spacing.xs,
+      borderWidth: 1, borderColor: Colors.primary,
+    },
+    queryImage: { width: '100%', height: '100%', borderRadius: 13 },
+    queryImageCloseBtn: {
+      position: 'absolute', top: -6, right: -6, backgroundColor: Colors.surface, borderRadius: 8, zIndex: 1
+    },
+
+    feedContent: { paddingBottom: 100 },
+    suggestionsRow: { marginBottom: Spacing.xl, marginTop: Spacing.sm },
+    suggestionsScroll: { paddingHorizontal: Spacing.lg, gap: Spacing.sm },
+    suggestionChip: {
+      height: 36, backgroundColor: Colors.surfaceElevated, borderRadius: 18,
+      justifyContent: 'center', paddingHorizontal: Spacing.lg, borderWidth: 1, borderColor: Colors.border
+    },
+    suggestionChipText: { ...Typography.bodySmall, color: Colors.textPrimary },
+
+    section: { marginBottom: Spacing.xxl },
+    sectionHeader: { paddingHorizontal: Spacing.lg, marginBottom: Spacing.md },
+    sectionTitle: { ...Typography.h2, color: Colors.textPrimary },
+    horizontalScroll: { paddingHorizontal: Spacing.lg, gap: Spacing.md },
+
+    marketCard: { width: 160, gap: Spacing.xs },
+    marketImagePlaceholder: {
+      width: 160, height: 100, backgroundColor: 'rgba(108, 99, 255, 0.1)',
+      borderRadius: BorderRadius.md, justifyContent: 'center', alignItems: 'center',
+      borderWidth: 1, borderColor: 'rgba(108, 99, 255, 0.2)'
+    },
+    marketName: { ...Typography.body, fontWeight: '600', color: Colors.textPrimary, marginTop: 4 },
+    marketDistance: { ...Typography.caption, color: Colors.textSecondary },
+
+    dealCard: { width: 140, gap: Spacing.xs },
+    dealImagePlaceholder: {
+      width: 140, height: 140, backgroundColor: 'rgba(0, 200, 150, 0.1)',
+      borderRadius: BorderRadius.md, justifyContent: 'center', alignItems: 'center',
+      borderWidth: 1, borderColor: 'rgba(0, 200, 150, 0.2)', position: 'relative'
+    },
+    dealBadge: {
+      position: 'absolute', top: Spacing.sm, left: Spacing.sm,
+      backgroundColor: Colors.primary, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4
+    },
+    dealBadgeText: { ...Typography.caption, color: Colors.textOnPrimary, fontWeight: '700' },
+    dealName: { ...Typography.bodySmall, color: Colors.textPrimary, marginTop: 4 },
+    dealPrice: { ...Typography.bodySmall, color: Colors.secondary, fontWeight: '700' },
+
+    recentCard: {
+      width: 120, height: 80, backgroundColor: Colors.surface, borderRadius: BorderRadius.md,
+      borderWidth: 1, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center', gap: Spacing.xs
+    },
+    recentIconWrapper: {
+      width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surfaceElevated,
+      justifyContent: 'center', alignItems: 'center'
+    },
+    recentText: { ...Typography.caption, color: Colors.textSecondary, paddingHorizontal: Spacing.sm, textAlign: 'center' },
+
+    // Results State
+    resultsContainer: { flex: 1 },
+    listContent: { paddingHorizontal: Spacing.lg, paddingBottom: 110, paddingTop: Spacing.sm },
+    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    loadingText: { ...Typography.bodySmall, color: Colors.textSecondary, marginTop: Spacing.md },
+    emptyResultsContainer: { alignItems: 'center', paddingVertical: Spacing.xxxl },
+    emptyResultsTitle: { ...Typography.h3, color: Colors.textSecondary, marginTop: Spacing.lg },
+    emptyResultsText: { ...Typography.bodySmall, color: Colors.textMuted, marginTop: Spacing.sm },
+    recommendationBanner: {
+      flexDirection: 'row', gap: Spacing.md, alignItems: 'center',
+      backgroundColor: 'rgba(108, 99, 255, 0.12)', borderLeftWidth: 4,
+      borderLeftColor: Colors.primary, marginHorizontal: Spacing.xl,
+      marginBottom: Spacing.md, padding: Spacing.md, borderRadius: BorderRadius.md,
+    },
+    recommendationBannerTitle: { ...Typography.label, color: Colors.primary, fontWeight: '700', fontSize: 13 },
+    recommendationBannerText: { ...Typography.caption, color: Colors.textSecondary, marginTop: 2, fontSize: 11 },
+
+    // Denied State
+    deniedContainer: { flex: 1, backgroundColor: Colors.background, justifyContent: 'center', alignItems: 'center', padding: Spacing.xxl },
+    deniedIconWrapper: { position: 'relative', marginBottom: Spacing.xl },
+    deniedLock: { position: 'absolute', top: -10, right: -10, zIndex: 1, backgroundColor: Colors.background, borderRadius: 16, overflow: 'hidden' },
+    deniedTitle: { ...Typography.h2, color: Colors.textPrimary, textAlign: 'center' },
+    deniedText: { ...Typography.body, color: Colors.textSecondary, textAlign: 'center', marginTop: Spacing.md, marginBottom: Spacing.xxl, lineHeight: 22 },
+    primaryBtn: {
+      width: '100%', height: 48, backgroundColor: Colors.primary, borderRadius: BorderRadius.md,
+      justifyContent: 'center', alignItems: 'center', marginBottom: Spacing.md
+    },
+    primaryBtnText: { ...Typography.button, color: Colors.textOnPrimary },
+    secondaryBtn: { paddingVertical: Spacing.sm },
+    secondaryBtnText: { ...Typography.body, color: Colors.textSecondary, textDecorationLine: 'underline' },
+
+    // History Dropdown
+    historyDropdown: {
+      position: 'absolute',
+      top: 60,
+      left: Spacing.lg,
+      right: Spacing.lg,
+      backgroundColor: Colors.surface,
+      borderRadius: BorderRadius.md,
+      ...Shadows.medium,
+      zIndex: 1000,
+      elevation: 10,
+      overflow: 'hidden',
+    },
+    historyDropdownItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: Spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: Colors.border,
+    },
+    historyDropdownText: {
+      ...Typography.body,
+      color: Colors.textPrimary,
+    },
+    historyDropdownEmpty: {
+      padding: Spacing.xl,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    historyDropdownEmptyText: {
+      ...Typography.body,
+      color: Colors.textMuted,
+    },
+
+    // Modal Styles
+    modalOverlay: { flex: 1, justifyContent: 'flex-end' },
+    modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)' },
+    modalContent: { backgroundColor: Colors.surface, borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl, height: '80%', padding: Spacing.lg },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg },
+    modalTitle: { ...Typography.h2, color: Colors.textPrimary },
+    modalCloseBtn: { padding: Spacing.xs },
+    modalBody: { flex: 1 },
+    filterLabel: { ...Typography.h3, color: Colors.textPrimary, marginTop: Spacing.xl, marginBottom: Spacing.md },
+    filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+    filterChip: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: BorderRadius.full, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.background },
+    filterChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+    filterChipText: { ...Typography.body, color: Colors.textSecondary },
+    filterChipTextActive: { color: Colors.textOnPrimary, fontWeight: '600' },
+    checkboxRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.xs },
+    checkboxText: { ...Typography.body, color: Colors.textPrimary },
+    priceInputsContainer: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+    priceInput: { flex: 1, backgroundColor: Colors.background, borderRadius: BorderRadius.md, padding: Spacing.md, color: Colors.textPrimary, ...Typography.body, borderWidth: 1, borderColor: Colors.border },
+    priceSeparator: { color: Colors.textMuted, fontSize: 20 },
+    textInput: { backgroundColor: Colors.background, borderRadius: BorderRadius.md, padding: Spacing.md, color: Colors.textPrimary, ...Typography.body, borderWidth: 1, borderColor: Colors.border },
+    modalFooter: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.lg, paddingBottom: Spacing.xl },
+    resetButton: { flex: 1, padding: Spacing.md, borderRadius: BorderRadius.md, backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, alignItems: 'center' },
+    resetButtonText: { ...Typography.button, color: Colors.textPrimary },
+    applyButton: { flex: 2, padding: Spacing.md, borderRadius: BorderRadius.md, backgroundColor: Colors.primary, alignItems: 'center' },
+    applyButtonText: { ...Typography.button, color: Colors.textOnPrimary },
+  }), [Colors]);
+
+  // ── Rendering components ──────────────────────────────────
   const renderHeader = () => (
     <View style={styles.header}>
       <View style={styles.iconButton} />
@@ -561,218 +775,6 @@ export default function SearchScreen() {
         </View>
       </Modal>
 
-    </KeyboardAvoidingView>
+</KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  safeArea: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-  },
-  iconButton: {
-    width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start'
-  },
-  headerTitle: {
-    ...Typography.h3,
-    color: Colors.textPrimary,
-  },
-  avatarButton: {
-    width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-end'
-  },
-  avatarGradient: {
-    width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center'
-  },
-  avatarText: {
-    fontSize: 14, fontWeight: '700', color: Colors.textOnPrimary
-  },
-  searchWrapper: {
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-    zIndex: 100,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    zIndex: 1000,
-    elevation: 10,
-  },
-  searchBar: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 52,
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: 26,
-    paddingHorizontal: Spacing.lg,
-  },
-  searchIcon: { marginRight: Spacing.xs },
-  searchInput: {
-    flex: 1,
-    color: Colors.textPrimary,
-    ...Typography.body,
-    height: '100%',
-  },
-  clearIcon: { padding: Spacing.xs },
-  searchDivider: {
-    width: 1, height: 24, backgroundColor: Colors.border, marginHorizontal: Spacing.sm
-  },
-  cameraIcon: { padding: Spacing.xs, marginRight: 2 },
-  imageIcon: { padding: Spacing.xs },
-  filterButton: {
-    width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.surfaceElevated,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  queryImageContainer: {
-    width: 28, height: 28, borderRadius: 14, position: 'relative', marginRight: Spacing.xs,
-    borderWidth: 1, borderColor: Colors.primary,
-  },
-  queryImage: { width: '100%', height: '100%', borderRadius: 13 },
-  queryImageCloseBtn: {
-    position: 'absolute', top: -6, right: -6, backgroundColor: Colors.surface, borderRadius: 8, zIndex: 1
-  },
-
-  feedContent: { paddingBottom: 100 },
-  suggestionsRow: { marginBottom: Spacing.xl, marginTop: Spacing.sm },
-  suggestionsScroll: { paddingHorizontal: Spacing.lg, gap: Spacing.sm },
-  suggestionChip: {
-    height: 36, backgroundColor: Colors.surfaceElevated, borderRadius: 18,
-    justifyContent: 'center', paddingHorizontal: Spacing.lg, borderWidth: 1, borderColor: Colors.border
-  },
-  suggestionChipText: { ...Typography.bodySmall, color: Colors.textPrimary },
-
-  section: { marginBottom: Spacing.xxl },
-  sectionHeader: { paddingHorizontal: Spacing.lg, marginBottom: Spacing.md },
-  sectionTitle: { ...Typography.h2, color: Colors.textPrimary },
-  horizontalScroll: { paddingHorizontal: Spacing.lg, gap: Spacing.md },
-
-  marketCard: { width: 160, gap: Spacing.xs },
-  marketImagePlaceholder: {
-    width: 160, height: 100, backgroundColor: 'rgba(108, 99, 255, 0.1)',
-    borderRadius: BorderRadius.md, justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1, borderColor: 'rgba(108, 99, 255, 0.2)'
-  },
-  marketName: { ...Typography.body, fontWeight: '600', color: Colors.textPrimary, marginTop: 4 },
-  marketDistance: { ...Typography.caption, color: Colors.textSecondary },
-
-  dealCard: { width: 140, gap: Spacing.xs },
-  dealImagePlaceholder: {
-    width: 140, height: 140, backgroundColor: 'rgba(0, 200, 150, 0.1)',
-    borderRadius: BorderRadius.md, justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1, borderColor: 'rgba(0, 200, 150, 0.2)', position: 'relative'
-  },
-  dealBadge: {
-    position: 'absolute', top: Spacing.sm, left: Spacing.sm,
-    backgroundColor: Colors.primary, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4
-  },
-  dealBadgeText: { ...Typography.caption, color: Colors.textOnPrimary, fontWeight: '700' },
-  dealName: { ...Typography.bodySmall, color: Colors.textPrimary, marginTop: 4 },
-  dealPrice: { ...Typography.bodySmall, color: Colors.secondary, fontWeight: '700' },
-
-  recentCard: {
-    width: 120, height: 80, backgroundColor: Colors.surface, borderRadius: BorderRadius.md,
-    borderWidth: 1, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center', gap: Spacing.xs
-  },
-  recentIconWrapper: {
-    width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surfaceElevated,
-    justifyContent: 'center', alignItems: 'center'
-  },
-  recentText: { ...Typography.caption, color: Colors.textSecondary, paddingHorizontal: Spacing.sm, textAlign: 'center' },
-
-  // Results State
-  resultsContainer: { flex: 1 },
-  listContent: { paddingHorizontal: Spacing.lg, paddingBottom: 110, paddingTop: Spacing.sm },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { ...Typography.bodySmall, color: Colors.textSecondary, marginTop: Spacing.md },
-  emptyResultsContainer: { alignItems: 'center', paddingVertical: Spacing.xxxl },
-  emptyResultsTitle: { ...Typography.h3, color: Colors.textSecondary, marginTop: Spacing.lg },
-  emptyResultsText: { ...Typography.bodySmall, color: Colors.textMuted, marginTop: Spacing.sm },
-  recommendationBanner: {
-    flexDirection: 'row', gap: Spacing.md, alignItems: 'center',
-    backgroundColor: 'rgba(108, 99, 255, 0.12)', borderLeftWidth: 4,
-    borderLeftColor: Colors.primary, marginHorizontal: Spacing.xl,
-    marginBottom: Spacing.md, padding: Spacing.md, borderRadius: BorderRadius.md,
-  },
-  recommendationBannerTitle: { ...Typography.label, color: Colors.primary, fontWeight: '700', fontSize: 13 },
-  recommendationBannerText: { ...Typography.caption, color: Colors.textSecondary, marginTop: 2, fontSize: 11 },
-
-  // Denied State
-  deniedContainer: { flex: 1, backgroundColor: Colors.background, justifyContent: 'center', alignItems: 'center', padding: Spacing.xxl },
-  deniedIconWrapper: { position: 'relative', marginBottom: Spacing.xl },
-  deniedLock: { position: 'absolute', top: -10, right: -10, zIndex: 1, backgroundColor: Colors.background, borderRadius: 16, overflow: 'hidden' },
-  deniedTitle: { ...Typography.h2, color: Colors.textPrimary, textAlign: 'center' },
-  deniedText: { ...Typography.body, color: Colors.textSecondary, textAlign: 'center', marginTop: Spacing.md, marginBottom: Spacing.xxl, lineHeight: 22 },
-  primaryBtn: {
-    width: '100%', height: 48, backgroundColor: Colors.primary, borderRadius: BorderRadius.md,
-    justifyContent: 'center', alignItems: 'center', marginBottom: Spacing.md
-  },
-  primaryBtnText: { ...Typography.button, color: Colors.textOnPrimary },
-  secondaryBtn: { paddingVertical: Spacing.sm },
-  secondaryBtnText: { ...Typography.body, color: Colors.textSecondary, textDecorationLine: 'underline' },
-
-  // History Dropdown
-  historyDropdown: {
-    position: 'absolute',
-    top: 60,
-    left: Spacing.lg,
-    right: Spacing.lg,
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    ...Shadows.medium,
-    zIndex: 1000,
-    elevation: 10,
-    overflow: 'hidden',
-  },
-  historyDropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  historyDropdownText: {
-    ...Typography.body,
-    color: Colors.textPrimary,
-  },
-  historyDropdownEmpty: {
-    padding: Spacing.xl,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  historyDropdownEmptyText: {
-    ...Typography.body,
-    color: Colors.textMuted,
-  },
-  
-  // Modal Styles
-  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
-  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)' },
-  modalContent: { backgroundColor: Colors.surface, borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl, height: '80%', padding: Spacing.lg },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg },
-  modalTitle: { ...Typography.h2, color: Colors.textPrimary },
-  modalCloseBtn: { padding: Spacing.xs },
-  modalBody: { flex: 1 },
-  filterLabel: { ...Typography.h3, color: Colors.textPrimary, marginTop: Spacing.xl, marginBottom: Spacing.md },
-  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
-  filterChip: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: BorderRadius.full, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.background },
-  filterChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  filterChipText: { ...Typography.body, color: Colors.textSecondary },
-  filterChipTextActive: { color: Colors.textOnPrimary, fontWeight: '600' },
-  checkboxRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.xs },
-  checkboxText: { ...Typography.body, color: Colors.textPrimary },
-  priceInputsContainer: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  priceInput: { flex: 1, backgroundColor: Colors.background, borderRadius: BorderRadius.md, padding: Spacing.md, color: Colors.textPrimary, ...Typography.body, borderWidth: 1, borderColor: Colors.border },
-  priceSeparator: { color: Colors.textMuted, fontSize: 20 },
-  textInput: { backgroundColor: Colors.background, borderRadius: BorderRadius.md, padding: Spacing.md, color: Colors.textPrimary, ...Typography.body, borderWidth: 1, borderColor: Colors.border },
-  modalFooter: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.lg, paddingBottom: Spacing.xl },
-  resetButton: { flex: 1, padding: Spacing.md, borderRadius: BorderRadius.md, backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, alignItems: 'center' },
-  resetButtonText: { ...Typography.button, color: Colors.textPrimary },
-  applyButton: { flex: 2, padding: Spacing.md, borderRadius: BorderRadius.md, backgroundColor: Colors.primary, alignItems: 'center' },
-  applyButtonText: { ...Typography.button, color: Colors.textOnPrimary },
-});
