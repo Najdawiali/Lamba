@@ -149,13 +149,13 @@ export default function MerchantProfileScreen() {
         : '';
 
       summaryAnalysis = isAr 
-        ? `اليوم، حققت مبيعات بقيمة ${todaySales.toFixed(2)} ر.س عبر ${todayTxCount} عمليات دفع كاشير (${trendText}). تم بيع إجمالي ${totalItemsSoldToday} قطع من المنتجات${topItemText}. يستمر المتجر في الأداء الجيد، ويرجى مراقبة مستويات المخزون للمنتجات النشطة.`
-        : `Today you generated ${todaySales.toFixed(2)} SAR across ${todayTxCount} POS checkouts (${trendText}). A total of ${totalItemsSoldToday} units were sold${topItemText}. The store continues to track well; monitor stock counts for high-velocity items.`;
+        ? `اليوم، حققت مبيعات بقيمة ${formatPrice(todaySales)} عبر ${todayTxCount} عمليات دفع كاشير (${trendText}). تم بيع إجمالي ${totalItemsSoldToday} قطع من المنتجات${topItemText}. يستمر المتجر في الأداء الجيد، ويرجى مراقبة مستويات المخزون للمنتجات النشطة.`
+        : `Today you generated ${formatPrice(todaySales)} across ${todayTxCount} POS checkouts (${trendText}). A total of ${totalItemsSoldToday} units were sold${topItemText}. The store continues to track well; monitor stock counts for high-velocity items.`;
     } else {
       const yesterdayText = yesterdaySales > 0
         ? (isAr 
-            ? `يوم أمس حققت مبيعات بقيمة ${yesterdaySales.toFixed(2)} ر.س.`
-            : `Yesterday you generated ${yesterdaySales.toFixed(2)} SAR in transaction value.`)
+            ? `يوم أمس حققت مبيعات بقيمة ${formatPrice(yesterdaySales)}.`
+            : `Yesterday you generated ${formatPrice(yesterdaySales)} in transaction value.`)
         : (isAr
             ? 'لم تسجل أي مبيعات يوم أمس أيضاً.'
             : 'No sales were recorded yesterday either.');
@@ -229,7 +229,7 @@ export default function MerchantProfileScreen() {
   },
   scroll: {
     paddingHorizontal: Spacing.xl,
-    paddingBottom: Spacing.xxxl,
+    paddingBottom: 140,
   },
   menuDivider: {
     height: 1,

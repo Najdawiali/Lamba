@@ -254,7 +254,7 @@ export default function LowStockScreen() {
   },
   listContent: {
     paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.xxl,
+    paddingBottom: 140,
   },
   categorySection: {
     marginTop: Spacing.lg,

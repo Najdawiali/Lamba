@@ -229,6 +229,9 @@ export interface MarketResponse {
   address: string;
   latitude: number;
   longitude: number;
+  business_nature?: string | null;
+  operating_hours?: Record<string, string> | null;
+  employee_directory?: string[] | null;
   is_currently_open: boolean;
   is_manual_override: boolean;
   override_set_at: string | null;
@@ -287,9 +290,22 @@ export async function getMyMarket(): Promise<MarketResponse> {
   return data;
 }
 
-export async function createMarket(name: string, address: string, latitude: number, longitude: number): Promise<MarketResponse> {
+export async function createMarket(
+  name: string,
+  address: string,
+  latitude: number,
+  longitude: number,
+  options?: {
+    business_nature?: string;
+    operating_hours?: Record<string, string> | null;
+    is_currently_open?: boolean;
+  },
+): Promise<MarketResponse> {
   const { data } = await api.post<MarketResponse>('/api/v1/merchant/market', {
     name, address, latitude, longitude,
+    business_nature: options?.business_nature,
+    operating_hours: options?.operating_hours ?? null,
+    is_currently_open: options?.is_currently_open,
   });
   return data;
 }
@@ -342,6 +358,23 @@ export async function addNewItem(formData: FormData): Promise<ItemLinkResponse> 
   const { data } = await api.post<ItemLinkResponse>('/api/v1/merchant/items/new', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
+  return data;
+}
+
+export interface CSVUploadResponse {
+  success: boolean;
+  created: number;
+  linked: number;
+  indexed: number;
+  message: string;
+}
+
+export async function uploadItemsCSV(marketId: string, formData: FormData): Promise<CSVUploadResponse> {
+  const { data } = await api.post<CSVUploadResponse>(
+    `/api/v1/merchant/items/upload-csv/${marketId}`,
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  );
   return data;
 }
 

@@ -44,7 +44,7 @@ export default function CashierScreen() {
   content: {
     flex: 1,
     paddingHorizontal: Spacing.xl,
-    paddingBottom: 24,
+    paddingBottom: 140,
     gap: Spacing.lg,
   },
   actionCard: {
