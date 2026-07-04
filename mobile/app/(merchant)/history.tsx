@@ -211,7 +211,7 @@ export default function ReceiptHistoryScreen() {
   },
   listContent: {
     paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.xxl,
+    paddingBottom: 140,
   },
   receiptCard: {
     backgroundColor: Colors.surface,
@@ -479,7 +479,7 @@ export default function ReceiptHistoryScreen() {
                 </View>
 
                 <View style={[styles.receiptTotalCol, { alignItems: isAr ? 'flex-start' : 'flex-end' }]}>
-                  <Text style={styles.receiptCostValue}>{item.total_cost.toFixed(2)} {t('common.sar')}</Text>
+                  <Text style={styles.receiptCostValue}>{formatPrice(item.total_cost)}</Text>
                   <View style={[styles.itemCountRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
                     <Text style={styles.itemCountText}>
                       {item.items.reduce((s, i) => s + i.quantity, 0)} {isAr ? 'قطع' : t('scanner.items')}

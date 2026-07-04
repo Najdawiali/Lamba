@@ -25,9 +25,18 @@ export default function OnboardingScreen() {
   const [address, setAddress] = useState('');
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
+  const [businessNature, setBusinessNature] = useState('');
+  const [hoursPreset, setHoursPreset] = useState<'standard' | 'open_24_7' | 'weekdays'>('standard');
 
   const [loading, setLoading] = useState(false);
   const [geolocating, setGeolocating] = useState(false);
+
+  // Build structured operating_hours based on selected preset.
+  const buildOperatingHours = (): Record<string, string> | null => {
+    if (hoursPreset === 'open_24_7') return null;
+    if (hoursPreset === 'weekdays') return { 'Mon-Fri': '09:00-17:00', 'Sat-Sun': 'closed' };
+    return { 'Sat-Thu': '08:00-22:00', Fri: '09:00-22:00' };
+  };
 
   const handleGeolocate = () => {
     setGeolocating(true);
@@ -64,7 +73,10 @@ export default function OnboardingScreen() {
 
     setLoading(true);
     try {
-      await createMarket(name.trim(), address.trim(), latVal, lngVal);
+      await createMarket(name.trim(), address.trim(), latVal, lngVal, {
+        business_nature: businessNature.trim() || undefined,
+        operating_hours: buildOperatingHours(),
+      });
       
       Alert.alert(
         t('common.success'),
@@ -212,6 +224,45 @@ export default function OnboardingScreen() {
     color: Colors.secondary,
     fontWeight: '700',
   },
+  presetLabel: {
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
+    fontWeight: '700',
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
+  presetRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
+  presetBtn: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+  },
+  presetBtnActive: {
+    borderColor: Colors.secondary,
+    backgroundColor: 'rgba(0, 217, 166, 0.08)',
+  },
+  presetBtnText: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    fontWeight: '600',
+  },
+  presetBtnTextActive: {
+    color: Colors.secondary,
+    fontWeight: '700',
+  },
+  presetHint: {
+    ...Typography.caption,
+    color: Colors.textMuted,
+    marginBottom: Spacing.md,
+  },
   button: {
     backgroundColor: Colors.primary,
     borderRadius: BorderRadius.md,
@@ -314,6 +365,48 @@ export default function OnboardingScreen() {
               />
             </View>
           </View>
+
+          {/* Business Nature (optional) */}
+          <View style={styles.inputContainer}>
+            <Ionicons name="pricetag-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              placeholder={isAr ? 'طبيعة العمل (اختياري، مثال: بقالة)' : 'Business Nature (optional, e.g. Grocery)'}
+              placeholderTextColor={Colors.textMuted}
+              value={businessNature}
+              onChangeText={setBusinessNature}
+            />
+          </View>
+
+          {/* Operating Hours Preset */}
+          <Text style={styles.presetLabel}>
+            {isAr ? 'ساعات العمل' : 'Operating Hours'}
+          </Text>
+          <View style={styles.presetRow}>
+            {([
+              { key: 'standard', label: isAr ? 'قياسي' : 'Standard' },
+              { key: 'open_24_7', label: isAr ? '24/7' : '24/7' },
+              { key: 'weekdays', label: isAr ? 'أيام الأسبوع' : 'Weekdays' },
+            ] as const).map((opt) => (
+              <TouchableOpacity
+                key={opt.key}
+                style={[styles.presetBtn, hoursPreset === opt.key && styles.presetBtnActive]}
+                onPress={() => setHoursPreset(opt.key)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.presetBtnText, hoursPreset === opt.key && styles.presetBtnTextActive]}>
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.presetHint}>
+            {hoursPreset === 'standard'
+              ? (isAr ? 'السبت–الخميس 08:00–22:00، الجمعة 09:00–22:00' : 'Sat–Thu 08:00–22:00, Fri 09:00–22:00')
+              : hoursPreset === 'weekdays'
+              ? (isAr ? 'الاثنين–الجمعة 09:00–17:00' : 'Mon–Fri 09:00–17:00')
+              : (isAr ? 'مفتوح دائماً (لا جدول)' : 'Always open (no schedule)')}
+          </Text>
 
           {/* Geolocate Button */}
           <TouchableOpacity

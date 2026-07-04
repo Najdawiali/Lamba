@@ -28,6 +28,14 @@ export const Spacing = {
   xxxl: 48,
 } as const;
 
+/**
+ * Minimum bottom padding that any scrollable merchant screen must add to its
+ * content container so the last items clear the bottom tab bar (height + safe
+ * area inset) and nothing overlaps the bar. Use this on FlatList / ScrollView
+ * `contentContainerStyle` inside tabbed merchant screens.
+ */
+export const TAB_BAR_OVERFLOW = 140;
+
 export const BorderRadius = {
   sm: 8,
   md: 12,

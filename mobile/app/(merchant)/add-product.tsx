@@ -17,9 +17,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import api, {
+import {
   getMyMarket, checkItemName, linkExistingItem, addNewItem,
-  getCategories, CatalogItemMatch
+  uploadItemsCSV, getCategories, CatalogItemMatch
 } from '../../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
@@ -324,12 +324,10 @@ export default function AddProductScreen() {
         type: file.mimeType || 'text/csv',
       } as any);
 
-      const response = await api.post(`/api/products/upload-csv/${selectedShopId}`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const response = await uploadItemsCSV(selectedShopId, formData);
 
-      setCsvUploadResult(response.data);
-      Alert.alert('Success', response.data.message);
+      setCsvUploadResult(response);
+      Alert.alert('Success', response.message);
     } catch (err: any) {
       Alert.alert('Upload Failed', err?.response?.data?.detail || 'Something went wrong');
     } finally {
@@ -349,7 +347,7 @@ export default function AddProductScreen() {
     justifyContent: 'center', alignItems: 'center',
   },
   headerTitle: { fontSize: 20, fontWeight: '600', color: Colors.textPrimary },
-  scroll: { padding: Spacing.xl, paddingBottom: Spacing.xxxl },
+  scroll: { padding: Spacing.xl, paddingBottom: 140 },
   section: { width: '100%' },
   label: {
     ...Typography.label, color: Colors.textSecondary, marginBottom: Spacing.md,

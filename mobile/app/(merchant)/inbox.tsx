@@ -199,7 +199,7 @@ export default function MerchantInboxScreen() {
   },
   emptyText: { fontSize: 18, fontWeight: '600' as const, color: Colors.textPrimary, marginTop: Spacing.md },
   emptySubtext: { fontSize: 14, color: Colors.textSecondary, textAlign: 'center' as const, marginTop: Spacing.sm },
-  listContent: { padding: Spacing.md, paddingBottom: Spacing.xl },
+  listContent: { padding: Spacing.md, paddingBottom: 140 },
   
   // Inbox Card Styles
   chatCard: {

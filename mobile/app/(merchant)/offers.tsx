@@ -18,10 +18,11 @@ import {
   deleteSpecialOffer, getMarketItems, addNewItem, getMyMarket,
   SpecialOfferResponse, MarketItemDashboardResponse
 } from '../../services/api';
-import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Typography, Shadows, TAB_BAR_OVERFLOW } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
 import { resolveImageUrl } from '../../services/utils';
+import { formatPrice } from '../../services/currency';
 
 export default function MerchantOffersScreen() {
   const Colors = useThemeColors();
@@ -347,7 +348,7 @@ export default function MerchantOffersScreen() {
 
             {item.price != null && (
               <Text style={styles.priceText}>
-                {item.price} {t('common.sar')}
+                {formatPrice(item.price)}
               </Text>
             )}
           </View>
@@ -397,6 +398,22 @@ export default function MerchantOffersScreen() {
     alignItems: 'center',
   },
   header: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  headerSubtitle: {
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
+    marginTop: 4,
+  },
+  newOfferBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -405,34 +422,26 @@ export default function MerchantOffersScreen() {
     borderBottomWidth: 1,
     borderBottomColor: Colors.divider,
   },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  headerSubtitle: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
   addButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: Colors.secondary,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
     borderRadius: BorderRadius.md,
-    ...Shadows.glow,
+    gap: Spacing.xs,
+    ...Shadows.small,
   },
   addButtonText: {
     ...Typography.button,
     color: Colors.background,
-    marginLeft: 4,
-    fontSize: 13,
+    fontSize: 14,
   },
   listContent: {
     padding: Spacing.lg,
-    paddingBottom: Spacing.xxl,
+    paddingBottom: TAB_BAR_OVERFLOW,
   },
   offerCard: {
     backgroundColor: Colors.surface,
@@ -864,18 +873,23 @@ export default function MerchantOffersScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>{isAr ? 'العروض الخاصة' : 'Special Offers'}</Text>
-          <Text style={styles.headerSubtitle}>
-            {isAr ? 'إدارة وتنشيط حملات الترويج لمنتجاتك' : 'Manage and activate product promotions'}
-          </Text>
-        </View>
+        <Text style={[styles.headerTitle, { textAlign: isAr ? 'right' : 'left' }]}>
+          {isAr ? 'العروض الخاصة' : 'Special Offers'}
+        </Text>
+        <Text style={[styles.headerSubtitle, { textAlign: isAr ? 'right' : 'left' }]}>
+          {isAr ? 'إدارة وتنشيط حملات الترويج لمنتجاتك' : 'Manage and activate product promotions'}
+        </Text>
+      </View>
+
+      {/* Dedicated New Offer CTA — full-width bar so it's always in correct place */}
+      <View style={[styles.newOfferBar, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
         <TouchableOpacity
           style={styles.addButton}
           onPress={() => setAddModalVisible(true)}
+          activeOpacity={0.85}
         >
-          <Ionicons name="add" size={22} color={Colors.background} />
-          <Text style={styles.addButtonText}>{isAr ? 'عرض جديد' : 'New Offer'}</Text>
+          <Ionicons name="add-circle-outline" size={20} color={Colors.background} />
+          <Text style={styles.addButtonText}>{isAr ? 'إنشاء عرض جديد' : 'New Offer'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -990,7 +1004,7 @@ export default function MerchantOffersScreen() {
                         <Text style={styles.selectorItemName} numberOfLines={1}>{item.name}</Text>
                         <Text style={styles.selectorItemCategory}>{item.category || (isAr ? 'غير مصنف' : 'Uncategorized')}</Text>
                         <Text style={styles.selectorItemPrice}>
-                          {item.price} {isAr ? 'ر.س' : 'SAR'}
+                          {formatPrice(item.price)}
                         </Text>
                       </View>
                       <Ionicons name={isAr ? "chevron-back" : "chevron-forward"} size={18} color={Colors.textMuted} />
@@ -1062,7 +1076,7 @@ export default function MerchantOffersScreen() {
                                 {selectedProduct.name}
                               </Text>
                               <Text style={styles.selectedProductPrice}>
-                                {selectedProduct.price} {isAr ? 'ر.س' : 'SAR'}
+                                {formatPrice(selectedProduct.price)}
                               </Text>
                             </View>
                             <Ionicons name="swap-horizontal-outline" size={20} color={Colors.primary} />

@@ -9,10 +9,14 @@ Endpoints:
   POST /api/v1/merchant/items/check          — Case-insensitive fuzzy name search
   POST /api/v1/merchant/items/link           — Link catalog item to merchant market
   POST /api/v1/merchant/items/new            — Ingest brand-new item via CLIP/MiniLM AI
+  POST /api/v1/merchant/items/upload-csv/{market_id}  — Bulk ingest/link via CSV
+  GET  /api/v1/merchant/market/stats/value    — Total inventory assets value
 """
 
 import os
 import uuid
+import csv
+import io
 import logging
 from typing import Annotated, List, Optional
 import numpy as np
@@ -257,6 +261,26 @@ async def get_market_items(
     return items
 
 
+# ── GET /market/stats/value ─────────────────────────────────────
+@router.get("/market/stats/value")
+async def get_market_inventory_value(
+    user: User = Depends(get_merchant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Total inventory assets value = Σ (price * stock_count) for merchant's items."""
+    result = await db.execute(
+        select(
+            func.coalesce(
+                func.sum(MarketItem.price * MarketItem.stock_count), 0.0
+            ).label("total_value")
+        )
+        .join(Market, MarketItem.market_id == Market.id)
+        .where(Market.merchant_id == user.id)
+    )
+    total = float(result.scalar() or 0.0)
+    return {"total_value": round(total, 2)}
+
+
 # ── PATCH /market/items/{item_id}/stock ─────────────────────────
 @router.patch("/market/items/{item_id}/stock", response_model=MarketItemDashboardResponse)
 async def toggle_stock(
@@ -344,32 +368,30 @@ async def update_market_item(
             mi.status = True
     if data.price is not None:
         mi.price = data.price
-        
+
+    # Re-compute embeddings BEFORE commit so DB + ES stay consistent in one transaction boundary.
+    embedding = None
+    if data.name is not None:
+        combined_text = gi.name
+        if gi.description:
+            combined_text = f"{gi.name}. {gi.description}"
+        # Re-generate text vector (MiniLM) and image vector (CLIP)
+        text_vec = embedding_service.encode_text_384(combined_text).tolist()
+        image_vec = embedding_service.encode_product(gi.name, gi.description).tolist()
+        gi.text_embedding = text_vec
+        gi.image_embedding = image_vec
+        embedding = np.array(image_vec)
+
     await db.flush()
     if mi.status:
         await check_and_trigger_stock_alerts(db, mi.id)
     await db.commit()
-    
+
     # Elasticsearch update
     try:
         es_client = get_es_client()
         indexer = IndexerService(es_client)
-        
-        # Re-compute embedding if name changed
-        embedding = None
-        if data.name is not None:
-            combined_text = gi.name
-            if gi.description:
-                combined_text = f"{gi.name}. {gi.description}"
-            # Re-generate text vector (MiniLM) and image vector (CLIP)
-            text_vec = embedding_service.encode_text_384(combined_text).tolist()
-            image_vec = embedding_service.encode_product(gi.name, gi.description).tolist()
-            gi.text_embedding = text_vec
-            gi.image_embedding = image_vec
-            await db.flush()
-            await db.commit()
-            embedding = np.array(image_vec)
-            
+
         await indexer.index_product(
             product_id=mi.id,
             shop_id=market.id,
@@ -407,9 +429,16 @@ async def check_item(
     db: AsyncSession = Depends(get_db),
 ):
     """Search for existing catalog items matching the search string (case-insensitive fuzzy)."""
+    # Escape LIKE wildcards so user-supplied % and _ are matched literally, not as glob chars
+    escaped = (
+        data.item_name
+        .replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    )
     result = await db.execute(
         select(GlobalItem)
-        .where(GlobalItem.name.ilike(f"%{data.item_name}%"))
+        .where(GlobalItem.name.ilike(f"%{escaped}%", escape="\\"))
         .limit(10)
     )
     matches = result.unique().scalars().all()
@@ -572,6 +601,7 @@ async def create_new_item(
     barcode: Optional[str] = Form(None),
     stock_count: int = Form(0),
     price: Optional[float] = Form(None),
+    category_id: Optional[uuid.UUID] = Form(None),
     image: UploadFile = File(...),
     secondary_images: List[UploadFile] = File(default=[]),
     user: User = Depends(get_merchant),
@@ -635,15 +665,31 @@ async def create_new_item(
         logger.info(f"VLM successfully extracted product details: name='{refined_name}', category='{category_name}'")
         
     if not category_name:
-        # Fallback to Heuristic NLP Classification
-        category_name = _classify_category(name, description)
-        
-    cat_result = await db.execute(select(Category).where(Category.name == category_name))
-    cat = cat_result.scalar_one_or_none()
-    if not cat:
-        cat = Category(name=category_name)
-        db.add(cat)
-        await db.flush()
+        # Honor explicit category selection from the merchant when provided
+        cat: Category | None = None
+        if category_id is not None:
+            cat_result = await db.execute(
+                select(Category).where(Category.id == category_id)
+            )
+            cat = cat_result.scalar_one_or_none()
+        if cat is None:
+            # Fallback to Heuristic NLP Classification
+            category_name = _classify_category(name, description)
+            cat_result = await db.execute(
+                select(Category).where(Category.name == category_name)
+            )
+            cat = cat_result.scalar_one_or_none()
+            if not cat:
+                cat = Category(name=category_name)
+                db.add(cat)
+                await db.flush()
+    else:
+        cat_result = await db.execute(select(Category).where(Category.name == category_name))
+        cat = cat_result.scalar_one_or_none()
+        if not cat:
+            cat = Category(name=category_name)
+            db.add(cat)
+            await db.flush()
     
     # Generate 512-d image vector (CLIP)
     image_vector = None
@@ -728,13 +774,211 @@ async def create_new_item(
         )
     except Exception as e:
         logger.error(f"Elasticsearch indexing new item failed: {e}")
-        
+
     return ItemLinkResponse(
         success=True,
         message="Brand-new product ingested via AI pipeline and added to stock.",
         market_item_id=mi.id,
         stock_count=mi.stock_count
     )
+
+
+# ── POST /items/upload-csv/{market_id} ──────────────────────────
+@router.post("/items/upload-csv/{market_id}")
+async def upload_items_csv(
+    market_id: uuid.UUID,
+    file: UploadFile = File(...),
+    user: User = Depends(get_merchant),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Bulk ingest/link inventory via CSV. Required header: name. Optional: barcode,
+        description, stock_count, price. Rows are matched to existing catalog items
+    by barcode first, then by case-insensitive name; unmatched rows create new
+    GlobalItems (heuristic categorization + MiniLM/CLIP embeddings).
+    """
+    # Verify market ownership
+    market_result = await db.execute(
+        select(Market,
+               func.ST_Y(Market.location.cast(Geometry)).label("lat"),
+               func.ST_X(Market.location.cast(Geometry)).label("lng"))
+        .where(Market.id == market_id, Market.merchant_id == user.id)
+    )
+    market_row = market_result.first()
+    if not market_row:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not your market.",
+        )
+    market, lat, lng = market_row[0], market_row[1], market_row[2]
+
+    content = await file.read()
+    try:
+        text_content = content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text_content = content.decode("latin-1", errors="ignore")
+
+    reader = csv.DictReader(io.StringIO(text_content))
+    if not reader.fieldnames or "name" not in [f.strip().lower() for f in reader.fieldnames]:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="CSV must include a 'name' column. Optional: barcode, description, stock_count, price.",
+        )
+
+    es_client = None
+    indexer = None
+    try:
+        es_client = get_es_client()
+        indexer = IndexerService(es_client)
+    except Exception as e:
+        logger.warning(f"Elasticsearch unavailable for CSV bulk import: {e}")
+
+    created_count = 0
+    linked_count = 0
+    es_indexed = 0
+
+    for idx, row in enumerate(reader, start=2):
+        def _get(key: str) -> str:
+            return (row.get(key) or row.get(key.lower()) or row.get(key.title()) or "").strip()
+
+        row_name = _get("name")
+        if not row_name:
+            continue
+
+        barcode_val = _get("barcode") or None
+        description_val = _get("description") or None
+        try:
+            stock_count = int(_get("stock_count") or 0)
+        except ValueError:
+            stock_count = 0
+        try:
+            price_val = float(_get("price")) if _get("price") else None
+        except ValueError:
+            price_val = None
+
+        gi: GlobalItem | None = None
+
+        # Match by barcode first
+        if barcode_val:
+            gi_result = await db.execute(
+                select(GlobalItem).where(GlobalItem.barcode == barcode_val)
+            )
+            gi = gi_result.unique().scalar_one_or_none()
+
+        # Fall back to a name match
+        if gi is None:
+            gi_result = await db.execute(
+                select(GlobalItem).where(func.lower(GlobalItem.name) == row_name.lower())
+            )
+            gi = gi_result.unique().scalar_one_or_none()
+
+        if gi is None:
+            # Create a new catalog item with heuristic classification + text/image embeddings
+            category_name = _classify_category(row_name, description_val)
+            cat_result = await db.execute(
+                select(Category).where(Category.name == category_name)
+            )
+            cat = cat_result.scalar_one_or_none()
+            if not cat:
+                cat = Category(name=category_name)
+                db.add(cat)
+                await db.flush()
+
+            text_vector = None
+            try:
+                text = row_name
+                if description_val:
+                    text = f"{row_name}. {description_val}"
+                text_vector = embedding_service.encode_text_384(text)
+            except Exception as e:
+                logger.error(f"MiniLM encoding failed for CSV row {idx}: {e}")
+
+            image_vector = None
+            try:
+                image_vector = embedding_service.encode_product(row_name, description_val)
+            except Exception as e:
+                logger.error(f"CLIP encoding failed for CSV row {idx}: {e}")
+
+            gi = GlobalItem(
+                name=row_name,
+                description=description_val,
+                barcode=barcode_val,
+                category_id=cat.id,
+                text_embedding=text_vector.tolist() if text_vector is not None else None,
+                image_embedding=image_vector.tolist() if image_vector is not None else None,
+                created_by=user.id,
+            )
+            db.add(gi)
+            await db.flush()
+            created_count += 1
+        else:
+            linked_count += 1
+
+        # Check existing MarketItem linkage for this market
+        existing_mi_result = await db.execute(
+            select(MarketItem).where(
+                MarketItem.market_id == market_id,
+                MarketItem.item_id == gi.id,
+            )
+        )
+        mi = existing_mi_result.scalar_one_or_none()
+        if mi:
+            mi.stock_count += stock_count
+            if stock_count > 0:
+                mi.status = True
+            if price_val is not None:
+                mi.price = price_val
+        else:
+            mi = MarketItem(
+                market_id=market_id,
+                item_id=gi.id,
+                stock_count=stock_count,
+                price=price_val,
+                status=stock_count > 0,
+            )
+            db.add(mi)
+            await db.flush()
+
+        if mi.status:
+            await check_and_trigger_stock_alerts(db, mi.id)
+
+        # Index in Elasticsearch (best effort)
+        if indexer is not None:
+            try:
+                embed = gi.image_embedding if gi.image_embedding is not None else gi.text_embedding
+                if embed is not None:
+                    embed_arr = np.array(embed)
+                else:
+                    embed_arr = embedding_service.encode_product(row_name, description_val)
+                await indexer.index_product(
+                    product_id=mi.id,
+                    shop_id=market.id,
+                    name=gi.name,
+                    description=gi.description,
+                    price=price_val,
+                    category=gi.category,
+                    image_url=gi.image_url,
+                    in_stock=mi.status,
+                    latitude=float(lat),
+                    longitude=float(lng),
+                    embedding=embed_arr,
+                )
+                es_indexed += 1
+            except Exception as e:
+                logger.error(f"Elasticsearch CSV row {idx} index failed: {e}")
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "created": created_count,
+        "linked": linked_count,
+        "indexed": es_indexed,
+        "message": (
+            f"CSV import complete: {created_count} new item(s) created, "
+            f"{linked_count} existing item(s) linked, {es_indexed} indexed to search."
+        ),
+    }
 
 
 # ── GET /offers ─────────────────────────────────────────────────

@@ -19,7 +19,7 @@ import {
   getInventoryValue, getCheckoutHistory, logout, MarketResponse, MarketItemDashboardResponse,
   HistoricalReceipt
 } from '../../services/api';
-import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
+import { Spacing, BorderRadius, Typography, Shadows, TAB_BAR_OVERFLOW } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
 import { t, toggleLanguage, i18n } from '../../services/i18n';
 import { resolveImageUrl } from '../../services/utils';
@@ -67,7 +67,7 @@ export default function DashboardScreen() {
     message: '',
   });
 
-  const bannerY = React.useRef(new Animated.Value(-150)).current;
+  const bannerY = React.useRef(new Animated.Value(200)).current;
   const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -88,7 +88,7 @@ export default function DashboardScreen() {
       timeoutRef.current = null;
     }
     Animated.timing(bannerY, {
-      toValue: -150,
+      toValue: 200,
       duration: 300,
       useNativeDriver: true,
     }).start(() => {
@@ -357,13 +357,13 @@ export default function DashboardScreen() {
         : '';
 
       summaryAnalysis = isAr 
-        ? `اليوم، حققت مبيعات بقيمة ${todaySales.toFixed(2)} ر.س عبر ${todayTxCount} عمليات دفع كاشير (${trendText}). تم بيع إجمالي ${totalItemsSoldToday} قطع من المنتجات${topItemText}. يستمر المتجر في الأداء الجيد، ويرجى مراقبة مستويات المخزون للمنتجات النشطة.`
-        : `Today you generated ${todaySales.toFixed(2)} SAR across ${todayTxCount} POS checkouts (${trendText}). A total of ${totalItemsSoldToday} units were sold${topItemText}. The store continues to track well; monitor stock counts for high-velocity items.`;
+        ? `اليوم، حققت مبيعات بقيمة ${formatPrice(todaySales)} عبر ${todayTxCount} عمليات دفع كاشير (${trendText}). تم بيع إجمالي ${totalItemsSoldToday} قطع من المنتجات${topItemText}. يستمر المتجر في الأداء الجيد، ويرجى مراقبة مستويات المخزون للمنتجات النشطة.`
+        : `Today you generated ${formatPrice(todaySales)} across ${todayTxCount} POS checkouts (${trendText}). A total of ${totalItemsSoldToday} units were sold${topItemText}. The store continues to track well; monitor stock counts for high-velocity items.`;
     } else {
       const yesterdayText = yesterdaySales > 0
         ? (isAr 
-            ? `يوم أمس حققت مبيعات بقيمة ${yesterdaySales.toFixed(2)} ر.س.`
-            : `Yesterday you generated ${yesterdaySales.toFixed(2)} SAR in transaction value.`)
+            ? `يوم أمس حققت مبيعات بقيمة ${formatPrice(yesterdaySales)}.`
+            : `Yesterday you generated ${formatPrice(yesterdaySales)} in transaction value.`)
         : (isAr
             ? 'لم تسجل أي مبيعات يوم أمس أيضاً.'
             : 'No sales were recorded yesterday either.');
@@ -454,7 +454,7 @@ export default function DashboardScreen() {
   filterChipTextActive: { color: '#FFFFFF' },
 
   // Product List & Cards
-  listContent: { paddingHorizontal: Spacing.xl, paddingBottom: 100 },
+  listContent: { paddingHorizontal: Spacing.xl, paddingBottom: TAB_BAR_OVERFLOW },
   productRow: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: Colors.surface, borderRadius: BorderRadius.lg,
@@ -663,7 +663,7 @@ export default function DashboardScreen() {
   },
   toastContainer: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 60 : 30,
+    bottom: Platform.OS === 'ios' ? 110 : 90,
     left: Spacing.lg,
     right: Spacing.lg,
     zIndex: 9999,
@@ -1167,7 +1167,7 @@ export default function DashboardScreen() {
               </View>
 
               <View style={{ flex: 1 }}>
-                <Text style={styles.inputLabel}>{t('dashboard.price_cost', 'Price/Cost (SAR)')}</Text>
+                <Text style={styles.inputLabel}>{t('dashboard.price_cost', 'Price/Cost')}</Text>
                 <View style={styles.modalInputWrapper}>
                   <TextInput
                     style={styles.modalInput}
