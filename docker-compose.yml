@@ -55,13 +55,6 @@ services:
         condition: service_healthy
       elasticsearch:
         condition: service_healthy
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
 
 volumes:
   pg_data:

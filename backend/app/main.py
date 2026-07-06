@@ -21,6 +21,7 @@ from app.database import engine, Base
 from app.es_client import init_es_client, close_es_client, get_es_client
 from app.services.embedding import embedding_service
 from app.services.indexer import IndexerService
+from app.services.reranker import reranker_service
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -56,8 +57,13 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("ALTER TABLE global_items ADD COLUMN IF NOT EXISTS barcode VARCHAR(100) UNIQUE;"))
     logger.info("Database tables ensured")
 
-    # 2. Load CLIP model
+    # 2. Load Qwen3 text encoder (and CLIP only if image search is enabled)
     embedding_service.load_model()
+
+    # 2b. Pre-warm the BGE cross-encoder reranker (GPU) so the first request
+    #     doesn't pay the model-load cost. No-op if disabled by config.
+    if settings.enable_reranker:
+        reranker_service.load()
 
     # 3. Initialize Elasticsearch
     es = init_es_client()

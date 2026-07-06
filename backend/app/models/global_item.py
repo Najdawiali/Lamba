@@ -4,13 +4,14 @@ Supports strict categories and multi-image galleries while preserving backward c
 """
 
 import uuid
-from sqlalchemy import String, ForeignKey, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import String, ForeignKey, Text, Computed
+from sqlalchemy.dialects.postgresql import UUID, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.ext.hybrid import hybrid_property
 from pgvector.sqlalchemy import Vector
 
 from app.database import Base
+from app.config import settings
 
 
 class GlobalItem(Base):
@@ -30,8 +31,29 @@ class GlobalItem(Base):
     )
     
     # pgvector columns for high-performance similarity searches
-    text_embedding = mapped_column(Vector(384), nullable=True)  # MiniLM-L6-v2 pgvector
-    image_embedding = mapped_column(Vector(512), nullable=True) # CLIP ViT-B/32 pgvector
+    # Text embeddings use Qwen3-Embedding-0.6B (Matryoshka 1024-d) — multilingual, Arabic-strong.
+    # Image embeddings kept at CLIP ViT-B/32 (512-d) for the future VLM/image-search phase.
+    text_embedding = mapped_column(Vector(settings.text_embedding_dim), nullable=True)
+    image_embedding = mapped_column(Vector(512), nullable=True)
+
+    # Enriched search terms: deterministic concatenation of Arabic name, English name,
+    # dialect/Arabizi variants, and category label. Populated by the indexer at write time
+    # and by the one-time backfill script. Significantly boosts recall for cross-lingual
+    # queries like شاي ↔ "Ghazaleen Tea".
+    search_terms: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Generated tsvector over the normalized text bundle. Used by the lexical branch
+    # of the hybrid query (replaces the old ILIKE substring scan). GIN-indexed.
+    # Computed by Postgres on insert/update, so always consistent with the source columns.
+    search_tsv = mapped_column(
+        TSVECTOR,
+        Computed(
+            "to_tsvector('arabic', coalesce(name,'') || ' ' || coalesce(description,'') || ' ' || coalesce(search_terms,'')) "
+            "|| to_tsvector('simple', coalesce(name,'') || ' ' || coalesce(description,'') || ' ' || coalesce(search_terms,''))",
+            persisted=True,
+        ),
+        nullable=True,
+    )
     
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
