@@ -58,8 +58,10 @@ class Settings(BaseSettings):
     reranker_model: str = "Qwen/Qwen3-Reranker-0.6B"
     # Legacy self-hosted-GPU setting (only used when embedding_provider == "local"):
     reranker_device: str = "cuda"
-    reranker_top_k: int = 30          # How many candidates to cross-encode
+    reranker_top_k: int = 50          # How many fused candidates to cross-encode
     reranker_final_k: int = 15        # Final results returned after reranking
+    # Rerank fusion weight: relevance = w*rerank + (1-w)*prior_sql_score.
+    reranker_weight: float = 0.7
     # Qwen3-Reranker is instruction-aware. The string below is injected into the
     # model's chat template as the per-query <Instruct> field, signalling that
     # we are doing Arabic/mixed-script retail product retrieval. Qwen's own eval
@@ -70,6 +72,29 @@ class Settings(BaseSettings):
     )
     # Legacy self-hosted-only:
     reranker_max_length: int = 8192
+
+    # ── LLM Query Expansion (multi-query retrieval) ─────────────
+    # One cheap instruct-LLM call per cache-missed query generates up to
+    # `expansion_max_variants` paraphrases (EN translation, AR synonym,
+    # category phrase). Failures degrade silently to the original query.
+    enable_query_expansion: bool = True
+    expansion_model: str = "Qwen/Qwen2.5-7B-Instruct"
+    expansion_max_variants: int = 3
+    expansion_timeout_sec: float = 20.0
+    expansion_cache_size: int = 512
+    expansion_cache_ttl_sec: int = 3600
+
+    # ── Hybrid fusion (RRF) & tiering ───────────────────────────
+    # Reciprocal Rank Fusion constant and per-branch candidate depth.
+    rrf_k: int = 60
+    retrieval_per_branch: int = 50
+    # Single-pass tier thresholds applied to the reranker-fused final score.
+    # Calibrate against the eval set after any model or weight change.
+    exact_tier_threshold: float = 0.60
+    recommendation_tier_threshold: float = 0.35
+    # Tie-break boost for items whose name script matches the query script
+    # (keeps the result SET identical across languages, only affects order).
+    language_match_boost: float = 0.05
 
     # ── Search ──────────────────────────────────────────────────
     default_search_radius_km: float = 5.0

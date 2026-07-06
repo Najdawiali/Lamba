@@ -120,7 +120,8 @@ class RerankerService:
                 if _math.isnan(s_val) or _math.isinf(s_val):
                     s_val = 0.0
                 c["rerank_score"] = s_val
-                c["final_score"] = round(0.6 * s_val + 0.4 * prior, 4)
+                w = settings.reranker_weight
+                c["final_score"] = round(w * s_val + (1.0 - w) * prior, 4)
 
             reranked = sorted(candidates, key=lambda r: r["final_score"], reverse=True)
             return reranked[: (top_k or settings.reranker_final_k)]
@@ -187,7 +188,8 @@ class RerankerService:
             for c, s in zip(candidates, scores):
                 prior = float(c.get("final_score", c.get("semantic_score") or 0.0))
                 c["rerank_score"] = float(s)
-                c["final_score"] = round(0.6 * float(s) + 0.4 * prior, 4)
+                w = settings.reranker_weight
+                c["final_score"] = round(w * float(s) + (1.0 - w) * prior, 4)
             return sorted(candidates, key=lambda r: r["final_score"], reverse=True)[
                 : (top_k or settings.reranker_final_k)
             ]
