@@ -417,7 +417,12 @@ async def hybrid_search(
             db=db,
         )
 
-        exact = [r for r in scored if r.final_score >= settings.exact_tier_threshold]
+        # Gate tiers on RELEVANCE (semantic_score = rerank sigmoid when the
+        # reranker ran, raw cosine on fallback) — never on final_score.
+        # final_score includes 0.3*proximity, which let nearby-but-irrelevant
+        # items (e.g. tea for "كرسي مريح") pass the exact tier. Proximity
+        # only influences ORDERING within a tier, not whether an item is shown.
+        exact = [r for r in scored if r.semantic_score >= settings.exact_tier_threshold]
         if exact:
             return HybridSearchResponse(
                 found=True,
@@ -428,7 +433,7 @@ async def hybrid_search(
 
         recommendations = [
             r for r in scored
-            if r.final_score >= settings.recommendation_tier_threshold
+            if r.semantic_score >= settings.recommendation_tier_threshold
         ]
         if recommendations:
             return HybridSearchResponse(
@@ -522,6 +527,12 @@ async def double_check_search(
             filters=None,
             db=db,
         )
+        # Same relevance gate as /hybrid — never surface items below the
+        # recommendation floor just because they were the least-bad candidates.
+        scored = [
+            r for r in scored
+            if r.semantic_score >= settings.recommendation_tier_threshold
+        ]
         results = _filter_top_five_unless_accuracy_above_80(scored)
 
         return HybridSearchResponse(
