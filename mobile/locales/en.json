@@ -163,8 +163,7 @@
     "recently_viewed": "Recently Viewed",
     "enable_location": "Enable location to explore",
     "enable_location_desc": "Lamba finds products at shops near you.",
-    "enable_location_btn": "Enable Location",
-    "browse_without": "Browse without location"
+    "enable_location_btn": "Enable Location"
   },
   "map": {
     "search_area": "Search this area",

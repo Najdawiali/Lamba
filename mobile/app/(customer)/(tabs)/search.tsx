@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Search Screen — Explore (Eagle Vision) Redesigned.
  *
  * Features:
@@ -91,11 +91,11 @@ export default function SearchScreen() {
           if (address && address[0]) {
             const detectedCity = address[0].city || address[0].region || address[0].subregion || '';
             console.log('Detected user city:', detectedCity);
-            // Wire the detected city into the filters so the City field is
-            // pre-populated instead of being silently discarded.
-            if (detectedCity) {
-              setFilterCity(detectedCity);
-            }
+            // NOTE: deliberately NOT auto-populating filterCity. The 5km radius
+            // filter on the API already constrains proximity, and pre-filling
+            // the city string created false-negative ILIKE mismatches (e.g.
+            // "As Salt" vs DB "As-Salt"). The city filter is left for the user
+            // to set manually if they want to narrow further.
           }
         } catch (geoErr) {
           console.log('Reverse geocoding failed:', geoErr);
@@ -119,19 +119,30 @@ export default function SearchScreen() {
         setLocationStatus('denied');
       }
 
-      const currentUser = await getUser();
-      if (currentUser) {
-        setUserId(currentUser.id);
-        setUserEmail(currentUser.email);
-        loadHistory(currentUser.id);
+      try {
+        const currentUser = await getUser();
+        if (currentUser) {
+          setUserId(currentUser.id);
+          setUserEmail(currentUser.email);
+          loadHistory(currentUser.id);
+        }
+      } catch (authErr) {
+        console.warn('Failed to fetch current user profile:', authErr);
       }
 
-      const cats = await getCategories();
-      setCategoriesList(cats);
+      try {
+        const cats = await getCategories();
+        setCategoriesList(cats);
+      } catch (catsErr) {
+        console.warn('Failed to fetch categories:', catsErr);
+      }
     } catch (err) {
       console.error('Failed to initialize search tools:', err);
       setError('Could not connect to service host. Check network connectivity.');
-      setLocationStatus('denied'); // fallback
+      // Only set location status to denied if location request actually failed
+      if (locationStatus === 'loading') {
+        setLocationStatus('denied');
+      }
     }
   };
 
@@ -512,13 +523,6 @@ export default function SearchScreen() {
             <Ionicons name="close-circle" size={20} color={Colors.textMuted} />
           </TouchableOpacity>
         )}
-        <View style={styles.searchDivider} />
-        <TouchableOpacity onPress={() => handleImageSearch(true)} style={styles.cameraIcon}>
-          <Ionicons name="camera" size={20} color={Colors.secondary} />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => handleImageSearch(false)} style={styles.imageIcon}>
-          <Ionicons name="image" size={20} color={Colors.secondary} />
-        </TouchableOpacity>
       </View>
       <TouchableOpacity style={styles.filterButton} onPress={() => setShowFilters(true)}>
         <Ionicons name="options-outline" size={22} color={showFilters ? Colors.primary : Colors.textPrimary} />
@@ -664,9 +668,6 @@ export default function SearchScreen() {
         </Text>
         <TouchableOpacity style={styles.primaryBtn} onPress={handleOpenSettings}>
           <Text style={styles.primaryBtnText}>{t('explore.enable_location_btn')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.secondaryBtn} onPress={() => setLocationStatus('granted')}>
-          <Text style={styles.secondaryBtnText}>{t('explore.browse_without')}</Text>
         </TouchableOpacity>
       </View>
     );
