@@ -1,33 +1,45 @@
 """
-Search V1 API — Hybrid Qwen3 semantic + PostGIS proximity + Arabic tsvector lexical,
-with BGE-reranker-v2-m3 cross-encoder refinement.
+Search V1 API — RRF hybrid retrieval + LLM multi-query expansion
++ always-on Qwen3 cross-encoder reranking + language-aware ordering.
 
-Pipeline (text-only stack):
+Quality-first / latency-tolerant / serverless-cost-optimized pipeline:
+
   1. Normalize the query (Arabic NFKC + alef/hamza unification + Arabizi → Arabic).
-  2. Embed via Qwen3-Embedding-0.6B (1024-d, multilingual — no AR→EN pretranslation).
-  3. SQL hybrid retrieval in Postgres:
-       cosine_distance(text_embedding, query_vec)  over HNSW  (semantic)
-       search_tsv @@ plainto_tsquery(normalized_q)            (lexical, GIN)
-       ST_DWithin(location, point, radius) over PostGIS         (proximity)
-     Combined final_score = 0.7*semantic + 0.3*proximity  (global)
-                         = 1.0*semantic                  (in-shop)
-  4. Top-30 candidates → BGE-reranker-v2-m3 cross-encoder  (GPU, ~5ms)
-     Recompute final_score = 0.6*rerank + 0.4*prior.
-  5. Two-tier fallback:  ≥0.65 exact → 0.40–0.64 recommendations → SearchAlert cache.
-  6. Top-5 cap, unless ≥5 results already score ≥0.80.
+  2. Expand the query with a small DeepInfra-hosted LLM into up to N variants
+     (English translation, Arabic synonym, category phrase). Failures degrade
+     silently to the original query only.
+  3. Embed original + variants via Qwen3-Embedding-0.6B (cache-first, 1024-d).
+  4. Ranked retrieval branches in Postgres (top-K each):
+       - one semantic branch per query vector  (pgvector cosine over HNSW)
+       - one lexical branch                    (arabic+simple tsvector, ts_rank, GIN)
+  5. Reciprocal Rank Fusion (k = settings.rrf_k) across all branches.
+  6. Qwen3-Reranker cross-encoder over the fused top-K (always on).
+       relevance = w·rerank + (1-w)·prior
+       prior     = 0.7·semantic + 0.3·proximity   (global)
+                 = 1.0·semantic                   (in-shop)
+  7. Language-aware ordering: identical result SET for شاي / \"tea\", with a
+     small tie-break boost for items whose name script matches the query script.
+  8. Single-pass tiering on the fused relevance score:
+       exact (≥ exact_tier_threshold) → recommendations
+       (≥ recommendation_tier_threshold) → SearchAlert cache.
+  9. Top-5 cap unless ≥5 results score ≥ 0.80.
 
-Image search endpoint (/image) is hidden in this phase — returns 410 Gone
-until settings.enable_image_search is flipped on.
+Image search endpoint (/image) remains hidden — returns 410 Gone until
+settings.enable_image_search is flipped on.
 """
 
+import asyncio
+import math as _m
+import re
 import uuid
 import logging
+from collections import defaultdict
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, status, File, Form, UploadFile
 from geoalchemy2.elements import WKTElement
 from geoalchemy2 import Geometry, Geography
-from sqlalchemy import select, func, or_, text as sql_text
+from sqlalchemy import select, func, literal
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -48,71 +60,52 @@ from app.schemas.search_v1 import (
 )
 from app.services.embedding import embedding_service
 from app.services.reranker import reranker_service
-from app.services.arabic_norm import normalize_query, normalize_arabic
+from app.services.query_expansion import query_expansion_service
+from app.services.arabic_norm import normalize_query
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/search", tags=["Search V1"])
 
-# Latest semantic accuracy stats by the reranker can be 0.5..1.5 before the
-# extraction cap, so the cap only acts once scores are normalized.
-RETRIEVAL_TOP_K = (
-    settings.reranker_top_k if settings.enable_reranker else settings.reranker_final_k
-)
+_ARABIC_RE = re.compile(r"[\u0600-\u06FF]")
 
 
-async def _execute_hybrid_vector_query(
-    query_vec: List[float],
+def _script_of(text: str | None) -> str:
+    """Classify a string as Arabic-script ('ar') or Latin-script ('latin')."""
+    return "ar" if text and _ARABIC_RE.search(text) else "latin"
+
+
+def _safe(v, default: float = 0.0) -> float:
+    try:
+        fv = float(v)
+    except (TypeError, ValueError):
+        return default
+    if _m.isnan(fv) or _m.isinf(fv):
+        return default
+    return fv
+
+
+# ── Retrieval: ranked branches + Reciprocal Rank Fusion ────────────
+async def _retrieve_fused_candidates(
+    db: AsyncSession,
+    query_vecs: List[List[float]],
+    lexical_variants: List[str],
     latitude: float,
     longitude: float,
     market_id: Optional[uuid.UUID],
-    db: AsyncSession,
-    limit: int = RETRIEVAL_TOP_K,
-    min_similarity: float = 0.0,
-    max_similarity: float = 1.0,
-    filters: Optional[SearchFilters] = None,
-    lexical_query_normalized: Optional[str] = None,
-) -> List[HybridSearchResultItem]:
+    filters: Optional[SearchFilters],
+) -> List[dict]:
     """
-    Hybrid SQL retrieval combining pgvector semantic match + PostGIS proximity
-    + Arabic tsvector lexical match. Returns up to `limit` candidates for the
-    reranker to refine.
+    Run one ranked semantic branch per query vector plus one ranked lexical
+    branch, then fuse with Reciprocal Rank Fusion. Returns fused candidates
+    (dicts with 'result' item + 'text' for the reranker), best-first, capped
+    at settings.reranker_top_k.
     """
     point_wkt = WKTElement(f"POINT({longitude} {latitude})", srid=4326)
     geog_location = Market.location.cast(Geography)
     geog_point = func.cast(point_wkt, Geography)
-
     distance_km_expr = (func.ST_Distance(geog_location, geog_point) / 1000.0)
 
-    cosine_dist_expr = GlobalItem.text_embedding.cosine_distance(query_vec)
-    semantic_score_expr = func.coalesce(1.0 - cosine_dist_expr, 0.0)
-
-    # Lexical match via tsvector @@ plainto_tsquery (replaces the old ILIKE scan).
-    # The generated search_tsv combines 'arabic' and 'simple' configs so cross-script
-    # lookups like شاي ↔ "tea" surface through the enriched search_terms column.
-    # We OR-union the two tsqueries (`||`) into one so a single ts_rank call scores
-    # both scripts at once.
-    lexical_cond = None
-    lexical_rank_expr = func.coalesce(sql_text("0"), 0.0)
-    if lexical_query_normalized:
-        tsquery = func.plainto_tsquery("arabic", lexical_query_normalized).op("||")(
-            func.plainto_tsquery("simple", lexical_query_normalized)
-        )
-        lexical_cond = GlobalItem.search_tsv.op("@@")(tsquery)
-        lexical_rank_expr = func.ts_rank(GlobalItem.search_tsv, tsquery)
-
-    # Lexical-boosted semantic score — match-aware. Replaces the old 0.5 case-on
-    # ILIKE boost with a continuous ts_rank contribution scaled to the same order.
-    if lexical_cond is not None:
-        from sqlalchemy import case
-        boosted_semantic_score_expr = semantic_score_expr + case(
-            (lexical_cond, 0.5 + func.least(0.3, lexical_rank_expr)),
-            else_=0.0
-        )
-    else:
-        boosted_semantic_score_expr = semantic_score_expr
-
-    # Handle custom radius or default to 5km limit
     max_dist_km = settings.default_search_radius_km
     if filters and filters.max_distance_km is not None and filters.max_distance_km > 0:
         max_dist_km = filters.max_distance_km
@@ -120,79 +113,120 @@ async def _execute_hybrid_vector_query(
 
     proximity_score_expr = func.greatest(0.0, 1.0 - (distance_km_expr / max_dist_km))
 
-    if market_id:
-        final_score_expr = boosted_semantic_score_expr
-    else:
-        final_score_expr = (0.7 * boosted_semantic_score_expr) + (0.3 * proximity_score_expr)
-
-    # Combined WHERE: semantic OR lexical (semantic branch requires embedding non-null).
-    semantic_cond = (
-        GlobalItem.text_embedding.is_not(None)
-        & (semantic_score_expr >= min_similarity)
-        & (semantic_score_expr <= max_similarity)
-    )
-    if lexical_cond is not None:
-        where_cond = or_(semantic_cond, lexical_cond)
-    else:
-        where_cond = semantic_cond
-
-    stmt = (
-        select(
-            MarketItem,
-            GlobalItem,
-            Market,
-            func.ST_Y(Market.location.cast(Geometry)).label("lat"),
-            func.ST_X(Market.location.cast(Geometry)).label("lng"),
-            distance_km_expr.label("distance_km"),
-            boosted_semantic_score_expr.label("semantic_score"),
-            proximity_score_expr.label("proximity_score"),
-            final_score_expr.label("final_score"),
+    # Semantic score vs the ORIGINAL query vector rides along on every branch
+    # so lexical-only hits still carry a real semantic prior for the reranker.
+    primary_vec = query_vecs[0] if query_vecs else None
+    if primary_vec is not None:
+        semantic_score_expr = func.coalesce(
+            1.0 - GlobalItem.text_embedding.cosine_distance(primary_vec), 0.0
         )
-        .join(GlobalItem, MarketItem.item_id == GlobalItem.id)
-        .join(Market, MarketItem.market_id == Market.id)
-        .options(
-            selectinload(GlobalItem.category_rel),
-            selectinload(GlobalItem.images),
-        )
-        .where(where_cond)
-    )
-
-    if filters and filters.in_stock_only:
-        stmt = stmt.where(MarketItem.status == True, MarketItem.stock_count > 0)
     else:
-        stmt = stmt.where(MarketItem.status == True)
+        semantic_score_expr = literal(0.0)
 
-    if filters:
-        if filters.business_nature:
-            stmt = stmt.where(Market.business_nature.ilike(f"%{filters.business_nature}%"))
-        if filters.category_id:
-            stmt = stmt.where(GlobalItem.category_id == filters.category_id)
-        if filters.price_min is not None:
-            stmt = stmt.where(MarketItem.price >= filters.price_min)
-        if filters.price_max is not None:
-            stmt = stmt.where(MarketItem.price <= filters.price_max)
-        if filters.city:
-            # Normalize both sides: replace punctuation/whitespace with a single
-            # wildcard so "As Salt" / "As-Salt" / "As_Salt" all match each other.
-            # ILIKE is case-insensitive but not punctuation-insensitive, so we
-            # collapse separators into `%` around the cleaned token.
-            import re as _re
-            city_token = _re.sub(r"[\s\-_]+", "%", filters.city.strip().lower())
-            stmt = stmt.where(
-                func.lower(Market.address).op("LIKE")(f"%{city_token}%")
+    def _base_stmt():
+        stmt = (
+            select(
+                MarketItem,
+                GlobalItem,
+                Market,
+                func.ST_Y(Market.location.cast(Geometry)).label("lat"),
+                func.ST_X(Market.location.cast(Geometry)).label("lng"),
+                distance_km_expr.label("distance_km"),
+                semantic_score_expr.label("semantic_score"),
+                proximity_score_expr.label("proximity_score"),
             )
+            .join(GlobalItem, MarketItem.item_id == GlobalItem.id)
+            .join(Market, MarketItem.market_id == Market.id)
+            .options(
+                selectinload(GlobalItem.category_rel),
+                selectinload(GlobalItem.images),
+            )
+        )
 
-    if market_id:
-        stmt = stmt.where(MarketItem.market_id == market_id)
-    else:
-        stmt = stmt.where(func.ST_DWithin(geog_location, geog_point, radius_meters))
+        if filters and filters.in_stock_only:
+            stmt = stmt.where(MarketItem.status == True, MarketItem.stock_count > 0)
+        else:
+            stmt = stmt.where(MarketItem.status == True)
 
-    stmt = stmt.order_by(final_score_expr.desc()).limit(limit)
+        if filters:
+            if filters.business_nature:
+                stmt = stmt.where(
+                    Market.business_nature.ilike(f"%{filters.business_nature}%")
+                )
+            if filters.category_id:
+                stmt = stmt.where(GlobalItem.category_id == filters.category_id)
+            if filters.price_min is not None:
+                stmt = stmt.where(MarketItem.price >= filters.price_min)
+            if filters.price_max is not None:
+                stmt = stmt.where(MarketItem.price <= filters.price_max)
+            if filters.city:
+                # Normalize both sides: collapse punctuation/whitespace into a
+                # single wildcard so \"As Salt\" / \"As-Salt\" / \"As_Salt\" match.
+                city_token = re.sub(r"[\s\-_]+", "%", filters.city.strip().lower())
+                stmt = stmt.where(
+                    func.lower(Market.address).op("LIKE")(f"%{city_token}%")
+                )
 
-    result = await db.execute(stmt)
-    rows = result.unique().all()
+        if market_id:
+            stmt = stmt.where(MarketItem.market_id == market_id)
+        else:
+            stmt = stmt.where(func.ST_DWithin(geog_location, geog_point, radius_meters))
+        return stmt
 
-    unique_markets = list({row[2].id: row[2] for row in rows}.values())
+    ranked_lists: List[List[uuid.UUID]] = []
+    rows_by_key: dict = {}
+
+    async def _run_branch(stmt) -> None:
+        result = await db.execute(stmt)
+        rows = result.unique().all()
+        keys: List[uuid.UUID] = []
+        for row in rows:
+            key = row[0].id  # MarketItem.id — unique per (item, market) pair
+            rows_by_key.setdefault(key, row)
+            keys.append(key)
+        ranked_lists.append(keys)
+
+    # Semantic branches — one per query vector (original + LLM variants).
+    for vec in query_vecs:
+        stmt = (
+            _base_stmt()
+            .where(GlobalItem.text_embedding.is_not(None))
+            .order_by(GlobalItem.text_embedding.cosine_distance(vec).asc())
+            .limit(settings.retrieval_per_branch)
+        )
+        await _run_branch(stmt)
+
+    # Lexical branch — one OR-combined tsquery across all query variants.
+    tsq = None
+    for v in lexical_variants:
+        if not v or not v.strip():
+            continue
+        part = func.plainto_tsquery("arabic", v).op("||")(
+            func.plainto_tsquery("simple", v)
+        )
+        tsq = part if tsq is None else tsq.op("||")(part)
+    if tsq is not None:
+        stmt = (
+            _base_stmt()
+            .where(GlobalItem.search_tsv.op("@@")(tsq))
+            .order_by(func.ts_rank(GlobalItem.search_tsv, tsq).desc())
+            .limit(settings.retrieval_per_branch)
+        )
+        await _run_branch(stmt)
+
+    # Reciprocal Rank Fusion across all ranked lists.
+    rrf_scores: dict = defaultdict(float)
+    for keys in ranked_lists:
+        for rank, key in enumerate(keys):
+            rrf_scores[key] += 1.0 / (settings.rrf_k + rank + 1)
+
+    fused_keys = sorted(rrf_scores, key=rrf_scores.get, reverse=True)
+    fused_keys = fused_keys[: settings.reranker_top_k]
+
+    # Opportunistic market-schedule refresh for the fused set.
+    unique_markets = list(
+        {rows_by_key[k][2].id: rows_by_key[k][2] for k in fused_keys}.values()
+    )
     if unique_markets:
         from app.utils.schedule import check_and_update_markets_schedule
         try:
@@ -200,45 +234,96 @@ async def _execute_hybrid_vector_query(
         except Exception as e:
             logger.warning(f"Schedule refresh skipped: {e}")
 
-    items: List[HybridSearchResultItem] = []
-    import math as _m
-    for row in rows:
-        mi, gi, market, lat, lng, dist_km, sem_score, prox_score, fin_score = row
+    fused: List[dict] = []
+    for key in fused_keys:
+        mi, gi, market, lat, lng, dist_km, sem_score, prox_score = rows_by_key[key]
+        sem = _safe(sem_score)
+        prox = _safe(prox_score)
+        prior = sem if market_id else (0.7 * sem) + (0.3 * prox)
         price_val = float(mi.price) if getattr(mi, "price", None) is not None else None
 
-        def _safe(v, default=0.0):
-            try:
-                fv = float(v)
-            except (TypeError, ValueError):
-                return default
-            if _m.isnan(fv) or _m.isinf(fv):
-                return default
-            return fv
-
-        items.append(
-            HybridSearchResultItem(
-                item_id=gi.id,
-                market_item_id=mi.id,
-                name=gi.name,
-                description=gi.description,
-                category=gi.category,
-                image_url=gi.image_url,
-                price=price_val,
-                stock_count=mi.stock_count,
-                in_stock=mi.status,
-                market_id=market.id,
-                market_name=market.name,
-                market_address=market.address,
-                latitude=float(lat),
-                longitude=float(lng),
-                market_is_open=market.is_currently_open,
-                distance_km=round(_safe(dist_km), 2),
-                semantic_score=round(_safe(sem_score), 4),
-                proximity_score=round(_safe(prox_score), 4),
-                final_score=round(_safe(fin_score), 4),
-            )
+        item = HybridSearchResultItem(
+            item_id=gi.id,
+            market_item_id=mi.id,
+            name=gi.name,
+            description=gi.description,
+            category=gi.category,
+            image_url=gi.image_url,
+            price=price_val,
+            stock_count=mi.stock_count,
+            in_stock=mi.status,
+            market_id=market.id,
+            market_name=market.name,
+            market_address=market.address,
+            latitude=float(lat),
+            longitude=float(lng),
+            market_is_open=market.is_currently_open,
+            distance_km=round(_safe(dist_km), 2),
+            semantic_score=round(sem, 4),
+            proximity_score=round(prox, 4),
+            final_score=round(prior, 4),
         )
-    return items
+
+        # Rich document for the cross-encoder: search_terms carries brand
+        # aliases and cross-lingual synonyms, category anchors intent.
+        text_parts = [gi.name]
+        if gi.description:
+            text_parts.append(gi.description)
+        if gi.search_terms:
+            text_parts.append(gi.search_terms)
+        if gi.category:
+            text_parts.append(gi.category)
+
+        fused.append({"result": item, "text": " ".join(text_parts)})
+    return fused
+
+
+# ── Rerank + language-aware final ordering ─────────────────────────
+async def _rerank_and_finalize(
+    query_text: str,
+    fused: List[dict],
+    query_script: str,
+) -> List[HybridSearchResultItem]:
+    """
+    Cross-encode the fused candidates (always on), fuse
+    final = w·rerank + (1-w)·prior, then apply the language tie-break boost
+    and sort. On reranker failure the RRF/prior ordering is preserved.
+    """
+    if not fused:
+        return []
+
+    out: List[HybridSearchResultItem] = []
+    if settings.enable_reranker:
+        candidates = [
+            {
+                "text": f["text"],
+                "final_score": f["result"].final_score,
+                "semantic_score": f["result"].semantic_score,
+                "result": f["result"],
+            }
+            for f in fused
+        ]
+        reranked = await reranker_service.rerank_async(
+            query=query_text,
+            candidates=candidates,
+            top_k=settings.reranker_final_k,
+        )
+        for c in reranked:
+            r = c["result"]
+            r.final_score = _safe(c.get("final_score", r.final_score))
+            # Rerank score doubles as the accuracy proxy for the top-5 cap.
+            r.semantic_score = _safe(c.get("rerank_score", r.semantic_score))
+            out.append(r)
+    else:
+        out = [f["result"] for f in fused][: settings.reranker_final_k]
+
+    # Language-aware ordering: same result SET across languages; items whose
+    # name script matches the query script win ties.
+    for r in out:
+        if _script_of(r.name) == query_script:
+            r.final_score = round(r.final_score + settings.language_match_boost, 4)
+    out.sort(key=lambda r: r.final_score, reverse=True)
+    return out
 
 
 def _filter_top_five_unless_accuracy_above_80(
@@ -254,46 +339,60 @@ def _filter_top_five_unless_accuracy_above_80(
     return results[:5]
 
 
-async def _rerank_candidates(
+# ── Shared pipeline ────────────────────────────────────────────────
+async def _run_search(
     query_text: str,
-    results: List[HybridSearchResultItem],
-) -> List[HybridSearchResultItem]:
+    latitude: float,
+    longitude: float,
+    market_id: Optional[uuid.UUID],
+    filters: Optional[SearchFilters],
+    db: AsyncSession,
+) -> tuple[List[HybridSearchResultItem], List[float]]:
     """
-    Pass top-N candidates through the Qwen3-Reranker cross-encoder.
-
-    The reranker adjusts `final_score` = 0.6 * rerank + 0.4 * prior_sql,
-    re-sorts decreasing, and keeps up to `settings.reranker_final_k`.
-    If the reranker is unavailable or disabled, returns results unchanged.
+    Full pipeline: normalize → expand → embed (multi-query) → RRF retrieval
+    → rerank → language-aware ordering. Returns (scored results, primary
+    query vector for SearchAlert caching).
     """
-    if not settings.enable_reranker or not results:
-        return results
+    normalized_query = normalize_query(query_text)
+    query_script = _script_of(query_text)
 
-    candidates = []
-    for r in results:
-        text_parts = [r.name]
-        if r.description:
-            text_parts.append(r.description)
-        candidates.append({
-            "text": " ".join(text_parts),
-            "final_score": r.final_score,
-            "semantic_score": r.semantic_score,
-            "result": r,
-        })
+    # 1. LLM multi-query expansion (graceful — never blocks search on failure).
+    variants: List[str] = []
+    if settings.enable_query_expansion:
+        try:
+            variants = await query_expansion_service.expand_async(query_text)
+        except Exception as e:
+            logger.warning(f"Query expansion skipped: {e}")
 
-    reranked = await reranker_service.rerank_async(
-        query=query_text,
-        candidates=candidates,
-        top_k=settings.reranker_final_k,
+    texts: List[str] = [normalized_query or query_text]
+    for v in variants:
+        nv = normalize_query(v) or v.strip()
+        if nv and nv not in texts:
+            texts.append(nv)
+
+    # 2. Embed original + variants in parallel (cache-first).
+    embeddings = await asyncio.gather(
+        *[embedding_service.encode_text_async(t) for t in texts]
     )
-    out: List[HybridSearchResultItem] = []
-    for c in reranked:
-        r = c["result"]
-        r.final_score = float(c.get("final_score", r.final_score))
-        # Use rerank score as a proxy for an updated semantic_score so
-        # _filter_top_five_unless_accuracy_above_80 still gates meaningfully.
-        r.semantic_score = float(c.get("rerank_score", r.semantic_score))
-        out.append(r)
-    return out
+    primary_raw = embeddings[0].tolist()
+    # Zero vectors (provider failure) are dropped — search degrades to the
+    # remaining vectors, or to lexical-only ranking if none survive.
+    query_vecs = [e.tolist() for e in embeddings if bool(e.any())]
+
+    # 3. Ranked branches + RRF.
+    fused = await _retrieve_fused_candidates(
+        db=db,
+        query_vecs=query_vecs,
+        lexical_variants=texts,
+        latitude=latitude,
+        longitude=longitude,
+        market_id=market_id,
+        filters=filters,
+    )
+
+    # 4. Cross-encode + language-aware ordering.
+    scored = await _rerank_and_finalize(query_text, fused, query_script)
+    return scored, primary_raw
 
 
 # ── POST /hybrid ────────────────────────────────────────────────
@@ -304,87 +403,68 @@ async def hybrid_search(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Hybrid text search: Qwen3 semantic + PostGIS proximity + Arabic tsvector lexical,
-    refined by BGE-reranker-v2-m3. Two-tier fallback (exact → recommendations → alert).
+    Hybrid text search: multi-query Qwen3 semantic + Arabic tsvector lexical,
+    fused with RRF, refined by the Qwen3 reranker, ordered language-aware.
+    Single-pass tiering: exact → recommendations → SearchAlert.
     """
     try:
-        # 1. Normalize the raw query (Arabic NFKC + Arabizi → Arabic + lowercase).
-        normalized_query = normalize_query(request.query_text)
-
-        # 2. Embed via Qwen3 (no AR→EN pretranslation — encoder is multilingual).
-        query_vec = (await embedding_service.encode_text_async(
-            normalized_query or request.query_text
-        )).tolist()
-
-        # 3. Exact tier: cosine ≥ 0.65 OR lexical tsvector match.
-        results = await _execute_hybrid_vector_query(
-            query_vec=query_vec,
+        scored, primary_vec = await _run_search(
+            query_text=request.query_text,
             latitude=request.latitude,
             longitude=request.longitude,
             market_id=request.market_id,
-            db=db,
-            min_similarity=0.65,
             filters=request.filters,
-            lexical_query_normalized=normalized_query,
+            db=db,
         )
 
-        search_mode = "exact_matches"
-        action = None
-        found = bool(results)
+        exact = [r for r in scored if r.final_score >= settings.exact_tier_threshold]
+        if exact:
+            return HybridSearchResponse(
+                found=True,
+                action=None,
+                search_mode="exact_matches",
+                results=_filter_top_five_unless_accuracy_above_80(exact),
+            )
 
-        if found:
-            results = await _rerank_candidates(request.query_text, results)
-            results = _filter_top_five_unless_accuracy_above_80(results)
-        else:
-            # 4. Recommendations tier: 0.40–0.64 similarity band.
-            results = await _execute_hybrid_vector_query(
-                query_vec=query_vec,
+        recommendations = [
+            r for r in scored
+            if r.final_score >= settings.recommendation_tier_threshold
+        ]
+        if recommendations:
+            return HybridSearchResponse(
+                found=True,
+                action="recommendations",
+                search_mode="recommendations",
+                results=_filter_top_five_unless_accuracy_above_80(recommendations),
+            )
+
+        # Nothing relevant — cache a SearchAlert (dedup on user_id + query_text).
+        existing_alert_stmt = select(SearchAlert).where(
+            SearchAlert.user_id == user.id,
+            func.lower(SearchAlert.query_text) == request.query_text.lower().strip(),
+        )
+        existing_alert = (await db.execute(existing_alert_stmt)).scalar_one_or_none()
+        if not existing_alert:
+            alert = SearchAlert(
+                user_id=user.id,
+                query_text=request.query_text,
+                query_vector=primary_vec,
                 latitude=request.latitude,
                 longitude=request.longitude,
-                market_id=request.market_id,
-                db=db,
-                min_similarity=0.40,
-                max_similarity=0.64,
-                filters=request.filters,
-                lexical_query_normalized=normalized_query,
+                is_active=True,
             )
-            if results:
-                results = await _rerank_candidates(request.query_text, results)
-                results = _filter_top_five_unless_accuracy_above_80(results)
-                search_mode = "recommendations"
-                action = "recommendations"
-                found = True
-            else:
-                found = False
-                action = "request_more_details"
-
-                # 5. Cache SearchAlert — dedup on (user_id, query_text)
-                existing_alert_stmt = select(SearchAlert).where(
-                    SearchAlert.user_id == user.id,
-                    func.lower(SearchAlert.query_text) == request.query_text.lower().strip(),
-                )
-                existing_alert = (await db.execute(existing_alert_stmt)).scalar_one_or_none()
-                if not existing_alert:
-                    alert = SearchAlert(
-                        user_id=user.id,
-                        query_text=request.query_text,
-                        query_vector=query_vec,
-                        latitude=request.latitude,
-                        longitude=request.longitude,
-                        is_active=True,
-                    )
-                    db.add(alert)
-                    await db.flush()
-                    logger.info(
-                        f"[SEARCH ALERT ENGINE] Cached alert for user={user.id} "
-                        f"term='{request.query_text}'"
-                    )
+            db.add(alert)
+            await db.flush()
+            logger.info(
+                f"[SEARCH ALERT ENGINE] Cached alert for user={user.id} "
+                f"term='{request.query_text}'"
+            )
 
         return HybridSearchResponse(
-            found=found,
-            action=action,
-            search_mode=search_mode,
-            results=results,
+            found=False,
+            action="request_more_details",
+            search_mode="exact_matches",
+            results=[],
         )
 
     except Exception as e:
@@ -425,29 +505,24 @@ async def double_check_search(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Secondary fallback: concat original query + user-supplied details,
-    re-embed with Qwen3, re-rerank.
+    Secondary fallback: concat original query + user-supplied details, then
+    run the full expansion → RRF → rerank pipeline on the refined query.
     """
     try:
-        refined_query = f"{request.original_query_text.strip()} {request.user_refined_details.strip()}"
-        normalized_refined = normalize_query(refined_query)
+        refined_query = (
+            f"{request.original_query_text.strip()} "
+            f"{request.user_refined_details.strip()}"
+        )
 
-        query_vec = (await embedding_service.encode_text_async(
-            normalized_refined or refined_query
-        )).tolist()
-
-        results = await _execute_hybrid_vector_query(
-            query_vec=query_vec,
+        scored, _ = await _run_search(
+            query_text=refined_query,
             latitude=request.latitude,
             longitude=request.longitude,
             market_id=request.market_id,
+            filters=None,
             db=db,
-            lexical_query_normalized=normalized_refined,
         )
-
-        if results:
-            results = await _rerank_candidates(refined_query, results)
-        results = _filter_top_five_unless_accuracy_above_80(results)
+        results = _filter_top_five_unless_accuracy_above_80(scored)
 
         return HybridSearchResponse(
             found=len(results) > 0,
