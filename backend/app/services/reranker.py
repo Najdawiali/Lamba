@@ -101,24 +101,58 @@ class RerankerService:
             resp = await self._http.post(url, headers=headers, json=payload)
             resp.raise_for_status()
             data = resp.json()
-            # DeepInfra returns either {"results": [...]} or a bare list.
+            # DeepInfra returns {"results": [...]}, {"scores": [...]}, or a bare
+            # list; entries may be floats OR dicts like
+            # {"index": i, "relevance_score": s}. Index-align defensively.
             if isinstance(data, dict):
-                scores = data.get("results") or data.get("scores") or []
+                raw = data.get("results") or data.get("scores") or []
             else:
-                scores = data
-            if not isinstance(scores, list):
-                scores = [scores]
+                raw = data
+            if not isinstance(raw, list):
+                raw = [raw]
 
-            for c, s in zip(candidates, scores):
+            scores: list[float] = [0.0] * len(candidates)
+            for i, entry in enumerate(raw):
+                idx, val = i, entry
+                if isinstance(entry, dict):
+                    idx = int(entry.get("index", i))
+                    val = entry.get(
+                        "relevance_score", entry.get("score", entry.get("logit", 0.0))
+                    )
+                try:
+                    f = float(val)
+                except (TypeError, ValueError):
+                    f = 0.0
+                if _math.isnan(f) or _math.isinf(f):
+                    f = 0.0
+                if 0 <= idx < len(scores):
+                    scores[idx] = f
+
+            # Sanity guard: a healthy cross-encoder SEPARATES relevant from
+            # irrelevant candidates. Near-constant scores (e.g. ~0.8 for both
+            # a screen and a protein drink) mean the provider payload/template
+            # is off — in that case trust the SQL-stage ranking instead of
+            # poisoning every final score.
+            if len(scores) >= 3:
+                spread = max(scores) - min(scores)
+                if spread < 0.05:
+                    logger.error(
+                        f"Degenerate rerank scores (spread={spread:.4f}, "
+                        f"min={min(scores):.3f}, max={max(scores):.3f}) — "
+                        f"ignoring rerank pass, keeping SQL-stage ranking. "
+                        f"Check reranker_model/payload format on the provider."
+                    )
+                    return candidates[: (top_k or settings.reranker_final_k)]
+
+            logger.info(
+                "Rerank top scores: "
+                + ", ".join(f"{s:.3f}" for s in sorted(scores, reverse=True)[:5])
+            )
+
+            for c, s_val in zip(candidates, scores):
                 prior = float(c.get("final_score", c.get("semantic_score") or 0.0))
                 if _math.isnan(prior) or _math.isinf(prior):
                     prior = 0.0
-                try:
-                    s_val = float(s)
-                except (TypeError, ValueError):
-                    s_val = 0.0
-                if _math.isnan(s_val) or _math.isinf(s_val):
-                    s_val = 0.0
                 c["rerank_score"] = s_val
                 w = settings.reranker_weight
                 c["final_score"] = round(w * s_val + (1.0 - w) * prior, 4)
