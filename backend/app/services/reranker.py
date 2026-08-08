@@ -1,236 +1,243 @@
 """
-Cross-Encoder Re-ranker Service — DeepInfra-hosted Qwen3-Reranker-0.6B.
-
-Serverless path:
-  - POST {"queries": [q,q,...], "documents": [d,d,...], "instruction": "..."}
-    to https://api.deepinfra.com/v1/inference/Qwen/Qwen3-Reranker-0.6B
-  - Response: a JSON array of sigmoid-style scores in [0,1], one per pair.
-  - Fuse final_score = 0.6 * rerank_score + 0.4 * prior_final_score.
-
-Graceful fallback: on API failure the service logs and returns candidates
-unchanged (truncated to top_k), preserving SQL-stage ranking order so
-search_v1 never returns a 500 to the mobile client.
-
-A local self-host path is preserved behind `embedding_provider == "local"`,
-exercising sentence-transformers' CrossEncoder API — not loaded by default.
+Cross-Encoder Reranker Service — Provider Abstraction supporting Local Qwen3-Reranker-0.6B
+and legacy API backends.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import math as _math
-from typing import Optional
+import math
+from typing import Optional, List, Dict, Any
 
 from app.config import settings
+from app.services.local_reranker import local_reranker_provider
 
 logger = logging.getLogger(__name__)
 
 
 class RerankerService:
     """
-    Async reranker backed by DeepInfra's dedicated /inference/<model> endpoint
-    for rerankers. No torch/CrossEncoder loaded at runtime in serverless mode.
+    Reranker service backed by local transformers or remote APIs.
     """
 
     def __init__(self) -> None:
-        self._http = None  # httpx.AsyncClient
-        self._local_model = None
-        self._local_loaded = False
+        self._http = None
 
     def load(self) -> None:
-        """Called at FastAPI startup. In serverless mode, just prime the HTTP client."""
-        if not settings.enable_reranker:
+        """Called during FastAPI startup."""
+        if not getattr(settings, "enable_reranker", True):
             logger.info("Reranker disabled by settings.enable_reranker=False")
             return
 
-        if settings.embedding_provider == "local":
-            self._load_local()
+        provider = getattr(settings, "reranker_provider", "local_transformers").lower()
+        if provider == "local_transformers":
+            local_reranker_provider.load_model()
+            logger.info("Local transformers reranker loaded.")
+        elif provider == "local":
+            local_reranker_provider.load_model()
         else:
-            logger.info(
-                f"Reranker provider={settings.embedding_provider} "
-                f"model={settings.reranker_model} — no local weights loaded."
-            )
+            logger.info(f"Reranker provider '{provider}' configured.")
 
-    def _ensure_http(self) -> None:
-        if self._http is not None:
-            return
-        try:
-            import httpx
-        except ImportError as e:
-            raise RuntimeError("httpx required for reranker (DeepInfra mode).") from e
-        self._http = httpx.AsyncClient(
-            timeout=httpx.Timeout(settings.embedding_request_timeout_sec),
-            limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
-        )
+    async def _call_deepinfra_reranker(
+        self, query: str, candidates: List[Dict[str, Any]]
+    ) -> List[float]:
+        """Call DeepInfra reranker API with retry logic."""
+        import httpx
 
-    async def rerank_async(
-        self,
-        query: str,
-        candidates: list[dict],
-        top_k: Optional[int] = None,
-    ) -> list[dict]:
-        """
-        Async variant. sort candidates desc by fused final_score.
-        Returns up to `top_k` (defaults to settings.reranker_final_k).
-        """
-        if not settings.enable_reranker or not candidates:
-            return candidates[: (top_k or settings.reranker_final_k)]
-
-        if settings.embedding_provider == "local" and self._local_model is not None:
-            return self._rerank_local(query, candidates, top_k)
-
-        self._ensure_http()
-        url = (
-            f"{settings.deepinfra_api_base}/inference/{settings.reranker_model}"
-        )
+        url = f"https://api.deepinfra.com/v1/inference/{settings.reranker_model}"
         headers = {
             "Authorization": f"Bearer {settings.deepinfra_api_key}",
             "Content-Type": "application/json",
         }
-        # DeepInfra expects one query per document (parallel lists).
-        queries = [query] * len(candidates)
-        documents = [c["text"] for c in candidates]
-        payload = {
-            "queries": queries,
+        documents = [c.get("text", c.get("name", "")) for c in candidates]
+        payload: Dict[str, Any] = {
+            "queries": [query],
             "documents": documents,
-            "instruction": settings.reranker_instruction,
         }
+        if getattr(settings, "reranker_instruction_enabled", True):
+            payload["instruction"] = settings.reranker_instruction
 
-        try:
-            resp = await self._http.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            # DeepInfra returns {"results": [...]}, {"scores": [...]}, or a bare
-            # list; entries may be floats OR dicts like
-            # {"index": i, "relevance_score": s}. Index-align defensively.
-            if isinstance(data, dict):
-                raw = data.get("results") or data.get("scores") or []
-            else:
-                raw = data
-            if not isinstance(raw, list):
-                raw = [raw]
-
-            scores: list[float] = [0.0] * len(candidates)
-            for i, entry in enumerate(raw):
-                idx, val = i, entry
-                if isinstance(entry, dict):
-                    idx = int(entry.get("index", i))
-                    val = entry.get(
-                        "relevance_score", entry.get("score", entry.get("logit", 0.0))
-                    )
-                try:
-                    f = float(val)
-                except (TypeError, ValueError):
-                    f = 0.0
-                if _math.isnan(f) or _math.isinf(f):
-                    f = 0.0
-                if 0 <= idx < len(scores):
-                    scores[idx] = f
-
-            # Sanity guard: a healthy cross-encoder SEPARATES relevant from
-            # irrelevant candidates. Near-constant scores (e.g. ~0.8 for both
-            # a screen and a protein drink) mean the provider payload/template
-            # is off — in that case trust the SQL-stage ranking instead of
-            # poisoning every final score.
-            if len(scores) >= 3:
-                spread = max(scores) - min(scores)
-                if spread < 0.05:
-                    logger.error(
-                        f"Degenerate rerank scores (spread={spread:.4f}, "
-                        f"min={min(scores):.3f}, max={max(scores):.3f}) — "
-                        f"ignoring rerank pass, keeping SQL-stage ranking. "
-                        f"Check reranker_model/payload format on the provider."
-                    )
-                    return candidates[: (top_k or settings.reranker_final_k)]
-
-            logger.info(
-                "Rerank top scores: "
-                + ", ".join(f"{s:.3f}" for s in sorted(scores, reverse=True)[:5])
+        # ── Diagnostic: log outbound payload ──────────────────────
+        logger.debug(
+            "[RERANKER API] Sending to DeepInfra: model=%s  query=%r  "
+            "instruction=%r  num_documents=%d",
+            settings.reranker_model, query,
+            payload.get("instruction", "<none>"),
+            len(documents),
+        )
+        for di, doc in enumerate(documents):
+            logger.debug(
+                "[RERANKER API]  document[%d] len=%d  text=%r",
+                di, len(doc), doc[:200],
             )
 
-            for c, s_val in zip(candidates, scores):
-                prior = float(c.get("final_score", c.get("semantic_score") or 0.0))
-                if _math.isnan(prior) or _math.isinf(prior):
-                    prior = 0.0
-                c["rerank_score"] = s_val
-                w = settings.reranker_weight
-                c["final_score"] = round(w * s_val + (1.0 - w) * prior, 4)
+        max_retries = getattr(settings, "embedding_max_retries", 3)
+        timeout = getattr(settings, "embedding_request_timeout_sec", 15.0)
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(timeout)) as client:
+                    resp = await client.post(url, headers=headers, json=payload)
+                    if resp.status_code in (429, 500, 502, 503, 504):
+                        raise Exception(f"Retryable HTTP {resp.status_code}")
+                    resp.raise_for_status()
+                    data = resp.json()
+                    raw_scores = data["scores"]
 
-            reranked = sorted(candidates, key=lambda r: r["final_score"], reverse=True)
-            return reranked[: (top_k or settings.reranker_final_k)]
-        except Exception as e:
-            logger.error(
-                f"DeepInfra rerank failed ({len(candidates)} pairs): {e}. "
-                f"Returning SQL-stage ranking.",
-                exc_info=True,
+                    # ── Diagnostic: log raw API response ──────────────
+                    logger.debug(
+                        "[RERANKER API] Raw scores from DeepInfra: %s",
+                        [round(s, 6) for s in raw_scores],
+                    )
+                    return raw_scores
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    backoff = 0.5 * (2 ** attempt)
+                    logger.warning(
+                        f"Reranker API attempt {attempt + 1}/{max_retries} failed: {e}. "
+                        f"Retrying in {backoff}s"
+                    )
+                    await asyncio.sleep(backoff)
+
+        raise RuntimeError(f"DeepInfra reranker failed after {max_retries} retries: {last_error}")
+
+    async def rerank_async(
+        self,
+        query: str,
+        candidates: List[Dict[str, Any]],
+        top_k: Optional[int] = None,
+        brand_terms: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Asynchronously rerank candidates.
+        """
+        if not getattr(settings, "enable_reranker", True) or not candidates:
+            k = top_k or getattr(settings, "reranker_final_k", 15)
+            return candidates[:k]
+
+        provider = getattr(settings, "reranker_provider", "local_transformers").lower()
+
+        if provider in ("local_transformers", "local"):
+            return await local_reranker_provider.rerank(query, candidates, top_k=top_k)
+
+        elif provider == "deepinfra":
+            # DeepInfra reranker API call
+            try:
+                scores = await self._call_deepinfra_reranker(query, candidates)
+                k = top_k or getattr(settings, "reranker_final_k", 15)
+
+                # ── Diagnostic: log raw scores before any processing ──
+                logger.debug(
+                    "[RERANKER DEBUG] provider=deepinfra  query=%r  "
+                    "instruction_enabled=%s  num_docs=%d",
+                    query,
+                    getattr(settings, "reranker_instruction_enabled", False),
+                    len(candidates),
+                )
+                for idx, (c_item, raw_s) in enumerate(zip(candidates, scores)):
+                    doc_text = c_item.get("text", c_item.get("name", ""))
+                    logger.debug(
+                        "[RERANKER DEBUG]  doc#%d  raw_score=%.6f  text=%r",
+                        idx, raw_s, doc_text[:120],
+                    )
+
+                # ── Normalize scores ──────────────────────────────────
+                # DeepInfra may return raw logits OR pre-sigmoid values.
+                # Either way, if the spread is tiny the scores are useless
+                # for ranking. Apply min-max normalization across the batch
+                # to restore discrimination.
+                import math as _math
+                norm_method = getattr(settings, "reranker_score_normalization", "auto").lower()
+
+                # Step 1: If scores look like raw logits (any outside [0,1]),
+                # apply sigmoid first to get them into [0,1].
+                normalized = []
+                needs_sigmoid = any(s < 0.0 or s > 1.0 for s in scores)
+                for s in scores:
+                    v = float(s)
+                    if norm_method == "sigmoid" or (norm_method == "auto" and needs_sigmoid):
+                        v = 1.0 / (1.0 + _math.exp(-v))
+                    normalized.append(v)
+
+                # Step 2: Check spread & max score before rescaling.
+                # If all scores are near zero (max_score < 0.10), nothing in the catalog matched.
+                # Do NOT rescale in that case — let them fall below the 0.50 guard floor naturally.
+                lo, hi = min(normalized), max(normalized)
+                spread = hi - lo
+                if spread < 0.05 and hi < 0.10:
+                    logger.debug(
+                        "[RERANKER DEBUG] All scores are near zero (max=%.4f, spread=%.4f). "
+                        "Preserving raw scores so guard filter drops them.",
+                        hi, spread,
+                    )
+                elif spread < 0.05 and hi >= 0.10 and len(normalized) > 1:
+                    logger.debug(
+                        "[RERANKER DEBUG] Score spread=%.6f is compressed (range %.4f–%.4f). "
+                        "Applying min-max rescaling to [0.3, 1.0].",
+                        spread, lo, hi,
+                    )
+                    # Rescale to [0.3, 1.0] so floor guard (0.50) still works
+                    for j in range(len(normalized)):
+                        normalized[j] = 0.3 + 0.7 * ((normalized[j] - lo) / spread) if spread > 0 else 0.5
+                else:
+                    logger.debug(
+                        "[RERANKER DEBUG] Score spread=%.6f OK (range %.4f–%.4f).",
+                        spread, lo, hi,
+                    )
+
+                for idx, (c_item, norm_s) in enumerate(zip(candidates, normalized)):
+                    logger.debug(
+                        "[RERANKER DEBUG]  doc#%d  normalized_score=%.6f  name=%r",
+                        idx, norm_s,
+                        c_item.get("result", {}).name if hasattr(c_item.get("result", {}), "name") else "?",
+                    )
+
+                for i, c in enumerate(candidates):
+                    c["rerank_score"] = normalized[i] if i < len(normalized) else 0.0
+                    c["reranker_available"] = True
+                    c["reranker_fallback"] = False
+                # Sort by rerank_score descending
+                candidates.sort(key=lambda x: x.get("rerank_score", 0.0), reverse=True)
+                return candidates[:k]
+            except Exception as e:
+                logger.warning(
+                    f"DeepInfra reranker failed, falling back to fusion rank: {e}"
+                )
+                k = top_k or getattr(settings, "reranker_final_k", 15)
+                for c in candidates:
+                    c["rerank_score"] = 0.0
+                    c["reranker_available"] = False
+                    c["reranker_fallback"] = True
+                return candidates[:k]
+        else:
+            # Unknown provider fallback
+            logger.warning(
+                f"Reranker provider '{provider}' is unavailable/disabled. Preserving prior fusion rank."
             )
-            return candidates[: (top_k or settings.reranker_final_k)]
+            k = top_k or getattr(settings, "reranker_final_k", 15)
+            for c in candidates:
+                c["rerank_score"] = 0.0
+                c["reranker_available"] = False
+                c["reranker_fallback"] = True
+            return candidates[:k]
 
     def rerank(
         self,
         query: str,
-        candidates: list[dict],
+        candidates: List[Dict[str, Any]],
         top_k: Optional[int] = None,
-    ) -> list[dict]:
-        """Sync wrapper for callers that aren't async (test harness, scripts)."""
+        brand_terms: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Synchronous wrapper."""
         try:
             asyncio.get_running_loop()
-            raise RuntimeError(
-                "rerank() called from within an event loop. Use `await rerank_async()`."
-            )
+            raise RuntimeError("rerank() called inside loop — use await rerank_async()")
         except RuntimeError as e:
-            if "no running event loop" not in str(e).lower() and "rerank() called" not in str(e):
+            if "no running event loop" not in str(e).lower() and "rerank()" not in str(e):
                 raise
-        return asyncio.run(self.rerank_async(query, candidates, top_k=top_k))
-
-    # ── Legacy local path (only when provider == "local") ───────
-    def _load_local(self) -> None:
-        if self._local_loaded:
-            return
-        try:
-            from sentence_transformers import CrossEncoder
-            import torch
-            kwargs = {"trust_remote_code": True}
-            if settings.reranker_device == "cuda" and torch.cuda.is_available():
-                kwargs["device"] = "cuda"
-                kwargs["model_kwargs"] = {"torch_dtype": torch.float16}
-            else:
-                kwargs["device"] = "cpu"
-            self._local_model = CrossEncoder(
-                settings.reranker_model,
-                max_length=settings.reranker_max_length,
-                prompts={"query": settings.reranker_instruction},
-                default_prompt_name="query",
-                **kwargs,
-            )
-            self._local_loaded = True
-        except Exception as e:
-            logger.warning(f"Failed to load local reranker: {e}")
-
-    def _rerank_local(
-        self, query: str, candidates: list[dict], top_k: Optional[int] = None
-    ) -> list[dict]:
-        try:
-            import torch
-            pairs = [[query, c["text"]] for c in candidates]
-            scores = self._local_model.predict(
-                pairs, activation_fn=torch.nn.Sigmoid(), batch_size=16
-            )
-            if hasattr(scores, "tolist"):
-                scores = scores.tolist()
-            for c, s in zip(candidates, scores):
-                prior = float(c.get("final_score", c.get("semantic_score") or 0.0))
-                c["rerank_score"] = float(s)
-                w = settings.reranker_weight
-                c["final_score"] = round(w * float(s) + (1.0 - w) * prior, 4)
-            return sorted(candidates, key=lambda r: r["final_score"], reverse=True)[
-                : (top_k or settings.reranker_final_k)
-            ]
-        except Exception as e:
-            logger.error(f"Local rerank failed: {e}", exc_info=True)
-            return candidates[: (top_k or settings.reranker_final_k)]
+        return asyncio.run(self.rerank_async(query, candidates, top_k=top_k, brand_terms=brand_terms))
 
 
-# ── Singleton ──────────────────────────────────────────────────────
 reranker_service = RerankerService()

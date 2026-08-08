@@ -1,16 +1,6 @@
 """
-Embedding Service — DeepInfra-hosted Qwen3-Embedding-0.6B (multilingual, Arabic-strong).
-
-Text-only search stack in serverless mode:
-  - Backend POSTs each normalized query to DeepInfra's OpenAI-compatible
-    /embeddings endpoint and gets back a 1024-d Matryoshka embedding.
-  - LRU cache (256 queries, 5-min TTL) absorbs repeat traffic.
-  - Graceful fallback: on any API failure the service logs and returns a
-    zero vector, so search_v1 can degrade to tsvector-only lexical ranking
-    instead of returning a 500 to the mobile client.
-
-CLIP and the Gemma VLM remain gated behind settings.enable_image_search
-for the future image-search phase — they're not loaded by default.
+Embedding Service — Provider Abstraction supporting Local Qwen3-Embedding-0.6B (1024-d)
+and legacy API backends. Maintains thread-safe LRU caching with key normalization.
 """
 
 from __future__ import annotations
@@ -18,50 +8,69 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from io import BytesIO
+import re
 from collections import OrderedDict
-from typing import Optional
-
+from typing import Optional, List
 import numpy as np
 
 from app.config import settings
 from app.services.arabic_norm import normalize_query
-
-# Optional imports kept for the future local-self-host path. They're lazy and
-# only enter the runtime if settings.embedding_provider == "local", which is
-# not the default.
-try:
-    from sentence_transformers import SentenceTransformer
-    _HAS_ST = True
-except ImportError:
-    _HAS_ST = False
+from app.services.local_embedding import local_embedding_provider
 
 logger = logging.getLogger(__name__)
 
 
-# ── Tiny thread-safe-ish LRU cache with TTL ────────────────────────
+def normalize_cache_key(text: str) -> str:
+    """
+    Produce canonical cache keys:
+    - Arabic NFKC normalization
+    - Diacritic, tatweel removal
+    - Alef/Hamza unification
+    - Taa Marbuta normalization (ة -> ه)
+    - Whitespace collapse
+    - Lowercase Latin text
+    """
+    if not text:
+        return ""
+    norm = normalize_query(text) or text
+    norm = norm.strip().lower()
+    # Taa Marbuta normalization for caching
+    norm = re.sub(r"ة\b", "ه", norm)
+    norm = re.sub(r"\s+", " ", norm)
+    return norm
+
+
 class _LRUCache:
-    """OrderedDict-backed LRU with TTL. Single-process; async-safe via lock."""
+    """OrderedDict-backed LRU with TTL for embedding vectors."""
 
     def __init__(self, max_size: int, ttl_sec: int) -> None:
         self._store: OrderedDict[str, tuple[float, np.ndarray]] = OrderedDict()
         self._max = max_size
         self._ttl = ttl_sec
         self._lock = asyncio.Lock()
+        self.hits: int = 0
+        self.misses: int = 0
+        self.errors: int = 0
 
     async def get(self, key: str) -> Optional[np.ndarray]:
         async with self._lock:
             entry = self._store.get(key)
             if entry is None:
+                self.misses += 1
                 return None
             ts, val = entry
             if (time.time() - ts) > self._ttl:
                 self._store.pop(key, None)
+                self.misses += 1
                 return None
             self._store.move_to_end(key)
+            self.hits += 1
             return val.copy()
 
     async def put(self, key: str, val: np.ndarray) -> None:
+        if not bool(val.any()) or np.isnan(val).any():
+            # Never cache zero or NaN vectors
+            return
         async with self._lock:
             self._store[key] = (time.time(), val.copy())
             self._store.move_to_end(key)
@@ -75,76 +84,56 @@ class _LRUCache:
 
 class EmbeddingService:
     """
-    Async embedding service backed by DeepInfra for the Qwen3-Embedding-0.6B
-    model. Maintains a small LRU cache for repeat queries.
+    Async embedding service backed by local transformers or API providers.
     """
 
     def __init__(self) -> None:
-        self._http = None  # httpx.AsyncClient, lazily created
+        self._http = None
         self._cache: Optional[_LRUCache] = None
-        # Legacy local-encoder handles (only used if provider == "local"):
-        self._text_model = None
-        self._text_loaded = False
-        # CLIP / VLM (image search) — only enabled in future phase:
-        self._clip_model = None
-        self._clip_dim = 512
-        self._clip_loaded = False
-        self.gemma_processor = None
-        self.gemma_model = None
+        self._failures_count: int = 0
 
     @property
     def embedding_dim(self) -> int:
         return settings.text_embedding_dim
 
-    # ── Lifecycle ─────────────────────────────────────────────────
     def load_model(self) -> None:
-        """
-        Called during FastAPI startup. In serverless (DeepInfra) mode this only
-        initializes the cache and HTTP client — no torch, no model weights.
-        In local mode it loads Qwen3 via sentence-transformers as before.
-        """
+        """Called during FastAPI startup."""
         if self._cache is None:
             self._cache = _LRUCache(
-                max_size=settings.embedding_cache_size,
-                ttl_sec=settings.embedding_cache_ttl_sec,
+                max_size=getattr(settings, "embedding_cache_max_size", 2048),
+                ttl_sec=getattr(settings, "embedding_cache_ttl_sec", 3600),
             )
 
-        if settings.embedding_provider == "local":
-            self._load_text_encoder_local()
+        provider = settings.embedding_provider.lower()
+        if provider == "local_transformers":
+            local_embedding_provider.load_model()
+            logger.info("Local transformers embedding provider initialized.")
+        elif provider == "deepinfra":
+            if not settings.deepinfra_api_key or "REPLACE" in settings.deepinfra_api_key:
+                logger.warning(
+                    f"Embedding provider '{provider}' selected but DEEPINFRA_API_KEY is invalid/missing."
+                )
         else:
-            logger.info(
-                f"Embedding provider={settings.embedding_provider} "
-                f"model={settings.qwen_embed_model} — no local weights loaded."
+            logger.warning(f"Embedding provider '{provider}' is currently stubbed/disabled.")
+
+    async def _embed_via_api(self, text: str) -> np.ndarray:
+        """Remote API embedding request with retry logic."""
+        # Check API key
+        if not settings.deepinfra_api_key or "REPLACE" in settings.deepinfra_api_key:
+            msg = "Embedding API key is invalid or unconfigured."
+            logger.error(msg)
+            if getattr(settings, "embedding_strict_mode", False):
+                raise RuntimeError(msg)
+            return np.zeros(settings.text_embedding_dim, dtype=np.float32)
+
+        if self._http is None:
+            import httpx
+            self._http = httpx.AsyncClient(
+                timeout=httpx.Timeout(settings.embedding_request_timeout_sec),
+                limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
             )
 
-        if settings.enable_image_search:
-            self._load_clip()
-
-    def _ensure_http(self) -> None:
-        """Lazy-init the httpx.AsyncClient. Must be called inside an event loop."""
-        if self._http is not None:
-            return
-        try:
-            import httpx
-        except ImportError as e:
-            raise RuntimeError(
-                "httpx is required for the DeepInfra embedding provider. "
-                "Install with `pip install httpx`."
-            ) from e
-        self._http = httpx.AsyncClient(
-            timeout=httpx.Timeout(settings.embedding_request_timeout_sec),
-            limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
-        )
-        logger.info(f"HTTP client ready — base={settings.deepinfra_api_base}")
-
-    # ── DeepInfra async embedding call ──────────────────────────
-    async def _embed_via_deepinfra(self, text: str) -> np.ndarray:
-        """
-        POST one text to DeepInfra /openai/embeddings (OpenAI-compatible).
-        Returns L2-normalized 1024-d float32 vector.
-        """
-        self._ensure_http()
-        url = f"{settings.deepinfra_api_base}/openai/embeddings"
+        url = f"{settings.deepinfra_api_base}{settings.embedding_api_path}"
         headers = {
             "Authorization": f"Bearer {settings.deepinfra_api_key}",
             "Content-Type": "application/json",
@@ -152,57 +141,81 @@ class EmbeddingService:
         payload = {
             "model": settings.qwen_embed_model,
             "input": [text],
+            "encoding_format": "float",
+            "dimensions": settings.text_embedding_dim,
         }
 
-        last_err: Optional[Exception] = None
-        for attempt in range(settings.embedding_max_retries + 1):
+        last_error = None
+        max_retries = settings.embedding_max_retries
+        for attempt in range(max_retries):
             try:
                 resp = await self._http.post(url, headers=headers, json=payload)
+                if resp.status_code in (429, 500, 502, 503, 504):
+                    raise Exception(f"Retryable HTTP {resp.status_code}")
                 resp.raise_for_status()
                 data = resp.json()
                 vec = np.asarray(data["data"][0]["embedding"], dtype=np.float32)
-                vec = vec / (np.linalg.norm(vec) + 1e-12)
+                norm = np.linalg.norm(vec)
+                if norm > 0:
+                    vec = vec / norm
                 return vec
             except Exception as e:
-                last_err = e
-                logger.warning(
-                    f"DeepInfra embeddings attempt {attempt+1} failed: {e}"
-                )
-                if attempt < settings.embedding_max_retries:
-                    await asyncio.sleep(0.5 * (attempt + 1))
+                last_error = e
+                if attempt < max_retries - 1:
+                    backoff = 0.5 * (2 ** attempt)
+                    logger.warning(
+                        f"Embedding API attempt {attempt + 1}/{max_retries} failed: {e}. "
+                        f"Retrying in {backoff}s"
+                    )
+                    await asyncio.sleep(backoff)
 
-        logger.error(
-            f"DeepInfra embeddings exhausted retries for text='{text[:60]}': {last_err}"
-        )
-        # Graceful fallback: zero vector signals "no semantic signal" to search_v1.
+        self._failures_count += 1
+        logger.error(f"Embedding API request failed after {max_retries} retries: {last_error}")
+        if getattr(settings, "embedding_strict_mode", False):
+            raise RuntimeError(f"Embedding API failed under strict mode: {last_error}") from last_error
         return np.zeros(settings.text_embedding_dim, dtype=np.float32)
 
-    # ── Public async API ─────────────────────────────────────────
-    async def encode_text_async(self, text: str, dim: Optional[int] = None) -> np.ndarray:
+    async def encode_text_async(
+        self, text: str, text_type: str = "query", dim: Optional[int] = None
+    ) -> np.ndarray:
         """
-        Async encode of a normalized or raw query. Lookup is cache-first.
-        `dim` may request a Matryoshka truncation to a smaller dimension.
+        Async encode a string query or document. Cache-first.
         """
         if self._cache is None:
             self._cache = _LRUCache(
-                max_size=settings.embedding_cache_size,
-                ttl_sec=settings.embedding_cache_ttl_sec,
+                max_size=getattr(settings, "embedding_cache_max_size", 2048),
+                ttl_sec=getattr(settings, "embedding_cache_ttl_sec", 3600),
             )
 
-        # Surface-form cache key uses the already-normalized text (Arabic NFKC +
-        # alef/hamza unification + Arabizi → Arabic). Don't cache truncated slices
-        # because reslicing is cheap.
-        norm = normalize_query(text) or text
-        cache_key = norm if dim is None else f"{norm}#{dim}"
+        provider = settings.embedding_provider.lower()
+
+        # Apply instruction template for API-based queries BEFORE cache lookup.
+        # Local providers handle templates internally.
+        if provider == "deepinfra" and text_type == "query":
+            text = settings.embedding_query_template.format(
+                instruction=settings.embedding_query_instruction,
+                text=text,
+            )
+
+        cache_key = normalize_cache_key(text)
+        if dim is not None:
+            cache_key = f"{cache_key}#{dim}"
 
         cached = await self._cache.get(cache_key)
         if cached is not None:
             return cached
 
-        if settings.embedding_provider == "local":
-            vec = self._encode_local(norm)
+        if provider == "local_transformers":
+            if text_type == "query":
+                vec_list = await local_embedding_provider.embed_query(text)
+            else:
+                vec_list = await local_embedding_provider.embed_document(text)
+            vec = np.asarray(vec_list, dtype=np.float32)
+        elif provider == "deepinfra":
+            vec = await self._embed_via_api(text)
         else:
-            vec = await self._embed_via_deepinfra(norm)
+            logger.warning(f"Provider '{provider}' unavailable — returning zero vector.")
+            vec = np.zeros(settings.text_embedding_dim, dtype=np.float32)
 
         if dim is not None and dim < vec.shape[0]:
             vec = vec[:dim]
@@ -210,33 +223,116 @@ class EmbeddingService:
             if n > 0:
                 vec = vec / n
 
-        await self._cache.put(cache_key, vec)
+        if bool(vec.any()):
+            await self._cache.put(cache_key, vec)
+
         return vec
 
+    async def embed_texts_batch(
+        self, texts: List[str], text_type: str = "document"
+    ) -> List[List[float]]:
+        """
+        Async batch embedding for indexing or scripts.
+        """
+        if not texts:
+            return []
+
+        provider = settings.embedding_provider.lower()
+        if provider == "local_transformers":
+            return await local_embedding_provider.embed_texts_batch(texts, text_type=text_type)
+
+        if provider == "deepinfra":
+            # Apply instruction template for queries
+            if text_type == "query":
+                texts = [
+                    settings.embedding_query_template.format(
+                        instruction=settings.embedding_query_instruction,
+                        text=t,
+                    )
+                    for t in texts
+                ]
+
+            # Batch via API in chunks
+            all_results = []
+            batch_size = settings.embedding_batch_size
+            for i in range(0, len(texts), batch_size):
+                batch = texts[i : i + batch_size]
+                if not settings.deepinfra_api_key or "REPLACE" in settings.deepinfra_api_key:
+                    all_results.extend(
+                        [np.zeros(settings.text_embedding_dim, dtype=np.float32).tolist()] * len(batch)
+                    )
+                    continue
+
+                if self._http is None:
+                    import httpx
+                    self._http = httpx.AsyncClient(
+                        timeout=httpx.Timeout(settings.embedding_request_timeout_sec),
+                        limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+                    )
+
+                url = f"{settings.deepinfra_api_base}{settings.embedding_api_path}"
+                headers = {
+                    "Authorization": f"Bearer {settings.deepinfra_api_key}",
+                    "Content-Type": "application/json",
+                }
+                payload = {
+                    "model": settings.qwen_embed_model,
+                    "input": batch,
+                    "encoding_format": "float",
+                    "dimensions": settings.text_embedding_dim,
+                }
+
+                last_error = None
+                max_retries = settings.embedding_max_retries
+                for attempt in range(max_retries):
+                    try:
+                        resp = await self._http.post(url, headers=headers, json=payload)
+                        if resp.status_code in (429, 500, 502, 503, 504):
+                            raise Exception(f"Retryable HTTP {resp.status_code}")
+                        resp.raise_for_status()
+                        data = resp.json()
+                        vecs = [item["embedding"] for item in data["data"]]
+                        all_results.extend(vecs)
+                        last_error = None
+                        break
+                    except Exception as e:
+                        last_error = e
+                        if attempt < max_retries - 1:
+                            backoff = 0.5 * (2 ** attempt)
+                            logger.warning(
+                                f"Batch embedding attempt {attempt + 1}/{max_retries} failed: {e}. "
+                                f"Retrying in {backoff}s"
+                            )
+                            await asyncio.sleep(backoff)
+
+                if last_error:
+                    logger.error(f"Batch embedding failed after {max_retries} retries: {last_error}")
+                    all_results.extend(
+                        [np.zeros(settings.text_embedding_dim, dtype=np.float32).tolist()] * len(batch)
+                    )
+
+            return all_results
+
+        # Fallback for unknown providers
+        results = []
+        for t in texts:
+            v = await self.encode_text_async(t, text_type=text_type)
+            results.append(v.tolist())
+        return results
+
     def encode_text(self, text: str, dim: Optional[int] = None) -> np.ndarray:
-        """
-        Synchronous wrapper for scripts (backfill, seed) that aren't async.
-        Runs encode_text_async inside an event loop.
-        """
+        """Sync wrapper for scripts."""
         try:
             asyncio.get_running_loop()
-            # Already in an event loop — caller must use the async version.
-            raise RuntimeError(
-                "encode_text() called from within an event loop. "
-                "Use `await encode_text_async()` instead."
-            )
+            raise RuntimeError("encode_text called inside loop — use await encode_text_async()")
         except RuntimeError as e:
-            if "no running event loop" not in str(e).lower() and "encode_text() called" not in str(e):
+            if "no running event loop" not in str(e).lower() and "encode_text" not in str(e):
                 raise
         return asyncio.run(self.encode_text_async(text, dim=dim))
 
-    def encode_text_384(self, text: str) -> np.ndarray:
-        """Deprecated back-compat alias (returns full 1024-d, not 384)."""
-        return self.encode_text(text)
-
-    def encode_product(self, name: str, description: str | None = None,
-                        search_terms: str | None = None) -> np.ndarray:
-        """Build indexed embedding for a GlobalItem. Sync wrapper for scripts."""
+    def encode_product(
+        self, name: str, description: Optional[str] = None, search_terms: Optional[str] = None
+    ) -> np.ndarray:
         parts = [name]
         if description:
             parts.append(description)
@@ -244,82 +340,15 @@ class EmbeddingService:
             parts.append(search_terms)
         return self.encode_text(" ".join(parts))
 
-    async def encode_product_async(self, name: str, description: str | None = None,
-                                    search_terms: str | None = None) -> np.ndarray:
-        """Async version of encode_product — used by live API paths."""
+    async def encode_product_async(
+        self, name: str, description: Optional[str] = None, search_terms: Optional[str] = None
+    ) -> np.ndarray:
         parts = [name]
         if description:
             parts.append(description)
         if search_terms:
             parts.append(search_terms)
-        return await self.encode_text_async(" ".join(parts))
-
-    # ── Legacy local self-host path (only when provider == "local") ──
-    def _load_text_encoder_local(self) -> None:
-        if not _HAS_ST:
-            logger.warning(
-                "sentence-transformers not installed. Local embedding path unavailable."
-            )
-            return
-        if self._text_loaded:
-            return
-        logger.info(f"Loading local text encoder: {settings.qwen_embed_model}")
-        try:
-            import torch
-            model_kwargs: dict = {}
-            if settings.qwen_embed_device == "cuda" and torch.cuda.is_available():
-                model_kwargs["device"] = "cuda"
-                model_kwargs["model_kwargs"] = {
-                    "torch_dtype": torch.float16 if settings.qwen_embed_dtype == "float16"
-                    else torch.float32
-                }
-            else:
-                model_kwargs["device"] = "cpu"
-            self._text_model = SentenceTransformer(
-                settings.qwen_embed_model, model_kwargs=model_kwargs
-            )
-            self._text_loaded = True
-            logger.info("Local Qwen3 encoder loaded.")
-        except Exception as e:
-            logger.error(f"Failed to load local Qwen3 encoder: {e}", exc_info=True)
-
-    def _encode_local(self, text: str) -> np.ndarray:
-        if not self._text_loaded or self._text_model is None:
-            logger.warning("Local encoder not loaded — returning zero vector.")
-            return np.zeros(settings.text_embedding_dim, dtype=np.float32)
-        emb = self._text_model.encode(
-            text, convert_to_numpy=True, normalize_embeddings=True
-        )
-        return emb.astype(np.float32)
-
-    # ── CLIP cross-modal encoder (optional, future phase) ───────
-    def _load_clip(self) -> None:
-        if self._clip_loaded or not _HAS_ST:
-            return
-        try:
-            self._clip_model = SentenceTransformer(settings.clip_model_name)
-            self._clip_dim = self._clip_model.get_sentence_embedding_dimension()
-            self._clip_loaded = True
-            logger.info(f"CLIP loaded — dim={self._clip_dim}")
-        except Exception as e:
-            logger.error(f"Failed to load CLIP: {e}", exc_info=True)
-
-    def encode_image_bytes(self, image_bytes: bytes) -> np.ndarray:
-        if not settings.enable_image_search:
-            raise RuntimeError("Image search is disabled.")
-        if not self._clip_loaded:
-            self._load_clip()
-        if self._clip_model is None:
-            raise RuntimeError("CLIP unavailable.")
-        from PIL import Image
-        img = Image.open(BytesIO(image_bytes)).convert("RGB")
-        emb = self._clip_model.encode(img, convert_to_numpy=True, normalize_embeddings=True)
-        return emb.astype(np.float32)
-
-    # ── VLM (disabled) ────────────────────────────────────────────
-    def identify_product_from_image(self, image_bytes: bytes) -> str | None:
-        return None
+        return await self.encode_text_async(" ".join(parts), text_type="document")
 
 
-# ── Singleton instance ──────────────────────────────────────────
 embedding_service = EmbeddingService()

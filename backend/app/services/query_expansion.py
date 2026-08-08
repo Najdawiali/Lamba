@@ -1,18 +1,6 @@
 """
-LLM Query Expansion Service — multi-query retrieval via DeepInfra chat completions.
-
-Latency-tolerant, quality-first: one cheap instruct-LLM call per (cache-missed)
-query produces up to N paraphrases across languages:
-
-    "مشروب احمر ساخن"  →  ["hot red drink", "شاي", "مشروبات ساخنة"]
-    "ghazaleen"        →  ["غزالين", "Ghazaleen tea", "شاي غزالين"]
-
-The variants feed extra semantic retrieval branches and widen the lexical
-tsquery before Reciprocal Rank Fusion in search_v1.
-
-Any failure (timeout, quota, malformed JSON) degrades gracefully to an empty
-list, so search never depends on this call succeeding. Responses are cached
-(LRU + TTL) because popular queries repeat heavily.
+LLM Query Expansion Service — multi-query retrieval with Provider Abstraction.
+Supports cross-lingual translation (Arabic <-> English) and domain-specific synonyms.
 """
 
 from __future__ import annotations
@@ -21,161 +9,123 @@ import asyncio
 import json
 import logging
 import re
-import time
-from collections import OrderedDict
-from typing import Optional
+from typing import List, Optional
 
 from app.config import settings
+from app.services.llm import llm_adapter
 from app.services.arabic_norm import normalize_query
 
 logger = logging.getLogger(__name__)
 
-_JSON_ARRAY_RE = re.compile(r"\[.*\]", re.S)
+EXPANSION_SYSTEM_PROMPT = """You are a bilingual e-commerce search query assistant specialized in Arabic and English retail.
+Your goal is to expand user search queries to enable cross-lingual retrieval.
 
-_SYSTEM_PROMPT = (
-    "You are a search-query expander for a retail marketplace in the Middle East. "
-    "Customers search in Arabic, English, or Arabizi (Arabic written with Latin "
-    "letters and digits). Given one customer query, return ONLY a JSON array of "
-    "up to {n} alternative search phrasings that mean the same thing, covering: "
-    "1) the English translation, 2) the Arabic translation or a common Arabic "
-    "synonym, 3) the product-category phrase. Rules: JSON array of strings only, "
-    "no explanations, no duplicates of the original query, each variant under "
-    "6 words."
-)
+Rules:
+1. Generate an Arabic translation/synonym if the query is in English.
+2. Generate an English translation/synonym if the query is in Arabic.
+3. Keep brand names (e.g. Nike, Nescafe, Apple, Almarai) intact; do NOT translate proper nouns literally.
+4. Output 1 to 3 alternate high-quality search terms/phrases.
+5. Respond strictly with a valid JSON list of strings, for example: ["زيت زيتون", "extra virgin olive oil"]
+Do not include explanations or markdown fences."""
 
 
-class _LRUCache:
-    """OrderedDict-backed LRU with TTL. Single-process; async-safe via lock."""
-
-    def __init__(self, max_size: int, ttl_sec: int) -> None:
-        self._store: OrderedDict[str, tuple[float, list[str]]] = OrderedDict()
-        self._max = max_size
-        self._ttl = ttl_sec
-        self._lock = asyncio.Lock()
-
-    async def get(self, key: str) -> Optional[list[str]]:
-        async with self._lock:
-            entry = self._store.get(key)
-            if entry is None:
-                return None
-            ts, val = entry
-            if (time.time() - ts) > self._ttl:
-                self._store.pop(key, None)
-                return None
-            self._store.move_to_end(key)
-            return list(val)
-
-    async def put(self, key: str, val: list[str]) -> None:
-        async with self._lock:
-            self._store[key] = (time.time(), list(val))
-            self._store.move_to_end(key)
-            while len(self._store) > self._max:
-                self._store.popitem(last=False)
+# Placeholder / example tokens to reject so prompt examples are never extracted
+_PLACEHOLDER_EXPANSIONS = {
+    "term1", "term2", "term3", "synonym1", "synonym2", "example1", "example2",
+    "query", "variant1", "variant2", "phrase1", "phrase2",
+}
 
 
 class QueryExpansionService:
-    """Async LLM-based query expansion backed by DeepInfra chat completions."""
+    """Async LLM-based query expansion with provider abstraction."""
 
-    def __init__(self) -> None:
-        self._http = None  # httpx.AsyncClient, lazily created
-        self._cache = _LRUCache(
-            max_size=settings.expansion_cache_size,
-            ttl_sec=settings.expansion_cache_ttl_sec,
-        )
-
-    def _ensure_http(self) -> None:
-        if self._http is not None:
-            return
-        try:
-            import httpx
-        except ImportError as e:
-            raise RuntimeError(
-                "httpx is required for the query expansion service."
-            ) from e
-        self._http = httpx.AsyncClient(
-            timeout=httpx.Timeout(settings.expansion_timeout_sec),
-            limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
-        )
-
-    @staticmethod
-    def _parse_variants(content: str, original: str, max_variants: int) -> list[str]:
-        """Extract a JSON array of strings from the LLM response, defensively."""
-        match = _JSON_ARRAY_RE.search(content or "")
-        if not match:
-            return []
-        try:
-            raw = json.loads(match.group(0))
-        except (json.JSONDecodeError, ValueError):
-            return []
-        if not isinstance(raw, list):
-            return []
-
-        norm_original = (normalize_query(original) or original).strip().lower()
-        seen: set[str] = set()
-        out: list[str] = []
-        for v in raw:
-            if not isinstance(v, str):
-                continue
-            v = v.strip()
-            if not v or len(v) > 80:
-                continue
-            key = (normalize_query(v) or v).strip().lower()
-            if not key or key == norm_original or key in seen:
-                continue
-            seen.add(key)
-            out.append(v)
-            if len(out) >= max_variants:
-                break
-        return out
-
-    async def expand_async(self, query: str) -> list[str]:
+    async def expand_async(self, query: str) -> List[str]:
         """
-        Return up to `settings.expansion_max_variants` paraphrases of `query`.
-        Cache-first; returns [] when disabled or on any provider failure.
+        Return up to `settings.expansion_max_variants` paraphrases and translations of `query`.
+        Returns [] immediately when disabled or when expansion_provider is 'disabled'.
         """
-        if not settings.enable_query_expansion or not query or not query.strip():
+        if not getattr(settings, "enable_query_expansion", True):
             return []
 
-        cache_key = (normalize_query(query) or query).strip().lower()
-        cached = await self._cache.get(cache_key)
-        if cached is not None:
-            return cached
-
-        try:
-            self._ensure_http()
-            url = f"{settings.deepinfra_api_base}/openai/chat/completions"
-            headers = {
-                "Authorization": f"Bearer {settings.deepinfra_api_key}",
-                "Content-Type": "application/json",
-            }
-            payload = {
-                "model": settings.expansion_model,
-                "temperature": 0.2,
-                "max_tokens": 150,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": _SYSTEM_PROMPT.format(
-                            n=settings.expansion_max_variants
-                        ),
-                    },
-                    {"role": "user", "content": query.strip()},
-                ],
-            }
-            resp = await self._http.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            content = data["choices"][0]["message"]["content"]
-            variants = self._parse_variants(
-                content, query, settings.expansion_max_variants
-            )
-            await self._cache.put(cache_key, variants)
-            logger.info(f"Query expansion '{query[:40]}' -> {variants}")
-            return variants
-        except Exception as e:
-            logger.warning(f"Query expansion failed for '{query[:40]}': {e}")
+        provider = getattr(settings, "expansion_provider", "api").lower()
+        if provider == "disabled" or not query or not query.strip():
             return []
 
+        if provider in ("api", "deepinfra"):
+            messages = [
+                {"role": "system", "content": EXPANSION_SYSTEM_PROMPT},
+                {"role": "user", "content": f"Expand this search query for cross-lingual retail search: {query.strip()}"},
+            ]
+            try:
+                full_resp = await llm_adapter.complete_chat_full(
+                    messages=messages,
+                    temperature=0.1,
+                    max_tokens=200,
+                    timeout=getattr(settings, "expansion_timeout_sec", 10.0),
+                    chat_template_kwargs={"enable_thinking": False},
+                )
+                logger.debug(
+                    f"[EXPANSION RESPONSE DUMP] {json.dumps(full_resp, ensure_ascii=False, default=str)[:2000]}"
+                )
+                if not full_resp or not full_resp.get("choices"):
+                    return []
 
-# ── Singleton ──────────────────────────────────────────────────────
+                choice = full_resp["choices"][0]
+                message = choice.get("message", {})
+                content = message.get("content") or ""
+                reasoning_content = message.get("reasoning_content") or ""
+
+                # Target text: content first, fallback to reasoning_content
+                target_text = content if content.strip() else reasoning_content
+                logger.debug(
+                    f"[EXPANSION RAW EXTRACTED] content={repr(content)} reasoning_content={repr(reasoning_content)}"
+                )
+
+                # Look for JSON array [ ... ] in target_text
+                match = re.search(r"\[.*?\]", target_text, re.DOTALL)
+                if not match:
+                    cleaned = re.sub(r"<think>.*?</think>", "", target_text, flags=re.DOTALL | re.IGNORECASE).strip()
+                    cleaned = re.sub(r"^```(?:json)?\n?", "", cleaned, flags=re.IGNORECASE)
+                    cleaned = re.sub(r"\n?```$", "", cleaned)
+                    match = re.search(r"\[.*?\]", cleaned, re.DOTALL)
+
+                if match:
+                    try:
+                        parsed = json.loads(match.group(0))
+                    except Exception:
+                        parsed = None
+
+                    if isinstance(parsed, list):
+                        max_v = getattr(settings, "expansion_max_variants", 3)
+                        cleaned_variants = []
+                        for item in parsed:
+                            if not isinstance(item, str):
+                                continue
+                            val = item.strip()
+                            val_lower = val.lower()
+                            # Discard query duplicates, empty strings, and prompt placeholder values
+                            if (
+                                val
+                                and val_lower != query.strip().lower()
+                                and val_lower not in _PLACEHOLDER_EXPANSIONS
+                            ):
+                                cleaned_variants.append(val)
+
+                        if cleaned_variants:
+                            logger.debug(
+                                "[EXPANSION PARSED] query=%r  parsed_variants=%s",
+                                query, cleaned_variants[:max_v],
+                            )
+                            return cleaned_variants[:max_v]
+
+                logger.warning(f"[EXPANSION PARSE FAILED] query={query!r} target_text={target_text!r}")
+            except Exception as e:
+                logger.warning(f"Query expansion LLM call failed: {e}")
+                return []
+
+        logger.info(f"Query expansion provider '{provider}' is not supported.")
+        return []
+
+
 query_expansion_service = QueryExpansionService()
+
