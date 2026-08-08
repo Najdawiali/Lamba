@@ -11,7 +11,8 @@ import logging
 import random
 import string
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from app.rate_limit import limiter
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -54,7 +55,8 @@ def _mock_send_email(email: str, code: str) -> None:
 
 # ── POST /signup ────────────────────────────────────────────────
 @router.post("/signup", response_model=SignUpResponse, status_code=201)
-async def signup(data: SignUpRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def signup(request: Request, data: SignUpRequest, db: AsyncSession = Depends(get_db)):
     """
     Register a new customer or merchant.
 
@@ -109,7 +111,8 @@ async def signup(data: SignUpRequest, db: AsyncSession = Depends(get_db)):
 
 # ── POST /verify ───────────────────────────────────────────────
 @router.post("/verify", response_model=VerifyResponse)
-async def verify(data: VerifyRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def verify(request: Request, data: VerifyRequest, db: AsyncSession = Depends(get_db)):
     """
     Verify a user's registration with their 6-digit code.
 
@@ -144,7 +147,8 @@ async def verify(data: VerifyRequest, db: AsyncSession = Depends(get_db)):
 
 # ── POST /signin ───────────────────────────────────────────────
 @router.post("/signin", response_model=SignInResponse)
-async def signin(data: SignInRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def signin(request: Request, data: SignInRequest, db: AsyncSession = Depends(get_db)):
     """
     Authenticate a user by email or phone number.
 

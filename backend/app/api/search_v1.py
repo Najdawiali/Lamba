@@ -36,7 +36,8 @@ import logging
 from collections import defaultdict
 from typing import Optional, List
 
-from fastapi import APIRouter, Depends, HTTPException, status, File, Form, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, status, File, Form, UploadFile, Request
+from app.rate_limit import limiter
 from geoalchemy2.elements import WKTElement
 from geoalchemy2 import Geometry, Geography
 from sqlalchemy import select, func, literal
@@ -85,6 +86,31 @@ def _safe(v, default: float = 0.0) -> float:
     return fv
 
 
+# ── Gender exclusion filter (keyword-based) ────────────────────────
+_FEMALE_KEYWORDS = {"نسائي", "نسائية", "نساء", "بنات", "حريم", "ستات", "women", "female", "ladies"}
+_MALE_KEYWORDS = {"رجالي", "رجالية", "رجال", "اولاد", "شباب", "men", "male"}
+
+
+def _get_gender_filter(query: str) -> str | None:
+    """Returns 'female', 'male', or None based on query keywords."""
+    query_words = set(query.lower().split())
+    if query_words & _FEMALE_KEYWORDS:
+        return "female"
+    if query_words & _MALE_KEYWORDS:
+        return "male"
+    return None
+
+
+def _is_gender_excluded(item_text: str, gender_filter: str) -> bool:
+    """Returns True if this item should be excluded based on the opposite gender keywords."""
+    item_words = set(item_text.lower().split())
+    if gender_filter == "female":
+        return bool(item_words & _MALE_KEYWORDS)
+    if gender_filter == "male":
+        return bool(item_words & _FEMALE_KEYWORDS)
+    return False
+
+
 # ── Retrieval: ranked branches + Reciprocal Rank Fusion ────────────
 async def _retrieve_fused_candidates(
     db: AsyncSession,
@@ -94,6 +120,7 @@ async def _retrieve_fused_candidates(
     longitude: float,
     market_id: Optional[uuid.UUID],
     filters: Optional[SearchFilters],
+    listing_type: Optional[str] = None,
 ) -> List[dict]:
     """
     Run one ranked semantic branch per query vector plus one ranked lexical
@@ -142,6 +169,9 @@ async def _retrieve_fused_candidates(
                 selectinload(GlobalItem.images),
             )
         )
+
+        if listing_type:
+            stmt = stmt.where(GlobalItem.listing_type == listing_type)
 
         if filters and filters.in_stock_only:
             stmt = stmt.where(MarketItem.status == True, MarketItem.stock_count > 0)
@@ -248,6 +278,7 @@ async def _retrieve_fused_candidates(
             name=gi.name,
             description=gi.description,
             category=gi.category,
+            listing_type=getattr(gi, "listing_type", "product") or "product",
             image_url=gi.image_url,
             price=price_val,
             stock_count=mi.stock_count,
@@ -266,15 +297,31 @@ async def _retrieve_fused_candidates(
 
         # Rich document for the cross-encoder: search_terms carries brand
         # aliases and cross-lingual synonyms, category anchors intent.
-        text_parts = [gi.name]
+        # De-duplicate terms/phrases to prevent artificial amplification of phonetic matches.
+        raw_parts = []
+        if gi.name:
+            raw_parts.append(gi.name)
         if gi.description:
-            text_parts.append(gi.description)
+            raw_parts.append(gi.description)
         if gi.search_terms:
-            text_parts.append(gi.search_terms)
+            raw_parts.append(gi.search_terms)
         if gi.category:
-            text_parts.append(gi.category)
+            raw_parts.append(gi.category)
 
-        fused.append({"result": item, "text": " ".join(text_parts)})
+        seen_chunks = set()
+        deduped_parts = []
+        for part in raw_parts:
+            # Clean and split into distinct meaningful chunks/words
+            cleaned = re.sub(r"\s+", " ", str(part)).strip()
+            if not cleaned:
+                continue
+            cleaned_lower = cleaned.lower()
+            if cleaned_lower not in seen_chunks:
+                seen_chunks.add(cleaned_lower)
+                deduped_parts.append(cleaned)
+
+        doc_text = " - ".join(deduped_parts) if deduped_parts else (gi.name or "")
+        fused.append({"result": item, "text": doc_text, "cosine_sim": sem})
     return fused
 
 
@@ -285,9 +332,10 @@ async def _rerank_and_finalize(
     query_script: str,
 ) -> List[HybridSearchResultItem]:
     """
-    Cross-encode the fused candidates (always on), fuse
-    final = w·rerank + (1-w)·prior, then apply the language tie-break boost
-    and sort. On reranker failure the RRF/prior ordering is preserved.
+    Cross-encode the fused candidates (always on), then blend:
+    semantic_score = final_score = 0.7 * rerank_score + 0.3 * cosine_sim.
+    Applies the language tie-break boost and sorts by semantic_score.
+    On reranker failure the RRF/prior ordering is preserved.
     """
     if not fused:
         return []
@@ -299,6 +347,7 @@ async def _rerank_and_finalize(
                 "text": f["text"],
                 "final_score": f["result"].final_score,
                 "semantic_score": f["result"].semantic_score,
+                "cosine_sim": f.get("cosine_sim", f["result"].semantic_score),
                 "result": f["result"],
             }
             for f in fused
@@ -308,21 +357,39 @@ async def _rerank_and_finalize(
             candidates=candidates,
             top_k=settings.reranker_final_k,
         )
+        rerank_log_entries = []
         for c in reranked:
             r = c["result"]
-            r.final_score = _safe(c.get("final_score", r.final_score))
-            # Rerank score doubles as the accuracy proxy for the top-5 cap.
-            r.semantic_score = _safe(c.get("rerank_score", r.semantic_score))
+            cosine_sim = _safe(c.get("cosine_sim", r.semantic_score))
+            rerank_score = _safe(c.get("rerank_score", r.semantic_score))
+            blended = round(0.7 * rerank_score + 0.3 * cosine_sim, 4)
+            r.semantic_score = blended
+            r.final_score = blended
             out.append(r)
+            rerank_log_entries.append((r, cosine_sim, rerank_score, blended))
+
+        # ── Diagnostic logging ──────────────────────────────────
+        logger.debug(
+            "[RANKING DEBUG] query=%r  candidates=%d  reranked=%d",
+            query_text, len(candidates), len(reranked),
+        )
+        for i, (r, orig_cosine, rr_score, blnd) in enumerate(rerank_log_entries):
+            logger.debug(
+                "[RANKING DEBUG]  #%d  name=%r  rerank=%.4f  "
+                "cosine_sim=%.4f  blended=%.4f  proximity=%.4f  distance_km=%.2f  "
+                "final=%.4f",
+                i + 1, r.name, rr_score,
+                orig_cosine,
+                blnd,
+                _safe(r.proximity_score),
+                _safe(r.distance_km),
+                r.final_score,
+            )
     else:
         out = [f["result"] for f in fused][: settings.reranker_final_k]
 
-    # Language-aware ordering: same result SET across languages; items whose
-    # name script matches the query script win ties.
-    for r in out:
-        if _script_of(r.name) == query_script:
-            r.final_score = round(r.final_score + settings.language_match_boost, 4)
-    out.sort(key=lambda r: r.final_score, reverse=True)
+    # Sort results by blended relevance score (language match boost removed to support cross-lingual search)
+    out.sort(key=lambda r: r.semantic_score, reverse=True)
     return out
 
 
@@ -330,13 +397,116 @@ def _filter_top_five_unless_accuracy_above_80(
     results: List[HybridSearchResultItem],
 ) -> List[HybridSearchResultItem]:
     """
-    Top-5 cap, unless we already have ≥5 results scoring ≥0.80 — in which case
-    return all ≥0.80 matches (lets a broad category query surface a full shelf).
+    Legacy 0.80-gated top-5 cap. Kept as a thin shim over the new
+    `_filter_with_guards` so legacy call sites keep working during the
+    guard rollout. Defaults to lenient mode with empty query tokens.
     """
-    above_80 = [r for r in results if r.semantic_score >= 0.80]
-    if len(above_80) >= 5:
-        return above_80
-    return results[:5]
+    return _filter_with_guards(results, query_text="", lenient=True)
+
+
+def _filter_with_guards(
+    results: List[HybridSearchResultItem],
+    query_text: str = "",
+    lenient: bool = True,
+) -> List[HybridSearchResultItem]:
+    """
+    Three-stage post-rerank guard applied to the top-N candidates.
+
+    Stage A — shelf behavior
+        If ≥5 candidates score ≥ reranker_strong_confidence (0.70), return
+        all candidates up to settings.reranker_final_k.
+
+    Stage B — score-gap + token-overlap demote (lenient by default)
+        For any candidate whose rerank-score gap to #1 is below
+        `reranker_score_gap_threshold` (0.15) AND whose query/candidate
+        token overlap is below `reranker_token_overlap_min` (1), demote
+        to the end of the list AND keep it only if the strict list above
+        it has fewer than `cap` items.
+
+    Stage C — min-score floor
+        Drop any candidate with score below `reranker_min_keep_score` (0.50).
+    """
+    if not results:
+        logger.debug("[GUARD FILTER] query=%r  input_count=0  output_count=0", query_text)
+        return []
+
+    from app.services.query_filter import extract_query_tokens, tokens_overlap
+
+    input_count = len(results)
+
+    # Stable sort by semantic_score (blended relevance) desc
+    sorted_results = sorted(results, key=lambda r: r.semantic_score, reverse=True)
+    top_score = sorted_results[0].semantic_score if sorted_results else 0.0
+
+    # Stage A — shelf behavior for high-confidence matches (lowered to 0.70 for blended scores)
+    strong_threshold = getattr(settings, "reranker_strong_confidence", 0.70)
+    strong = [r for r in sorted_results if r.semantic_score >= strong_threshold]
+    if len(strong) >= 5:
+        final_strong = strong[: settings.reranker_final_k]
+        logger.debug(
+            "[GUARD FILTER] query=%r  input_count=%d  output_count=%d  (strong_shelf_applied, threshold=%.2f)",
+            query_text, input_count, len(final_strong), strong_threshold,
+        )
+        return final_strong
+
+    # Extract query tokens once (cache for the loop)
+    q_tokens = extract_query_tokens(query_text) if query_text else {
+        "brands": set(), "sizes": set(), "category_terms": set()
+    }
+
+    kept: List[HybridSearchResultItem] = []
+    demoted: List[HybridSearchResultItem] = []
+
+    for r in sorted_results:
+        # Stage C — absolute floor
+        if r.semantic_score < settings.reranker_min_keep_score:
+            continue
+
+        # Stage B — gap + overlap demotion
+        gap = top_score - r.semantic_score
+        if gap < settings.reranker_score_gap_threshold:
+            name_val = r.name if isinstance(r.name, str) else ""
+            desc_val = r.description if isinstance(r.description, str) else ""
+            doc_text = f"{name_val} {desc_val}".strip()
+            overlap = tokens_overlap(q_tokens, doc_text) if q_tokens else 1
+            if overlap < settings.reranker_token_overlap_min:
+                demoted.append(r)
+                continue
+
+        kept.append(r)
+
+    # Allow up to settings.reranker_final_k results
+    cap = settings.reranker_final_k
+    final = kept[:cap]
+    # Lenient mode: backfill demoted items only if we have fewer than `cap` kept
+    if lenient and len(final) < cap:
+        for d in demoted:
+            if len(final) >= cap:
+                break
+            final.append(d)
+
+    logger.debug(
+        "[GUARD FILTER] query=%r  input_count=%d  output_count=%d  (kept=%d, demoted_backfilled=%d, cap=%d)",
+        query_text, input_count, len(final), len(kept), max(0, len(final) - len(kept)), cap,
+    )
+
+    # ── Gender exclusion: remove opposite-gender items ──────────
+    gender_filter = _get_gender_filter(query_text)
+    if gender_filter:
+        before_gender = len(final)
+        final = [
+            r for r in final
+            if not _is_gender_excluded(f"{r.name} {r.description or ''}", gender_filter)
+        ]
+        if len(final) < before_gender:
+            logger.debug(
+                "[GENDER FILTER] query=%r  filter=%s  before=%d  after=%d",
+                query_text, gender_filter, before_gender, len(final),
+            )
+
+    # Ensure output is always strictly ordered by semantic_score descending
+    final.sort(key=lambda r: r.semantic_score, reverse=True)
+    return final
 
 
 # ── Shared pipeline ────────────────────────────────────────────────
@@ -347,12 +517,24 @@ async def _run_search(
     market_id: Optional[uuid.UUID],
     filters: Optional[SearchFilters],
     db: AsyncSession,
+    listing_type: Optional[str] = None,
 ) -> tuple[List[HybridSearchResultItem], List[float]]:
     """
     Full pipeline: normalize → expand → embed (multi-query) → RRF retrieval
     → rerank → language-aware ordering. Returns (scored results, primary
     query vector for SearchAlert caching).
     """
+    from app.services.query_understanding import query_understanding_service
+
+    effective_listing_type = listing_type
+    if not effective_listing_type:
+        try:
+            intent_analysis = await query_understanding_service.analyze_query_async(query_text)
+            if intent_analysis.intent in ("product", "service"):
+                effective_listing_type = intent_analysis.intent
+        except Exception as e:
+            logger.warning(f"Query understanding skipped: {e}")
+
     normalized_query = normalize_query(query_text)
     query_script = _script_of(query_text)
 
@@ -361,14 +543,31 @@ async def _run_search(
     if settings.enable_query_expansion:
         try:
             variants = await query_expansion_service.expand_async(query_text)
+            logger.debug(
+                "[EXPANSION DEBUG] original_query=%r  expansion_variants=%s",
+                query_text, variants,
+            )
         except Exception as e:
             logger.warning(f"Query expansion skipped: {e}")
 
+    from app.services.arabic_norm import arabizi_to_arabic
+
     texts: List[str] = [normalized_query or query_text]
+    arabicized = arabizi_to_arabic(query_text)
+    if arabicized and arabicized.strip() and arabicized.lower() != query_text.lower():
+        norm_arabicized = normalize_query(arabicized)
+        if norm_arabicized and norm_arabicized not in texts:
+            texts.append(norm_arabicized)
+
     for v in variants:
         nv = normalize_query(v) or v.strip()
         if nv and nv not in texts:
             texts.append(nv)
+
+    logger.debug(
+        "[SEARCH BRANCHES] query=%r  all_text_branches=%s",
+        query_text, texts,
+    )
 
     # 2. Embed original + variants in parallel (cache-first).
     embeddings = await asyncio.gather(
@@ -388,18 +587,26 @@ async def _run_search(
         longitude=longitude,
         market_id=market_id,
         filters=filters,
+        listing_type=effective_listing_type,
     )
 
+    # Choose the most canonical search term for cross-encoder reranking:
+    # if the query was Arabizi (e.g. "7aleeb"), pass the transliterated Arabic ("حليب")
+    # so the cross-encoder compares semantic concepts rather than raw Franco-Arabic chars.
+    rerank_query = norm_arabicized if (arabicized and arabicized.strip() and arabicized.lower() != query_text.lower() and norm_arabicized) else (normalized_query or query_text)
+
     # 4. Cross-encode + language-aware ordering.
-    scored = await _rerank_and_finalize(query_text, fused, query_script)
+    scored = await _rerank_and_finalize(rerank_query, fused, query_script)
     return scored, primary_raw
 
 
 # ── POST /hybrid ────────────────────────────────────────────────
 @router.post("/hybrid", response_model=HybridSearchResponse)
+@limiter.limit("30/minute")
 async def hybrid_search(
-    request: HybridSearchRequest,
-    user: User = Depends(get_current_user),
+    request: Request,
+    search_request: HybridSearchRequest,
+    user: Optional[User] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -409,11 +616,12 @@ async def hybrid_search(
     """
     try:
         scored, primary_vec = await _run_search(
-            query_text=request.query_text,
-            latitude=request.latitude,
-            longitude=request.longitude,
-            market_id=request.market_id,
-            filters=request.filters,
+            query_text=search_request.query_text,
+            latitude=search_request.latitude,
+            longitude=search_request.longitude,
+            market_id=search_request.market_id,
+            filters=search_request.filters,
+            listing_type=search_request.listing_type,
             db=db,
         )
 
@@ -423,47 +631,72 @@ async def hybrid_search(
         # items (e.g. tea for "كرسي مريح") pass the exact tier. Proximity
         # only influences ORDERING within a tier, not whether an item is shown.
         exact = [r for r in scored if r.semantic_score >= settings.exact_tier_threshold]
-        if exact:
+        logger.debug(
+            "[HYBRID SEARCH] query=%r  total_scored=%d  exact_tier_count=%d (threshold=%.2f)",
+            search_request.query_text, len(scored), len(exact), settings.exact_tier_threshold,
+        )
+
+        if len(exact) >= 3:
+            guarded_exact = _filter_with_guards(exact, query_text=search_request.query_text)
+            logger.debug(
+                "[HYBRID SEARCH RETURN] query=%r  exact_returning=%d",
+                search_request.query_text, len(guarded_exact),
+            )
             return HybridSearchResponse(
                 found=True,
                 action=None,
                 search_mode="exact_matches",
-                results=_filter_top_five_unless_accuracy_above_80(exact),
+                results=guarded_exact,
             )
-
-        recommendations = [
-            r for r in scored
-            if r.semantic_score >= settings.recommendation_tier_threshold
-        ]
-        if recommendations:
-            return HybridSearchResponse(
-                found=True,
-                action="recommendations",
-                search_mode="recommendations",
-                results=_filter_top_five_unless_accuracy_above_80(recommendations),
+        else:
+            # Not enough exact matches (< 3) — include recommendation tier items as well
+            recommendations = [
+                r for r in scored
+                if r.semantic_score >= settings.recommendation_tier_threshold
+            ]
+            logger.debug(
+                "[HYBRID SEARCH] query=%r  recommendations_tier_count=%d (threshold=%.2f)",
+                search_request.query_text, len(recommendations), settings.recommendation_tier_threshold,
             )
+            if recommendations:
+                guarded_recs = _filter_with_guards(recommendations, query_text=search_request.query_text)
+                return HybridSearchResponse(
+                    found=True,
+                    action=None if exact else "recommendations",
+                    search_mode="exact_matches" if exact else "recommendations",
+                    results=guarded_recs,
+                )
+            elif exact:
+                guarded_exact = _filter_with_guards(exact, query_text=search_request.query_text)
+                return HybridSearchResponse(
+                    found=True,
+                    action=None,
+                    search_mode="exact_matches",
+                    results=guarded_exact,
+                )
 
         # Nothing relevant — cache a SearchAlert (dedup on user_id + query_text).
-        existing_alert_stmt = select(SearchAlert).where(
-            SearchAlert.user_id == user.id,
-            func.lower(SearchAlert.query_text) == request.query_text.lower().strip(),
-        )
-        existing_alert = (await db.execute(existing_alert_stmt)).scalar_one_or_none()
-        if not existing_alert:
-            alert = SearchAlert(
-                user_id=user.id,
-                query_text=request.query_text,
-                query_vector=primary_vec,
-                latitude=request.latitude,
-                longitude=request.longitude,
-                is_active=True,
+        if user:
+            existing_alert_stmt = select(SearchAlert).where(
+                SearchAlert.user_id == user.id,
+                func.lower(SearchAlert.query_text) == search_request.query_text.lower().strip(),
             )
-            db.add(alert)
-            await db.flush()
-            logger.info(
-                f"[SEARCH ALERT ENGINE] Cached alert for user={user.id} "
-                f"term='{request.query_text}'"
-            )
+            existing_alert = (await db.execute(existing_alert_stmt)).scalar_one_or_none()
+            if not existing_alert:
+                alert = SearchAlert(
+                    user_id=user.id,
+                    query_text=search_request.query_text,
+                    query_vector=primary_vec,
+                    latitude=search_request.latitude,
+                    longitude=search_request.longitude,
+                    is_active=True,
+                )
+                db.add(alert)
+                await db.flush()
+                logger.info(
+                    f"[SEARCH ALERT ENGINE] Cached alert for user={user.id} "
+                    f"term='{search_request.query_text}'"
+                )
 
         return HybridSearchResponse(
             found=False,
@@ -504,8 +737,10 @@ async def image_search(
 
 # ── POST /double-check ──────────────────────────────────────────
 @router.post("/double-check", response_model=HybridSearchResponse)
+@limiter.limit("30/minute")
 async def double_check_search(
-    request: DoubleCheckSearchRequest,
+    request: Request,
+    search_request: DoubleCheckSearchRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -515,15 +750,15 @@ async def double_check_search(
     """
     try:
         refined_query = (
-            f"{request.original_query_text.strip()} "
-            f"{request.user_refined_details.strip()}"
+            f"{search_request.original_query_text.strip()} "
+            f"{search_request.user_refined_details.strip()}"
         )
 
         scored, _ = await _run_search(
             query_text=refined_query,
-            latitude=request.latitude,
-            longitude=request.longitude,
-            market_id=request.market_id,
+            latitude=search_request.latitude,
+            longitude=search_request.longitude,
+            market_id=search_request.market_id,
             filters=None,
             db=db,
         )
@@ -533,7 +768,7 @@ async def double_check_search(
             r for r in scored
             if r.semantic_score >= settings.recommendation_tier_threshold
         ]
-        results = _filter_top_five_unless_accuracy_above_80(scored)
+        results = _filter_with_guards(scored, query_text=refined_query)
 
         return HybridSearchResponse(
             found=len(results) > 0,

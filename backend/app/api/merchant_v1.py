@@ -52,7 +52,7 @@ from app.schemas.special_offer import (
 from app.services.embedding import embedding_service
 from app.services.indexer import IndexerService
 from app.services.alert_service import check_and_trigger_stock_alerts
-from app.es_client import get_es_client
+
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -312,8 +312,7 @@ async def toggle_stock(
     
     # Elasticsearch update
     try:
-        es_client = get_es_client()
-        indexer = IndexerService(es_client)
+        indexer = IndexerService()
         await indexer.update_stock(mi.id, data.in_stock)
     except Exception as e:
         logger.error(f"Elasticsearch stock toggle sync failed: {e}")
@@ -376,8 +375,8 @@ async def update_market_item(
         if gi.description:
             combined_text = f"{gi.name}. {gi.description}"
         # Re-generate text vector (MiniLM) and image vector (CLIP)
-        text_vec = embedding_service.encode_text_384(combined_text).tolist()
-        image_vec = embedding_service.encode_product(gi.name, gi.description).tolist()
+        text_vec = (await embedding_service.encode_text_async(combined_text)).tolist()
+        image_vec = (await embedding_service.encode_product_async(gi.name, gi.description)).tolist()
         gi.text_embedding = text_vec
         gi.image_embedding = image_vec
         embedding = np.array(image_vec)
@@ -389,8 +388,7 @@ async def update_market_item(
 
     # Elasticsearch update
     try:
-        es_client = get_es_client()
-        indexer = IndexerService(es_client)
+        indexer = IndexerService()
 
         await indexer.index_product(
             product_id=mi.id,
@@ -509,15 +507,14 @@ async def link_item(
     
     # Index in Elasticsearch
     try:
-        es_client = get_es_client()
-        indexer = IndexerService(es_client)
+        indexer = IndexerService()
         
         # Format embedding vector
         embedding = gi.image_embedding if gi.image_embedding is not None else gi.text_embedding
         if embedding is not None:
             embedding = np.array(embedding)
         else:
-            embedding = embedding_service.encode_product(gi.name, gi.description)
+            embedding = await embedding_service.encode_product_async(gi.name, gi.description)
             
         await indexer.index_product(
             product_id=mi.id,
@@ -544,52 +541,91 @@ async def link_item(
 
 
 # ── POST /items/new ─────────────────────────────────────────────
-def _classify_category(name: str, description: str | None) -> str:
-    """Heuristic categorizer parsing product name and description into the new 13 categories."""
+OFFICIAL_CATEGORIES = [
+    "Fruits & Vegetables", "Dairy & Eggs", "Meat & Poultry", "Beverages",
+    "Snacks", "Bakery", "Frozen Food", "Cleaning & Detergents",
+    "Beauty & Personal Care", "Cooking Essentials", "Mobiles & Tech",
+    "Cookware & Kitchenware", "Electronics",
+    "Beauty & Personal Care Services", "Vehicle Maintenance & Care",
+    "Home & Maintenance Services", "Education & Tutoring",
+]
+
+
+def _classify_category_heuristic(name: str, description: str | None) -> str:
+    """Heuristic categorizer parsing product name and description into official categories."""
     text = (name + " " + (description or "")).lower()
     
-    # 1. Fruits & Vegetables
+    # Services heuristic
+    if any(k in text for k in ["درس", "مدرسة", "تعليم", "توتور", "تدرس", "tutor", "school", "french", "math"]):
+        return "Education & Tutoring"
+    if any(k in text for k in ["غسيل سيار", "تلميع سيار", "صيانة سيار", "ميكانيك", "car wash", "oil change"]):
+        return "Vehicle Maintenance & Care"
+    if any(k in text for k in ["سباكة", "كهرباء منزل", "تنظيف منزل", "plumbing", "cleaning"]):
+        return "Home & Maintenance Services"
+    if any(k in text for k in ["حلاقة", "تجميل", "مساج", "علاج طبيعي", "barber", "salon"]):
+        return "Beauty & Personal Care Services"
+
+    # Products heuristic
     if any(k in text for k in ["fruit", "vegetable", "tomato", "banana", "apple", "orange", "lemon", "potato", "onion", "mint", "lettuce", "garlic", "cucumber"]):
         return "Fruits & Vegetables"
-    # 2. Dairy & Eggs
     if any(k in text for k in ["milk", "egg", "eggs", "cheese", "yogurt", "butter", "dairy", "cream"]):
         return "Dairy & Eggs"
-    # 3. Meat & Poultry
     if any(k in text for k in ["chicken", "meat", "beef", "lamb", "poultry", "turkey", "steak", "sausage"]):
         return "Meat & Poultry"
-    # 4. Beverages
     if any(k in text for k in ["tea", "coffee", "espresso", "juice", "soda", "water", "drink", "beverage", "cola", "nescafe"]):
         return "Beverages"
-    # 5. Snacks
     if any(k in text for k in ["snack", "chips", "chocolate", "biscuit", "cookie", "crisps", "nut", "nuts", "candy", "sweet"]):
         return "Snacks"
-    # 6. Bakery
     if any(k in text for k in ["bread", "bakery", "croissant", "muffin", "cake", "toast", "bun"]):
         return "Bakery"
-    # 7. Frozen Food
     if any(k in text for k in ["frozen", "ice cream", "nuggets"]):
         return "Frozen Food"
-    # 8. Cleaning & Detergents
     if any(k in text for k in ["clean", "detergent", "soap", "dishwash", "laundry", "bleach", "shampoo"]):
         return "Cleaning & Detergents"
-    # 9. Beauty & Personal Care
     if any(k in text for k in ["beauty", "personal care", "cream", "lotion", "cosmetic", "makeup", "perfume", "oil"]):
         if "essential oil" in text or "skin" in text or "face" in text or "hair" in text:
             return "Beauty & Personal Care"
-    # 10. Cooking Essentials
     if any(k in text for k in ["oil", "olive oil", "spice", "spices", "honey", "seed", "seeds", "salt", "sugar", "flour", "vinegar", "saffron", "turmeric", "cardamom", "spread", "peanut butter"]):
         return "Cooking Essentials"
-    # 11. Mobiles & Tech
     if any(k in text for k in ["phone", "mobile", "charger", "headphone", "earbuds", "cable", "screen protector"]):
         return "Mobiles & Tech"
-    # 12. Cookware & Kitchenware
     if any(k in text for k in ["pot", "pan", "cookware", "kitchenware", "plate", "spoon", "fork", "knife", "cup", "mug"]):
         return "Cookware & Kitchenware"
-    # 13. Electronics
     if any(k in text for k in ["electric", "vacuum", "oven", "tv", "refrigerator", "fridge", "microwave", "appliance"]):
         return "Electronics"
         
     return "Cooking Essentials"
+
+
+async def _classify_category(name: str, description: str | None) -> str:
+    """Classify item/service using LLMAdapter with heuristic fallback."""
+    from app.services.llm import llm_adapter
+
+    text_input = f"Name: {name}\nDescription: {description or ''}"
+    sys_prompt = (
+        "You are an expert catalog item and service categorizer. "
+        "Choose EXACTLY ONE category from this list that best fits the item/service:\n"
+        + ", ".join(OFFICIAL_CATEGORIES)
+        + "\nReturn ONLY the exact category name, with no punctuation, extra words, or markdown."
+    )
+    try:
+        res = await llm_adapter.complete_chat(
+            messages=[
+                {"role": "system", "content": sys_prompt},
+                {"role": "user", "content": text_input},
+            ],
+            temperature=0.0,
+            max_tokens=50,
+        )
+        if res:
+            clean_res = res.strip().strip('"').strip("'")
+            for cat in OFFICIAL_CATEGORIES:
+                if cat.lower() == clean_res.lower():
+                    return cat
+    except Exception as e:
+        logger.warning(f"LLM category classification failed: {e}")
+
+    return _classify_category_heuristic(name, description)
 
 
 
@@ -674,7 +710,7 @@ async def create_new_item(
             cat = cat_result.scalar_one_or_none()
         if cat is None:
             # Fallback to Heuristic NLP Classification
-            category_name = _classify_category(name, description)
+            category_name = await _classify_category(name, description)
             cat_result = await db.execute(
                 select(Category).where(Category.name == category_name)
             )
@@ -754,10 +790,9 @@ async def create_new_item(
     
     # Index in Elasticsearch (CLIP ViT-B-32 512-d space)
     try:
-        es_client = get_es_client()
-        indexer = IndexerService(es_client)
+        indexer = IndexerService()
         
-        embedding = image_vector if image_vector is not None else embedding_service.encode_product(name, description)
+        embedding = image_vector if image_vector is not None else await embedding_service.encode_product_async(name, description)
         
         await indexer.index_product(
             product_id=mi.id,
@@ -825,14 +860,6 @@ async def upload_items_csv(
             detail="CSV must include a 'name' column. Optional: barcode, description, stock_count, price.",
         )
 
-    es_client = None
-    indexer = None
-    try:
-        es_client = get_es_client()
-        indexer = IndexerService(es_client)
-    except Exception as e:
-        logger.warning(f"Elasticsearch unavailable for CSV bulk import: {e}")
-
     created_count = 0
     linked_count = 0
     es_indexed = 0
@@ -874,7 +901,7 @@ async def upload_items_csv(
 
         if gi is None:
             # Create a new catalog item with heuristic classification + text/image embeddings
-            category_name = _classify_category(row_name, description_val)
+            category_name = await _classify_category(row_name, description_val)
             cat_result = await db.execute(
                 select(Category).where(Category.name == category_name)
             )
@@ -1329,8 +1356,7 @@ async def pos_checkout(
 
     # Sync availability states to Elasticsearch index in real-time
     try:
-        es_client = get_es_client()
-        indexer = IndexerService(es_client)
+        indexer = IndexerService()
         for mi_id, in_stock in es_updates:
             await indexer.update_stock(mi_id, in_stock)
     except Exception as e:
