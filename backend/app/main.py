@@ -14,11 +14,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
+from app.rate_limit import limiter
 
 from sqlalchemy import text
 from app.config import settings
 from app.database import engine, Base
-from app.es_client import init_es_client, close_es_client, get_es_client
 from app.services.embedding import embedding_service
 from app.services.indexer import IndexerService
 from app.services.reranker import reranker_service
@@ -34,8 +36,8 @@ async def lifespan(app: FastAPI):
 
     On startup:
       1. Create PostgreSQL tables (if not exist)
-      2. Load the CLIP model into memory (~340MB)
-      3. Initialize Elasticsearch client and create index
+      2. Load the Qwen3 model into memory
+      3. Pre-warm cross-encoder reranker
     """
     # ── Startup ─────────────────────────────────────────────
     logger.info("Starting Eagle Vision API...")
@@ -45,30 +47,14 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
         await conn.run_sync(Base.metadata.create_all)
-        await conn.execute(text("ALTER TABLE markets ADD COLUMN IF NOT EXISTS is_currently_open BOOLEAN DEFAULT TRUE;"))
-        await conn.execute(text("ALTER TABLE markets ADD COLUMN IF NOT EXISTS is_manual_override BOOLEAN DEFAULT FALSE;"))
-        await conn.execute(text("ALTER TABLE markets ADD COLUMN IF NOT EXISTS override_set_at TIMESTAMP WITH TIME ZONE;"))
-        await conn.execute(text("ALTER TABLE markets ADD COLUMN IF NOT EXISTS phone VARCHAR(40);"))
-        await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name VARCHAR(255);"))
-        # Enforce unique constraint on ratings to prevent duplicate customer reviews per shop
-        await conn.execute(text("ALTER TABLE ratings DROP CONSTRAINT IF EXISTS uq_customer_market;"))
-        await conn.execute(text("ALTER TABLE ratings ADD CONSTRAINT uq_customer_market UNIQUE (customer_id, market_id);"))
-        # Ensure barcode column exists on global_items
-        await conn.execute(text("ALTER TABLE global_items ADD COLUMN IF NOT EXISTS barcode VARCHAR(100) UNIQUE;"))
     logger.info("Database tables ensured")
 
-    # 2. Load Qwen3 text encoder (and CLIP only if image search is enabled)
+    # 2. Load Qwen3 text encoder
     embedding_service.load_model()
 
-    # 2b. Pre-warm the BGE cross-encoder reranker (GPU) so the first request
-    #     doesn't pay the model-load cost. No-op if disabled by config.
+    # 2b. Pre-warm the cross-encoder reranker
     if settings.enable_reranker:
         reranker_service.load()
-
-    # 3. Initialize Elasticsearch
-    es = init_es_client()
-    indexer = IndexerService(es)
-    await indexer.ensure_index()
 
     # 4. Ensure upload directory exists
     os.makedirs(settings.upload_dir, exist_ok=True)
@@ -78,7 +64,6 @@ async def lifespan(app: FastAPI):
 
     # ── Shutdown ────────────────────────────────────────────
     logger.info("Shutting down Eagle Vision API...")
-    await close_es_client()
     await engine.dispose()
 
 
@@ -93,18 +78,21 @@ app = FastAPI(
 # ── CORS ────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex="https?://.*",
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Rate Limiting ───────────────────────────────────────────────
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── Static files (product images) ──────────────────────────────
 os.makedirs(settings.upload_dir, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.upload_dir), name="uploads")
 
 # ── Routers ─────────────────────────────────────────────────────
-# from app.api.auth import router as auth_router
 from app.api.auth_v1 import router as auth_v1_router
 from app.api.merchant_v1 import router as merchant_v1_router
 from app.api.customer_v1 import router as customer_v1_router
