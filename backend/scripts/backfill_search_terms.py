@@ -141,6 +141,7 @@ async def backfill(force: bool = False, batch_size: int = 32, qps: int = 5) -> N
                     await asyncio.sleep(min_interval - elapsed)
             except Exception as e:
                 logger.error(f"Failed on item {gi.id} ({gi.name}): {e}", exc_info=True)
+                await db.rollback()
 
         await db.commit()
         logger.info(f"Backfill complete. {updated} items enriched.")

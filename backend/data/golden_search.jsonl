@@ -1,0 +1,43 @@
+{"query": "شاي أخضر صيني", "intent": "product", "category": "tea", "query_type": "exact_ar", "relevant_ids": [], "relevant_keywords": [["شاي", "أخضر", "صيني"], ["شاي", "اخضر"]]}
+{"query": "قهوة تركية", "intent": "product", "category": "coffee", "query_type": "exact_ar", "relevant_ids": [], "relevant_keywords": [["قهوة", "تركية"]]}
+{"query": "زيت زيتون", "intent": "product", "category": "oil", "query_type": "exact_ar", "relevant_ids": [], "relevant_keywords": [["زيت", "زيتون"]]}
+{"query": "تمر عجوة", "intent": "product", "category": "dates", "query_type": "exact_ar", "relevant_ids": [], "relevant_keywords": [["تمر", "عجوة"]]}
+{"query": "حليب طازج", "intent": "product", "category": "dairy", "query_type": "exact_ar", "relevant_ids": [], "relevant_keywords": [["حليب", "طازج"]]}
+{"query": "عسل نخل", "intent": "product", "category": "honey", "query_type": "exact_ar", "relevant_ids": [], "relevant_keywords": [["عسل", "نخل"]]}
+{"query": "أرز بسمتي", "intent": "product", "category": "rice", "query_type": "exact_ar", "relevant_ids": [], "relevant_keywords": [["أرز", "بسمتي"]]}
+{"query": "معجون أسنان", "intent": "product", "category": "hygiene", "query_type": "exact_ar", "relevant_ids": [], "relevant_keywords": [["معجون", "أسنان"]]}
+{"query": "حليبب", "intent": "product", "category": "dairy", "query_type": "typo_ar", "relevant_ids": [], "relevant_keywords": [["حليب"]]}
+{"query": "شامبوه", "intent": "product", "category": "hygiene", "query_type": "typo_ar", "relevant_ids": [], "relevant_keywords": [["شامبو"]]}
+{"query": "معجون اسننان", "intent": "product", "category": "hygiene", "query_type": "typo_ar", "relevant_ids": [], "relevant_keywords": [["معجون", "أسنان"]]}
+{"query": "قهوه تريكه", "intent": "product", "category": "coffee", "query_type": "typo_ar", "relevant_ids": [], "relevant_keywords": [["قهوة", "تركية"]]}
+{"query": "زيت زيوتون", "intent": "product", "category": "oil", "query_type": "typo_ar", "relevant_ids": [], "relevant_keywords": [["زيت", "زيتون"]]}
+{"query": "شاي اخضر", "intent": "product", "category": "tea", "query_type": "typo_ar", "relevant_ids": [], "relevant_keywords": [["شاي", "أخضر"]]}
+{"query": "haleeb", "intent": "product", "category": "dairy", "query_type": "arabizi", "relevant_ids": [], "relevant_keywords": [["حليب"]]}
+{"query": "zayt zaytoun", "intent": "product", "category": "oil", "query_type": "arabizi", "relevant_ids": [], "relevant_keywords": [["زيت", "زيتون"]]}
+{"query": "kahwa", "intent": "product", "category": "coffee", "query_type": "arabizi", "relevant_ids": [], "relevant_keywords": [["قهوة"]]}
+{"query": "shai akhdar", "intent": "product", "category": "tea", "query_type": "arabizi", "relevant_ids": [], "relevant_keywords": [["شاي", "أخضر"]]}
+{"query": "tamr", "intent": "product", "category": "dates", "query_type": "arabizi", "relevant_ids": [], "relevant_keywords": [["تمر"]]}
+{"query": "ma'joon asnan", "intent": "product", "category": "hygiene", "query_type": "arabizi", "relevant_ids": [], "relevant_keywords": [["معجون", "أسنان"]]}
+{"query": "fresh milk", "intent": "product", "category": "dairy", "query_type": "exact_en", "relevant_ids": [], "relevant_keywords": [["حليب", "طازج"]]}
+{"query": "green tea", "intent": "product", "category": "tea", "query_type": "exact_en", "relevant_ids": [], "relevant_keywords": [["شاي", "أخضر"]]}
+{"query": "olive oil", "intent": "product", "category": "oil", "query_type": "exact_en", "relevant_ids": [], "relevant_keywords": [["زيت", "زيتون"]]}
+{"query": "turkish coffee", "intent": "product", "category": "coffee", "query_type": "exact_en", "relevant_ids": [], "relevant_keywords": [["قهوة", "تركية"]]}
+{"query": "dates", "intent": "product", "category": "dates", "query_type": "exact_en", "relevant_ids": [], "relevant_keywords": [["تمر"]]}
+{"query": "toothpaste", "intent": "product", "category": "hygiene", "query_type": "exact_en", "relevant_ids": [], "relevant_keywords": [["معجون", "أسنان"]]}
+{"query": "مشروبات", "intent": "category", "category": "drinks", "query_type": "category", "relevant_ids": [], "relevant_keywords": [["مشروبات"]]}
+{"query": "عناية بالبشرة", "intent": "category", "category": "skincare", "query_type": "category", "relevant_ids": [], "relevant_keywords": [["عناية", "بالبشرة"]]}
+{"query": "زيوت ومأكولات", "intent": "category", "category": "oils_food", "query_type": "category", "relevant_ids": [], "relevant_keywords": [["زيوت", "مأكولات"]]}
+{"query": "حلويات", "intent": "category", "category": "sweets", "query_type": "category", "relevant_ids": [], "relevant_keywords": [["حلويات"]]}
+{"query": "مواد تنظيف", "intent": "category", "category": "cleaning", "query_type": "category", "relevant_ids": [], "relevant_keywords": [["مواد", "تنظيف"]]}
+{"query": "المراعي", "intent": "brand", "category": "all", "query_type": "brand", "relevant_ids": [], "relevant_keywords": [["المراعي"]]}
+{"query": "ندى", "intent": "brand", "category": "all", "query_type": "brand", "relevant_ids": [], "relevant_keywords": [["ندى"]]}
+{"query": "نسكافيه", "intent": "brand", "category": "all", "query_type": "brand", "relevant_ids": [], "relevant_keywords": [["نسكافيه"]]}
+{"query": "ليبتون", "intent": "brand", "category": "all", "query_type": "brand", "relevant_ids": [], "relevant_keywords": [["ليبتون"]]}
+{"query": "سيجنال", "intent": "brand", "category": "all", "query_type": "brand", "relevant_ids": [], "relevant_keywords": [["سيجنال"]]}
+{"query": "حلاقة شعر", "intent": "service", "category": "service", "query_type": "service", "relevant_ids": [], "relevant_keywords": [["حلاقة", "شعر"]]}
+{"query": "غسيل سيارات", "intent": "service", "category": "service", "query_type": "service", "relevant_ids": [], "relevant_keywords": [["غسيل", "سيارات"]]}
+{"query": "خياطة رجالية", "intent": "service", "category": "service", "query_type": "service", "relevant_ids": [], "relevant_keywords": [["خياطة", "رجالية"]]}
+{"query": "تنظيف منازل", "intent": "service", "category": "service", "query_type": "service", "relevant_ids": [], "relevant_keywords": [["تنظيف", "منازل"]]}
+{"query": "آيفون 16", "intent": "product", "category": "electronics", "query_type": "out_of_catalog", "relevant_ids": [], "relevant_keywords": [["آيفون", "16"]]}
+{"query": "سيارة تسلا", "intent": "product", "category": "automotive", "query_type": "out_of_catalog", "relevant_ids": [], "relevant_keywords": [["سيارة", "تسلا"]]}
+{"query": "بلايستيشن 5", "intent": "product", "category": "electronics", "query_type": "out_of_catalog", "relevant_ids": [], "relevant_keywords": [["بلايستيشن", "5"]]}
