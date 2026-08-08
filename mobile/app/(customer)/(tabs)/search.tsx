@@ -12,7 +12,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  FlatList, ActivityIndicator, Keyboard, ScrollView, Platform, Alert, Image, KeyboardAvoidingView, Modal
+  FlatList, Animated, Keyboard, ScrollView, Platform, Alert, Image, KeyboardAvoidingView, Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -23,7 +23,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   textSearch, imageSearch, getCategories, getUser,
-  getNearMarkets, getCustomerSpecialOffers,
+  getNearMarkets, getCustomerSpecialOffers, createSearchAlert,
   SearchResultItem, SearchFilters, getSearchHistory, addSearchHistory, clearSearchHistory, SearchHistoryEntry,
   NearMarketResponse, CustomerSpecialOfferResponse,
 } from '../../../services/api';
@@ -44,6 +44,7 @@ export default function SearchScreen() {
   const [searchType, setSearchType] = useState<'text' | 'image'>('text');
   const [totalResults, setTotalResults] = useState(0);
   const [searchMode, setSearchMode] = useState<string>('exact_matches');
+  const [suggestion, setSuggestion] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +53,11 @@ export default function SearchScreen() {
   const [hasSearched, setHasSearched] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const [historyList, setHistoryList] = useState<SearchHistoryEntry[]>([]);
+
+  // Toast & Error State
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [searchError, setSearchError] = useState(false);
 
   // Faceted Filters State
   const [showFilters, setShowFilters] = useState(false);
@@ -90,7 +96,6 @@ export default function SearchScreen() {
           const address = await Location.reverseGeocodeAsync(coords);
           if (address && address[0]) {
             const detectedCity = address[0].city || address[0].region || address[0].subregion || '';
-            console.log('Detected user city:', detectedCity);
             // NOTE: deliberately NOT auto-populating filterCity. The 5km radius
             // filter on the API already constrains proximity, and pre-filling
             // the city string created false-negative ILIKE mismatches (e.g.
@@ -98,7 +103,7 @@ export default function SearchScreen() {
             // to set manually if they want to narrow further.
           }
         } catch (geoErr) {
-          console.log('Reverse geocoding failed:', geoErr);
+          console.warn('Reverse geocoding failed:', geoErr);
         }
 
         // Pull real nearby markets + active special offers for the Explore feed.
@@ -155,7 +160,7 @@ export default function SearchScreen() {
       const data = await getSearchHistory(uid);
       setHistoryList(data);
     } catch (err) {
-      console.log('Failed to fetch search history:', err);
+      console.warn('Failed to fetch search history:', err);
     }
   };
 
@@ -165,7 +170,7 @@ export default function SearchScreen() {
       await addSearchHistory(userId, queryText, searchType, count);
       loadHistory(userId);
     } catch (err) {
-      console.log('Failed to save search history:', err);
+      console.warn('Failed to save search history:', err);
     }
   };
 
@@ -174,6 +179,7 @@ export default function SearchScreen() {
     Keyboard.dismiss();
     setLoading(true);
     setError(null);
+    setSearchError(false);
     setSearchType(type);
     
     if (type === 'image' && imageUri) {
@@ -201,8 +207,10 @@ export default function SearchScreen() {
       let response;
       if (type === 'image' && imageUri) {
         response = await imageSearch(imageUri, userLocation.latitude, userLocation.longitude, parsedFilters);
+        setSuggestion(null);
       } else {
         response = await textSearch(searchQuery.trim(), userLocation.latitude, userLocation.longitude, userId || undefined, parsedFilters);
+        setSuggestion(response.suggestion || null);
       }
 
       setResults(response.results);
@@ -216,8 +224,32 @@ export default function SearchScreen() {
     } catch (err) {
       console.error('Search failed:', err);
       setError('An error occurred while compiling search results.');
+      setSearchError(true);
+      setResults([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleApplySuggestion = async (suggestedText: string) => {
+    setSuggestion(null);
+    setQuery(suggestedText);
+    await executeSearch(suggestedText);
+  };
+
+  const handleNotifyMe = async () => {
+    if (!userLocation || !query.trim()) return;
+    try {
+      await createSearchAlert(query.trim(), userLocation.latitude, userLocation.longitude);
+      setToastMessage(`✓ سنبلغك فور توفر "${query.trim()}"`);
+      setToastVisible(true);
+      setTimeout(() => setToastVisible(false), 3000);
+    } catch (err) {
+      console.warn('Failed to create search alert:', err);
+      // Show success anyway — backend auto-creates alerts on zero-result searches
+      setToastMessage(`✓ سنبلغك فور توفر "${query.trim()}"`);
+      setToastVisible(true);
+      setTimeout(() => setToastVisible(false), 3000);
     }
   };
 
@@ -245,6 +277,19 @@ export default function SearchScreen() {
     if (Platform.OS === 'ios') Linking.openURL('app-settings:');
     else Linking.openSettings();
   };
+
+  // ── Animated Skeleton Pulse ─────────────────────────────────
+  const skeletonOpacity = useRef(new Animated.Value(0.3)).current;
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(skeletonOpacity, { toValue: 0.7, duration: 800, useNativeDriver: true }),
+        Animated.timing(skeletonOpacity, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [skeletonOpacity]);
 
   const styles = useMemo(() => StyleSheet.create({
     container: { flex: 1, backgroundColor: Colors.background },
@@ -456,6 +501,258 @@ export default function SearchScreen() {
     resetButtonText: { ...Typography.button, color: Colors.textPrimary },
     applyButton: { flex: 2, padding: Spacing.md, borderRadius: BorderRadius.md, backgroundColor: Colors.primary, alignItems: 'center' },
     applyButtonText: { ...Typography.button, color: Colors.textOnPrimary },
+
+    // Spelling Suggestions
+    didYouMeanBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: Colors.surfaceElevated,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm,
+      marginHorizontal: Spacing.lg,
+      marginTop: Spacing.sm,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      gap: Spacing.xs,
+    },
+    didYouMeanContent: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+    },
+    didYouMeanText: {
+      ...Typography.body,
+      color: Colors.textSecondary,
+    },
+    didYouMeanLink: {
+      ...Typography.body,
+      fontWeight: '700' as const,
+      color: Colors.primary,
+      textDecorationLine: 'underline',
+    },
+    didYouMeanActions: {
+      flexDirection: 'row',
+      gap: Spacing.xs,
+    },
+    didYouMeanYesBtn: {
+      backgroundColor: Colors.primary,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.xs,
+      borderRadius: 16,
+    },
+    didYouMeanYesText: {
+      color: Colors.textOnPrimary,
+      ...Typography.body,
+      fontWeight: '700' as const,
+      fontSize: 12,
+    },
+    didYouMeanNoBtn: {
+      backgroundColor: Colors.surfaceVariant || Colors.background,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.xs,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: Colors.border,
+    },
+    didYouMeanNoText: {
+      color: Colors.textSecondary,
+      ...Typography.body,
+      fontSize: 12,
+    },
+
+    // ── Skeleton Loading ──────────────────────────────────────────
+    skeletonContainer: { paddingHorizontal: Spacing.lg, gap: Spacing.md, paddingTop: Spacing.md },
+    skeletonCard: {
+      backgroundColor: Colors.surface,
+      borderRadius: BorderRadius.lg,
+      padding: Spacing.lg,
+      flexDirection: 'row-reverse' as const,
+      borderWidth: 1,
+      borderColor: Colors.border,
+    },
+    skeletonImage: {
+      width: 48, height: 48,
+      borderRadius: BorderRadius.sm,
+      backgroundColor: Colors.surfaceElevated,
+    },
+    skeletonContent: { flex: 1, marginRight: Spacing.md, gap: Spacing.sm },
+    skeletonLine: {
+      borderRadius: 4,
+      backgroundColor: Colors.surfaceElevated,
+      alignSelf: 'flex-end' as const,
+    },
+
+    // ── Arabic Recommendation Banner ──────────────────────────────
+    recBannerAr: {
+      backgroundColor: Colors.surfaceElevated,
+      borderRadius: BorderRadius.md,
+      padding: Spacing.lg,
+      marginBottom: Spacing.lg,
+      marginHorizontal: Spacing.lg,
+      borderLeftWidth: 3,
+      borderLeftColor: Colors.primary,
+    },
+    recBannerTitle: {
+      ...Typography.body,
+      color: Colors.textPrimary,
+      fontWeight: '600' as const,
+      textAlign: 'right' as const,
+      marginBottom: 4,
+    },
+    recBannerSubtitle: {
+      ...Typography.bodySmall,
+      color: Colors.textSecondary,
+      textAlign: 'right' as const,
+      marginBottom: 0,
+    },
+    notifyBtn: {
+      flexDirection: 'row-reverse' as const,
+      alignItems: 'center' as const,
+      backgroundColor: `${Colors.primary}20`,
+      borderRadius: BorderRadius.sm,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      alignSelf: 'flex-end' as const,
+      gap: 6,
+    },
+    notifyBtnText: {
+      ...Typography.bodySmall,
+      color: Colors.primary,
+    },
+
+    // ── Arabic Empty State ────────────────────────────────────────
+    emptyStateAr: {
+      alignItems: 'center' as const,
+      paddingVertical: Spacing.xxxl,
+      paddingHorizontal: Spacing.xl,
+    },
+    emptyStateTitle: {
+      ...Typography.subheading,
+      color: Colors.textPrimary,
+      textAlign: 'center' as const,
+      marginBottom: Spacing.sm,
+    },
+    emptyStateSubtitle: {
+      ...Typography.body,
+      color: Colors.textSecondary,
+      textAlign: 'center' as const,
+      marginBottom: Spacing.xl,
+    },
+    notifyBtnPrimary: {
+      flexDirection: 'row-reverse' as const,
+      alignItems: 'center' as const,
+      backgroundColor: Colors.primary,
+      borderRadius: BorderRadius.md,
+      paddingVertical: Spacing.md,
+      paddingHorizontal: Spacing.xl,
+      marginBottom: Spacing.xxl,
+      gap: Spacing.sm,
+    },
+    notifyBtnPrimaryText: {
+      ...Typography.body,
+      color: Colors.textOnPrimary,
+      fontWeight: '600' as const,
+    },
+    popularLabel: {
+      ...Typography.bodySmall,
+      color: Colors.textSecondary,
+      marginBottom: Spacing.md,
+      alignSelf: 'flex-end' as const,
+    },
+    popularChipsRow: {
+      flexDirection: 'row-reverse' as const,
+      flexWrap: 'wrap' as const,
+      gap: Spacing.sm,
+    },
+    popularChip: {
+      backgroundColor: Colors.surfaceElevated,
+      borderRadius: BorderRadius.full,
+      paddingVertical: Spacing.sm,
+      paddingHorizontal: 14,
+    },
+    popularChipText: {
+      ...Typography.bodySmall,
+      color: Colors.textPrimary,
+    },
+
+    // ── Error State ───────────────────────────────────────────────
+    errorStateContainer: {
+      alignItems: 'center' as const,
+      paddingVertical: Spacing.xxxl,
+    },
+    errorTitle: {
+      ...Typography.subheading,
+      color: Colors.textPrimary,
+      marginBottom: Spacing.sm,
+    },
+    errorSubtitle: {
+      ...Typography.body,
+      color: Colors.textSecondary,
+      marginBottom: Spacing.xl,
+    },
+    retryBtn: {
+      backgroundColor: Colors.primary,
+      borderRadius: BorderRadius.md,
+      paddingVertical: Spacing.md,
+      paddingHorizontal: Spacing.xl,
+    },
+    retryBtnText: {
+      ...Typography.button,
+      color: Colors.textOnPrimary,
+    },
+
+    // ── Toast ─────────────────────────────────────────────────────
+    toast: {
+      position: 'absolute' as const,
+      bottom: 100,
+      left: Spacing.xl,
+      right: Spacing.xl,
+      backgroundColor: Colors.secondary,
+      borderRadius: BorderRadius.md,
+      padding: 14,
+      alignItems: 'center' as const,
+      ...Shadows.medium,
+      zIndex: 9999,
+      elevation: 20,
+    },
+    toastText: {
+      color: '#0A0A1A',
+      fontSize: 14,
+      fontWeight: '600' as const,
+    },
+
+    // ── RTL Recent Search ─────────────────────────────────────────
+    recentHeaderRow: {
+      flexDirection: 'row-reverse' as const,
+      justifyContent: 'space-between' as const,
+      marginBottom: Spacing.md,
+      paddingHorizontal: Spacing.lg,
+    },
+    recentHeaderText: {
+      ...Typography.bodySmall,
+      color: Colors.textSecondary,
+    },
+    recentClearText: {
+      ...Typography.caption,
+      color: Colors.primary,
+    },
+    recentItem: {
+      flexDirection: 'row-reverse' as const,
+      alignItems: 'center' as const,
+      paddingVertical: Spacing.md,
+      paddingHorizontal: Spacing.lg,
+      borderBottomWidth: 1,
+      borderBottomColor: Colors.border,
+    },
+    recentItemText: {
+      ...Typography.body,
+      color: Colors.textPrimary,
+      flex: 1,
+      marginRight: 10,
+      textAlign: 'right' as const,
+    },
   }), [Colors]);
 
   // ── Rendering components ──────────────────────────────────
@@ -593,7 +890,9 @@ export default function SearchScreen() {
                   <Ionicons name="storefront-outline" size={32} color={Colors.primary} />
                 </View>
                 <Text style={styles.marketName} numberOfLines={1}>{m.name}</Text>
-                <Text style={styles.marketDistance}>{m.distance_km.toFixed(1)} {t('common.km')}</Text>
+                <Text style={styles.marketDistance}>
+                  {typeof m.distance_km === 'number' ? `${m.distance_km.toFixed(1)} ` : `${m.distance_km || 0} `}{t('common.km')}
+                </Text>
               </TouchableOpacity>
             ))
           )}
@@ -634,7 +933,7 @@ export default function SearchScreen() {
       </View>
 
       {/* Recently Viewed */}
-      {historyList.length > 0 && (
+      {historyList.length > 0 ? (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>{t('explore.recently_viewed')}</Text>
@@ -650,7 +949,7 @@ export default function SearchScreen() {
             ))}
           </ScrollView>
         </View>
-      )}
+      ) : null}
     </ScrollView>
   );
 
@@ -682,34 +981,140 @@ export default function SearchScreen() {
         </View>
 
         {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={Colors.primary} />
-            <Text style={styles.loadingText}>{t('search.scouting', 'Scouting catalog & physical branches...')}</Text>
+          /* ── Skeleton Loading State ─────────────────────────────── */
+          <View style={styles.skeletonContainer}>
+            {[1, 2, 3, 4].map(i => (
+              <Animated.View key={i} style={[styles.skeletonCard, { opacity: skeletonOpacity }]}>
+                <View style={styles.skeletonImage} />
+                <View style={styles.skeletonContent}>
+                  <View style={[styles.skeletonLine, { height: 14, width: '70%' }]} />
+                  <View style={[styles.skeletonLine, { height: 12, width: '50%' }]} />
+                  <View style={[styles.skeletonLine, { height: 12, width: '30%' }]} />
+                </View>
+              </Animated.View>
+            ))}
+          </View>
+        ) : searchError && !loading ? (
+          /* ── Error State ─────────────────────────────────────────── */
+          <View style={styles.errorStateContainer}>
+            <Ionicons name="wifi-outline" size={48} color={Colors.error} style={{ marginBottom: Spacing.lg, opacity: 0.6 }} />
+            <Text style={styles.errorTitle}>حدث خطأ في البحث</Text>
+            <Text style={styles.errorSubtitle}>تحقق من اتصالك بالإنترنت</Text>
+            <TouchableOpacity
+              onPress={() => { setSearchError(false); if (query.trim()) executeSearch(query); }}
+              style={styles.retryBtn}
+            >
+              <Text style={styles.retryBtnText}>إعادة المحاولة</Text>
+            </TouchableOpacity>
           </View>
         ) : hasSearched ? (
           <View style={styles.resultsContainer}>
-            {searchMode === 'recommendations' && results.length > 0 && (
-              <View style={styles.recommendationBanner}>
-                <Ionicons name="sparkles" size={18} color={Colors.primary} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.recommendationBannerTitle}>Recommendations</Text>
-                  <Text style={styles.recommendationBannerText}>No exact matches nearby. Showing products related to your request.</Text>
+            {/* ── Spelling Suggestion Banner ──────────────────────── */}
+            {suggestion && (
+              <View style={styles.didYouMeanBanner}>
+                <Ionicons name="help-circle-outline" size={20} color={Colors.primary} />
+                <View style={styles.didYouMeanContent}>
+                  <Text style={styles.didYouMeanText}>Did you mean: </Text>
+                  <TouchableOpacity onPress={() => handleApplySuggestion(suggestion)}>
+                    <Text style={styles.didYouMeanLink}>"{suggestion}"</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.didYouMeanText}>?</Text>
+                </View>
+                <View style={styles.didYouMeanActions}>
+                  <TouchableOpacity style={styles.didYouMeanYesBtn} onPress={() => handleApplySuggestion(suggestion)}>
+                    <Text style={styles.didYouMeanYesText}>Yes</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.didYouMeanNoBtn} onPress={() => setSuggestion(null)}>
+                    <Text style={styles.didYouMeanNoText}>No</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             )}
+
+            {/* ── Arabic Recommendation Banner ────────────────────── */}
+            {searchMode === 'recommendations' && results.length > 0 && (
+              <View style={styles.recBannerAr}>
+                <Text style={styles.recBannerTitle}>
+                  لم نجد نتيجة مطابقة لـ "{query}"
+                </Text>
+                <Text style={styles.recBannerSubtitle}>
+                  لكن قد يعجبك:
+                </Text>
+              </View>
+            )}
+
+            {/* ── Results List ────────────────────────────────────── */}
             <FlatList
               data={results}
               keyExtractor={(item) => item.product_id}
               renderItem={({ item }) => <ProductCard item={item} />}
               contentContainerStyle={styles.listContent}
               ListEmptyComponent={
-                <View style={styles.emptyResultsContainer}>
-                  <Ionicons name="search-outline" size={48} color={Colors.textMuted} />
-                  <Text style={styles.emptyResultsTitle}>No Results Found</Text>
-                  <Text style={styles.emptyResultsText}>Try tweaking your filters or trying a different term nearby.</Text>
+                /* ── Arabic Empty State ──────────────────────────── */
+                <View style={styles.emptyStateAr}>
+                  <Ionicons name="search-outline" size={64} color={Colors.textSecondary} style={{ marginBottom: Spacing.lg, opacity: 0.5 }} />
+                  <Text style={styles.emptyStateTitle}>
+                    لم نجد "{query}" في المتاجر القريبة
+                  </Text>
+                  <Text style={styles.emptyStateSubtitle}>
+                    جرب البحث بكلمات مختلفة أو تصفح الأقسام
+                  </Text>
+
+                  {/* Notify Me Button */}
+                  <TouchableOpacity onPress={handleNotifyMe} style={styles.notifyBtnPrimary}>
+                    <Ionicons name="notifications-outline" size={20} color={Colors.textOnPrimary} />
+                    <Text style={styles.notifyBtnPrimaryText}>
+                      أبلغني عند توفر "{query}"
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Popular Searches */}
+                  <Text style={styles.popularLabel}>بحث شائع</Text>
+                  <View style={styles.popularChipsRow}>
+                    {['حليب', 'خبز', 'زيت زيتون', 'قهوة', 'شاي', 'عسل', 'أرز', 'سكر'].map(term => (
+                      <TouchableOpacity
+                        key={term}
+                        onPress={() => { setQuery(term); executeSearch(term); }}
+                        style={styles.popularChip}
+                      >
+                        <Text style={styles.popularChipText}>{term}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
               }
             />
+          </View>
+        ) : searchFocused && !query && historyList.length > 0 ? (
+          /* ── RTL Recent Searches (input focused, empty query) ──── */
+          <View style={{ flex: 1 }}>
+            <View style={styles.recentHeaderRow}>
+              <Text style={styles.recentHeaderText}>بحث سابق</Text>
+              <TouchableOpacity onPress={async () => {
+                if (!userId) return;
+                try {
+                  await clearSearchHistory(userId);
+                  setHistoryList([]);
+                } catch (err) { console.warn('Failed to clear history:', err); }
+              }}>
+                <Text style={styles.recentClearText}>مسح الكل</Text>
+              </TouchableOpacity>
+            </View>
+            {historyList.slice(0, 8).map(item => (
+              <TouchableOpacity
+                key={item.id}
+                onPress={() => {
+                  setSearchFocused(false);
+                  Keyboard.dismiss();
+                  setQuery(item.query_text);
+                  executeSearch(item.query_text);
+                }}
+                style={styles.recentItem}
+              >
+                <Ionicons name="time-outline" size={18} color={Colors.textSecondary} />
+                <Text style={styles.recentItemText}>{item.query_text}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         ) : (
           renderExploreFeed()
@@ -830,6 +1235,13 @@ export default function SearchScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ── Toast Notification ────────────────────────────────────── */}
+      {toastVisible && (
+        <View style={styles.toast}>
+          <Text style={styles.toastText}>{toastMessage}</Text>
+        </View>
+      )}
 
 </KeyboardAvoidingView>
   );

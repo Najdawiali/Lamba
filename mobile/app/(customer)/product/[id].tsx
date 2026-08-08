@@ -257,27 +257,27 @@ export default function ProductDetailScreen() {
           ) : (
             <Text style={styles.priceFree}>{t('product.price_request')}</Text>
           )}
-          {!!product.category && (
+          {Boolean(product.category) ? (
             <View style={styles.categoryBadge}>
               <Text style={styles.categoryText}>{product.category}</Text>
             </View>
-          )}
+          ) : null}
         </View>
 
         {/* Description */}
-        {!!product.description && (
+        {Boolean(product.description) ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>{t('product.description', 'Description')}</Text>
             <Text style={styles.description} numberOfLines={descExpanded ? undefined : 3}>
               {product.description}
             </Text>
-            {product.description.length > 100 && (
+            {Boolean(product.description && product.description.length > 100) ? (
               <TouchableOpacity onPress={() => setDescExpanded(!descExpanded)}>
                 <Text style={styles.readMoreText}>{descExpanded ? 'Show less' : t('product.read_more', 'Read more')}</Text>
               </TouchableOpacity>
-            )}
+            ) : null}
           </View>
-        )}
+        ) : null}
 
         {/* Shop Info Card */}
         <View style={styles.section}>
@@ -301,7 +301,7 @@ export default function ProductDetailScreen() {
               <Ionicons name={showHours ? 'chevron-up-outline' : 'chevron-down-outline'} size={18} color={Colors.textMuted} />
             </TouchableOpacity>
 
-            {showHours && (
+            {Boolean(showHours) ? (
               <View style={styles.collapsibleContent}>
                 {product.shop.operating_hours ? (
                   Object.entries(product.shop.operating_hours).map(([day, hours]) => (
@@ -314,7 +314,7 @@ export default function ProductDetailScreen() {
                   <Text style={styles.emptyDetailsText}>{t('product.no_schedule', 'No schedule provided')}</Text>
                 )}
               </View>
-            )}
+            ) : null}
 
           </View>
         </View>

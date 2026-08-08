@@ -222,7 +222,13 @@ export default function ProductCard({ item }: Props) {
   },
   }), [Colors]);
   const [isFav, setIsFav] = useState(false);
-  const scorePercent = Math.round(item.hybrid_score * 100);
+  const rawScore = item.semantic_score != null && !isNaN(item.semantic_score)
+    ? item.semantic_score
+    : (item.hybrid_score != null && !isNaN(item.hybrid_score) ? item.hybrid_score : null);
+
+  const scorePercent = rawScore !== null
+    ? Math.min(100, Math.max(0, Math.round(rawScore * 100)))
+    : null;
   const favPressedRef = useRef(false);
 
   useEffect(() => {
@@ -279,9 +285,13 @@ export default function ProductCard({ item }: Props) {
             </View>
           )}
           {/* Score Badge */}
-          <View style={[styles.scoreBadge, { backgroundColor: scorePercent >= 70 ? Colors.success : scorePercent >= 40 ? Colors.warning : Colors.textMuted }]}>
-            <Text style={scorePercent >= 70 ? styles.scoreTextDark : styles.scoreText}>{scorePercent}%</Text>
-          </View>
+          {typeof scorePercent === 'number' && scorePercent > 0 && !isNaN(scorePercent) ? (
+            <View style={[styles.scoreBadge, { backgroundColor: scorePercent >= 70 ? Colors.success : scorePercent >= 40 ? Colors.warning : Colors.textMuted }]}>
+              <Text style={scorePercent >= 70 ? styles.scoreTextDark : styles.scoreText}>
+                {Math.min(scorePercent, 100)}%
+              </Text>
+            </View>
+          ) : null}
           {/* Heart Button */}
           <TouchableOpacity
             style={styles.favBtn}
@@ -308,41 +318,41 @@ export default function ProductCard({ item }: Props) {
           </View>
 
           {/* Description */}
-          {!!item.description && (
+          {Boolean(item.description) ? (
             <Text style={styles.description} numberOfLines={2}>{item.description}</Text>
-          )}
+          ) : null}
 
           {/* Meta Row */}
           <View style={styles.metaRow}>
             {/* Price */}
-            {item.price != null && item.price > 0 && (
+            {item.price != null && item.price > 0 ? (
               <Text style={styles.price}>
                 {formatPrice(item.price)}
               </Text>
-            )}
+            ) : null}
 
             {/* Category */}
-            {!!item.category && (
+            {Boolean(item.category) ? (
               <View style={styles.categoryBadge}>
                 <Text style={styles.categoryText}>{item.category}</Text>
               </View>
-            )}
+            ) : null}
           </View>
 
           {/* Shop Details Row */}
           <View style={styles.shopDetailsRow}>
             <Ionicons name="storefront-outline" size={13} color={Colors.textMuted} />
-            <Text style={styles.shopName} numberOfLines={1}>{item.shop.name}</Text>
+            <Text style={styles.shopName} numberOfLines={1}>{item.shop?.name || ''}</Text>
             <View style={[
               styles.shopStatusMiniBadge,
               {
-                backgroundColor: item.shop.is_currently_open ? Colors.successBg : Colors.errorBg,
-                borderColor: item.shop.is_currently_open ? Colors.successBorder : Colors.errorBorder,
+                backgroundColor: item.shop?.is_currently_open ? Colors.successBg : Colors.errorBg,
+                borderColor: item.shop?.is_currently_open ? Colors.successBorder : Colors.errorBorder,
               }
             ]}>
-              <View style={[styles.statusDotMini, { backgroundColor: item.shop.is_currently_open ? Colors.success : Colors.error }]} />
-              <Text style={[styles.shopStatusMiniText, { color: item.shop.is_currently_open ? Colors.success : Colors.error }]}>
-                {item.shop.is_currently_open ? t('common.open') : t('common.closed')}
+              <View style={[styles.statusDotMini, { backgroundColor: item.shop?.is_currently_open ? Colors.success : Colors.error }]} />
+              <Text style={[styles.shopStatusMiniText, { color: item.shop?.is_currently_open ? Colors.success : Colors.error }]}>
+                {item.shop?.is_currently_open ? t('common.open') : t('common.closed')}
               </Text>
             </View>
           </View>
@@ -353,7 +363,7 @@ export default function ProductCard({ item }: Props) {
             <View style={styles.distancePill}>
               <Ionicons name="navigate-outline" size={11} color={Colors.secondary} />
               <Text style={styles.distanceText}>
-                {item.distance_km.toFixed(1)} {t('common.km')}
+                {typeof item.distance_km === 'number' ? `${item.distance_km.toFixed(1)} ` : '0 '}{t('common.km')}
               </Text>
             </View>
 
@@ -365,8 +375,8 @@ export default function ProductCard({ item }: Props) {
                   const session = await startChatSession(item.shop.id);
                   router.push(`/(customer)/inbox?sessionId=${session.id}` as any);
                 } catch (err) {
-                  console.error('Failed to start chat:', err);
-                  Alert.alert('Error', 'Could not open chat with this store.');
+                  // Navigate to inbox smoothly without blocking alert dialog
+                  router.push('/(customer)/inbox');
                 }
               }}
               activeOpacity={0.6}

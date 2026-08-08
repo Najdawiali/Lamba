@@ -27,8 +27,6 @@ export default function ShopCatalogScreen() {
 
   useEffect(() => {
     (async () => {
-      // Guard: a /market/<id>/items call with an undefined id hits the backend
-      // and produces a 422 (uuid cast) error — fail gracefully instead.
       if (!id) {
         setError(t('common.error', 'Failed to load catalog'));
         setLoading(false);
@@ -38,7 +36,7 @@ export default function ShopCatalogScreen() {
         setLoading(true);
         const data = await getMarketCatalog(id);
         setCatalog(data);
-        const categories = Object.keys(data);
+        const categories = Object.keys(data || {});
         if (categories.length > 0) {
           setActiveCategory(categories[0]);
         }
@@ -105,7 +103,7 @@ export default function ShopCatalogScreen() {
     return (
       <View style={styles.loadingContainer}>
         <Ionicons name="alert-circle-outline" size={48} color={Colors.error} />
-        <Text style={styles.errorText}>{error}</Text>
+        <Text style={styles.errorText}>{error || ''}</Text>
         <TouchableOpacity style={styles.retryBtn} onPress={() => router.back()}>
           <Text style={styles.retryBtnText}>{t('common.back', 'Go Back')}</Text>
         </TouchableOpacity>
@@ -124,7 +122,7 @@ export default function ShopCatalogScreen() {
           <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('product.view_full_shop', 'Shop Catalog')}</Text>
-        <View style={{ width: 40 }} /> {/* Spacer */}
+        <View style={{ width: 40 }} />
       </View>
 
       {categories.length > 0 ? (
@@ -148,7 +146,7 @@ export default function ShopCatalogScreen() {
 
           {/* Product Grid */}
           <ScrollView contentContainerStyle={styles.gridContainer} showsVerticalScrollIndicator={false}>
-            {activeItems.map((item) => (
+            {(activeItems || []).map((item) => (
               <TouchableOpacity
                 key={item.market_item_id}
                 style={styles.cardContainer}
@@ -163,31 +161,31 @@ export default function ShopCatalogScreen() {
                       <Ionicons name="cube-outline" size={32} color={Colors.textMuted} />
                     </View>
                   )}
-                  {!item.in_stock && (
+                  {!item.in_stock ? (
                     <View style={styles.outOfStockOverlay}>
                       <Text style={styles.outOfStockText}>{t('product.out_of_stock', 'Out of Stock')}</Text>
                     </View>
-                  )}
+                  ) : null}
                 </View>
 
-<View style={styles.cardInfo}>
+                <View style={styles.cardInfo}>
                   <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
                   <View style={styles.priceRow}>
                     {item.price != null && item.price > 0 ? (
                       <Text style={styles.priceText}>
-                        {item.price.toFixed(2)} <Text style={styles.currencyText}>{getCurrencyCode()}</Text>
+                        {`${item.price.toFixed(2)} ${getCurrencyCode()}`}
                       </Text>
                     ) : (
                       <Text style={styles.priceFree}>{t('product.price_request', 'Price on request')}</Text>
                     )}
-                    {item.in_stock && (
+                    {Boolean(item.in_stock) ? (
                       <TouchableOpacity
                         style={styles.quickAddBtn}
                         onPress={() => router.push(`/(customer)/product/${item.market_item_id}`)}
                       >
                         <Ionicons name="add" size={16} color={Colors.textOnPrimary} />
                       </TouchableOpacity>
-                    )}
+                    ) : null}
                   </View>
                 </View>
               </TouchableOpacity>
@@ -201,6 +199,6 @@ export default function ShopCatalogScreen() {
           <Text style={styles.emptySubtitle}>{t('common.no_items_desc', 'This shop has not listed any items yet.')}</Text>
         </View>
       )}
-</SafeAreaView>
+    </SafeAreaView>
   );
 }
