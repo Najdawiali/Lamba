@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Map Screen — Google Maps with nearby shop markers and interactive carousel.
  */
 
@@ -119,13 +119,17 @@ export default function MapScreen() {
 
       if (mapRef.current && nearbyMarkets.length > 0) {
         setTimeout(() => {
-          const deltas = regionDeltasForRadius(MAP_RADIUS_KM, nearbyMarkets[0].latitude);
-          mapRef.current?.animateToRegion({
-            latitude: nearbyMarkets[0].latitude,
-            longitude: nearbyMarkets[0].longitude,
-            latitudeDelta: deltas.latitudeDelta,
-            longitudeDelta: deltas.longitudeDelta,
-          }, 500);
+          const targetLat = Number(nearbyMarkets[0].latitude);
+          const targetLng = Number(nearbyMarkets[0].longitude);
+          if (!isNaN(targetLat) && !isNaN(targetLng) && targetLat !== 0) {
+            const deltas = regionDeltasForRadius(MAP_RADIUS_KM, targetLat);
+            mapRef.current?.animateToRegion({
+              latitude: targetLat,
+              longitude: targetLng,
+              latitudeDelta: deltas.latitudeDelta,
+              longitudeDelta: deltas.longitudeDelta,
+            }, 500);
+          }
         }, 500);
       } else if (mapRef.current) {
         setTimeout(() => {
@@ -203,15 +207,31 @@ export default function MapScreen() {
         showsUserLocation
         showsMyLocationButton={false}
         customMapStyle={mapStyle}
+        initialRegion={userLocation ? {
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude,
+          latitudeDelta: 0.05,
+          longitudeDelta: 0.05,
+        } : {
+          latitude: 32.0392,
+          longitude: 35.7272,
+          latitudeDelta: 0.1,
+          longitudeDelta: 0.1,
+        }}
+        onMapReady={() => {}}
       >
         {markets.map((market, index) => {
           const isSelected = focusedIndex === index;
+          const lat = Number(market.latitude);
+          const lng = Number(market.longitude);
+          if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) return null;
           return (
             <Marker
               key={market.id}
-              coordinate={{ latitude: market.latitude, longitude: market.longitude }}
+              coordinate={{ latitude: lat, longitude: lng }}
               onPress={() => handleMarkerPress(index)}
               zIndex={isSelected ? 10 : 1}
+              tracksViewChanges={true}
             >
               <View style={[styles.markerPin, isSelected && styles.markerPinSelected]}>
                 <Ionicons name="storefront" size={20} color={isSelected ? Colors.textOnPrimary : Colors.primary} />
@@ -226,11 +246,11 @@ export default function MapScreen() {
         <View style={styles.titleContainer}>
           <Ionicons name="map" size={18} color={Colors.primary} />
           <Text style={styles.title}>{t('map.nearby_markets', 'Nearby Markets')}</Text>
-          {markets.length > 0 && (
+          {markets.length > 0 ? (
             <View style={styles.countBadge}>
               <Text style={styles.countText}>{markets.length}</Text>
             </View>
-          )}
+          ) : null}
         </View>
       </SafeAreaView>
 
@@ -250,13 +270,13 @@ export default function MapScreen() {
         <Ionicons name="locate" size={22} color={Colors.primary} />
       </TouchableOpacity>
 
-      {loading && (
+      {loading ? (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
-      )}
+      ) : null}
 
-      {!loading && markets.length === 0 && (
+      {!loading && markets.length === 0 ? (
         <View style={styles.emptyOverlay}>
           <View style={styles.emptyCard}>
             <Ionicons name="storefront-outline" size={40} color={Colors.textMuted} />
@@ -264,9 +284,9 @@ export default function MapScreen() {
             <Text style={styles.emptyDesc}>{t('map.no_markets_desc', 'Try moving the map to another area.')}</Text>
           </View>
         </View>
-      )}
+      ) : null}
 
-      {!loading && markets.length > 0 && (
+      {!loading && markets.length > 0 ? (
         <View style={styles.carouselContainer}>
           <FlatList
             ref={flatListRef}
@@ -299,14 +319,16 @@ export default function MapScreen() {
                         {item.is_currently_open ? t('common.open', 'Open') : t('common.closed', 'Closed')}
                       </Text>
                     </View>
-                    <Text style={styles.distanceText}>{item.distance_km} {t('common.km', 'km')}</Text>
+                    <Text style={styles.distanceText}>
+                      {typeof item.distance_km === 'number' ? `${item.distance_km.toFixed(1)} ${t('common.km', 'km')}` : `${item.distance_km || 0} ${t('common.km', 'km')}`}
+                    </Text>
                   </View>
                 </View>
               </TouchableOpacity>
             )}
           />
         </View>
-      )}
+      ) : null}
     </View>
   );
 

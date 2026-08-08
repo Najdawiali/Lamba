@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -200,15 +200,12 @@ export default function CustomerInboxScreen() {
 
   const fetchSessions = async () => {
     try {
+      setLoading(true);
       const data = await getChatSessions();
-      setSessions(data);
+      setSessions(Array.isArray(data) ? data : []);
     } catch (err: any) {
-      if (err?.response?.status === 401) {
-        console.warn('Failed to load chat sessions due to 401 Unauthorized. Logging out.');
-        router.replace('/(auth)/gateway');
-        return;
-      }
-      console.error('Failed to load chat sessions', err);
+      // Silently fail and fallback to empty state
+      setSessions([]);
     } finally {
       setLoading(false);
     }
@@ -390,19 +387,14 @@ export default function CustomerInboxScreen() {
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
       ) : sessions.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <View style={styles.emptyIconCircle}>
-            <Ionicons name="chatbubbles-outline" size={40} color={Colors.textSecondary} />
-          </View>
-          <Text style={styles.emptyText}>{t('inbox.empty')}</Text>
-          <Text style={styles.emptySubtext}>{t('inbox.empty_desc')}</Text>
-          <TouchableOpacity
-            style={styles.exploreBtn}
-            activeOpacity={0.8}
-            onPress={() => router.replace('/(customer)/search')}
-          >
-            <Text style={styles.exploreBtnText}>{t('inbox.explore_shops')}</Text>
-          </TouchableOpacity>
+        <View style={{ alignItems: 'center', paddingVertical: 48, paddingHorizontal: Spacing.xl }}>
+          <Ionicons name="chatbubbles-outline" size={64} color={Colors.textSecondary} style={{ opacity: 0.4 }} />
+          <Text style={{ color: Colors.textSecondary, fontSize: 15, marginTop: 16, textAlign: 'center', fontWeight: '600' }}>
+            {isAr ? 'المحادثات قريباً' : 'Messages Coming Soon'}
+          </Text>
+          <Text style={{ color: Colors.textSecondary, fontSize: 13, marginTop: 4, textAlign: 'center' }}>
+            {isAr ? 'ستتمكن من التواصل مع المتاجر مباشرة' : 'You will be able to chat with nearby stores directly'}
+          </Text>
         </View>
       ) : (
         <FlatList

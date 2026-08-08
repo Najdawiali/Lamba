@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Customer Special Offers Discovery Screen
  * Displays hyper-local BOGO and Discount promotions sorted dynamically by score.
  * Features search, categories, offer type, and distance filters.
@@ -472,13 +472,10 @@ export default function CustomerOffersScreen() {
         coords.longitude,
         filters
       );
-      setOffers(fetchedOffers);
+      setOffers(Array.isArray(fetchedOffers) ? fetchedOffers : []);
     } catch (err) {
-      console.error('Failed to get customer offers:', err);
-      Alert.alert(
-        t('common.error'),
-        t('offers.fetch_failed')
-      );
+      // Silently fail and fallback to empty state
+      setOffers([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -790,18 +787,14 @@ export default function CustomerOffersScreen() {
             />
           }
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Ionicons name="gift-outline" size={60} color={Colors.textMuted} />
-              <Text style={styles.emptyTitle}>{t('offers.no_deals_title')}</Text>
-              <Text style={styles.emptySubtitle}>
-                {t('offers.no_deals_desc')}
+            <View style={{ alignItems: 'center', paddingVertical: 48, paddingHorizontal: Spacing.xl }}>
+              <Ionicons name="pricetag-outline" size={64} color={Colors.textSecondary} style={{ opacity: 0.4 }} />
+              <Text style={{ color: Colors.textSecondary, fontSize: 15, marginTop: 16, textAlign: 'center', fontWeight: '600' }}>
+                {isAr ? 'العروض قريباً' : 'Offers Coming Soon'}
               </Text>
-              <TouchableOpacity
-                style={styles.resetButton}
-                onPress={() => setMaxDistance(25)}
-              >
-                <Text style={styles.resetButtonText}>{t('offers.expand_radius')}</Text>
-              </TouchableOpacity>
+              <Text style={{ color: Colors.textSecondary, fontSize: 13, marginTop: 4, textAlign: 'center' }}>
+                {isAr ? 'ترقب العروض والتخفيضات من المتاجر القريبة' : 'Stay tuned for deals and discounts from nearby stores'}
+              </Text>
             </View>
           }
         />

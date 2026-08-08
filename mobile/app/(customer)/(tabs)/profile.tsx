@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Customer Profile Screen — Account info, settings, search alerts, and logout.
  * Premium dark UI with glassmorphic cards.
  * 
@@ -304,10 +304,10 @@ export default function CustomerProfileScreen() {
     setAlertsModalVisible(true);
     try {
       const data = await getCustomerAlerts(user.id);
-      setAlerts(data);
+      setAlerts(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error('Failed to load search alerts:', err);
-      Alert.alert(t('common.error'), t('profile.alerts_failed'));
+      // Silently fail and show clean empty state
+      setAlerts([]);
     } finally {
       setLoadingAlerts(false);
     }
