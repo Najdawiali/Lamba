@@ -4,10 +4,14 @@
   "description": "Eagle Vision Workspace - Root Orchestrator for Mobile & Backend",
   "private": true,
   "scripts": {
-    "services:up": "docker compose up -d postgres elasticsearch",
+    "services:up": "docker compose up -d postgres",
+    "services:up-all": "docker compose up -d postgres opensearch",
     "services:down": "docker compose down",
     "backend:up": "docker compose up -d",
+    "backend:dev": "cd backend && venv\\Scripts\\uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload",
     "backend:seed": "docker compose exec api python -m app.seed",
+    "backend:seed-os": "cd backend && venv\\Scripts\\python -m scripts.seed_opensearch",
+    "backend:sync-os": "cd backend && venv\\Scripts\\python -m scripts.sync_opensearch",
     "backend:logs": "docker compose logs -f api",
     "mobile:start": "node scripts/start-mobile.js",
     "mobile:tunnel": "node scripts/start-mobile.js --tunnel"

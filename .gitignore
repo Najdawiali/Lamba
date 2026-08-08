@@ -22,6 +22,14 @@ backend/uploads/*
 dist/
 web-build/
 node_modules/
+mobile/android/
+mobile/.env
+
+# Evaluation artifacts & labeling worksheets with transient data
+backend/data/eval_*.json
+backend/data/baseline_eval_results.json
+backend/data/labeling_worksheet.jsonl
+backend/backend/
 
 # Local Environment Variables
 .env
