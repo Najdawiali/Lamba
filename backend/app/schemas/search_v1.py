@@ -23,6 +23,7 @@ class HybridSearchRequest(BaseModel):
     longitude: float = Field(..., ge=-180.0, le=180.0, description="User's longitude coordinate")
     market_id: Optional[uuid.UUID] = Field(None, description="Optional market ID to filter results locally")
     user_id: Optional[uuid.UUID] = Field(None, description="Optional user ID to associate search alerts")
+    listing_type: Optional[str] = Field(None, description="Filter by listing type: 'product' or 'service'")
     filters: Optional[SearchFilters] = Field(None, description="Granular filtering parameters")
 
 
@@ -32,6 +33,7 @@ class DoubleCheckSearchRequest(BaseModel):
     latitude: float = Field(..., ge=-90.0, le=90.0, description="User's latitude coordinate")
     longitude: float = Field(..., ge=-180.0, le=180.0, description="User's longitude coordinate")
     market_id: Optional[uuid.UUID] = Field(None, description="Optional market ID to filter results locally")
+    listing_type: Optional[str] = Field(None, description="Filter by listing type: 'product' or 'service'")
 
 
 class HybridSearchResultItem(BaseModel):
@@ -40,6 +42,7 @@ class HybridSearchResultItem(BaseModel):
     name: str
     description: Optional[str] = None
     category: Optional[str] = None
+    listing_type: Optional[str] = "product"
     image_url: Optional[str] = None
     price: Optional[float] = None
     stock_count: int

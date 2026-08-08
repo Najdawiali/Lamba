@@ -4,8 +4,8 @@ Supports strict categories and multi-image galleries while preserving backward c
 """
 
 import uuid
-from sqlalchemy import String, ForeignKey, Text, Computed
-from sqlalchemy.dialects.postgresql import UUID, TSVECTOR
+from sqlalchemy import String, ForeignKey, Text, Computed, Integer, DateTime
+from sqlalchemy.dialects.postgresql import UUID, TSVECTOR, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.ext.hybrid import hybrid_property
 from pgvector.sqlalchemy import Vector
@@ -24,6 +24,21 @@ class GlobalItem(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     barcode: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True, index=True)
     
+    listing_type: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="product"
+    )
+    attributes = mapped_column(JSONB, nullable=True, server_default="{}")
+    name_ar: Mapped[str | None] = mapped_column(Text, nullable=True)
+    name_en: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description_ar: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description_en: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedding_dim: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    embedded_at = mapped_column(DateTime(timezone=True), nullable=True)
+    embedding_status: Mapped[str | None] = mapped_column(
+        Text, nullable=True, server_default="pending"
+    )
+
     category_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("categories.id", ondelete="CASCADE"),

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from pgvector.sqlalchemy import Vector
 
 from app.database import Base
+from app.config import settings
 
 
 class SearchAlert(Base):
@@ -26,8 +27,8 @@ class SearchAlert(Base):
     )
     query_text: Mapped[str] = mapped_column(String(255), nullable=False)
     
-    # 384-dimensional dense vector representing the search query semantically
-    query_vector = mapped_column(Vector(384), nullable=False)
+    # Qwen3-Embedding vector (dim matches settings.text_embedding_dim)
+    query_vector = mapped_column(Vector(settings.text_embedding_dim), nullable=False)
     
     latitude: Mapped[float] = mapped_column(Float, nullable=False)
     longitude: Mapped[float] = mapped_column(Float, nullable=False)

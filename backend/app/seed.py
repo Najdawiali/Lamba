@@ -23,7 +23,6 @@ from app.models.market_item import MarketItem
 from app.services.auth import hash_password
 from app.services.embedding import embedding_service
 from app.services.indexer import IndexerService
-from app.es_client import init_es_client, close_es_client
 from app.config import settings
 
 logging.basicConfig(level=logging.INFO)
@@ -789,6 +788,10 @@ def _build_products():
             ("جيلاتين بودرة", "جيلاتين بودرة حلال للحلويات", "Grocery", 5.00, True, 35),
             ("Gelatin Powder - Halal", "Halal gelatin powder for desserts.", "Grocery", 6.00, True, 30),
             ("قشطة معلبة", "قشطة معلبة كثيفة للحلويات", "Grocery", 4.00, True, 50),
+            ("عصير برتقال طبيعي", "عصير برتقال طبيعي طازج ولذيذ", "Beverages", 5.00, True, 30),
+            ("Natural Orange Juice", "Fresh and delicious natural orange juice.", "Beverages", 6.00, True, 25),
+            ("عصير تفاح عضوي", "عصير تفاح عضوي طبيعي وصحي", "Beverages", 6.00, True, 30),
+            ("Organic Apple Juice", "Natural and healthy organic apple juice.", "Beverages", 7.00, True, 25),
         ],
         "Royal Roastery": [
             ("Yemen Mocha Coffee", "Authentic Yemeni mocha coffee beans.", "Coffee", 65.00, True, 8),
@@ -912,6 +915,33 @@ def _build_products():
                 "stock_count": p[5],
             })
 
+
+    # ── Service Listings (16 Services across markets) ────────────────────────
+    s_m1 = "Ali's Corner Market"
+    s_m2 = "Sara's Organic Garden"
+    s_m3 = "بقالة الحي القديم"
+    s_m4 = "سوبرماركت الأمل"
+    s_m5 = "محمصة النكهة الذهبية"
+
+    all_products += [
+        {"market_name": s_m1, "name": "حلاقة رجالية وصالون تجميل", "description": "قص شعر وتشذيب لحية وتصفيف رجالي احترافي", "price": 15.00, "category": "Beauty & Personal Care Services", "listing_type": "service", "in_stock": True, "stock_count": 99},
+        {"market_name": s_m1, "name": "Men's Haircut & Beard Styling", "description": "Professional men haircut, beard trim, and hot towel facial.", "price": 18.00, "category": "Beauty & Personal Care Services", "listing_type": "service", "in_stock": True, "stock_count": 99},
+        {"market_name": s_m2, "name": "غسيل وتلميع سيارات متنقل", "description": "غسيل سيارات شامل أمام البيت مع تلميع الشمع وشفط الأتربة", "price": 25.00, "category": "Vehicle Maintenance & Care", "listing_type": "service", "in_stock": True, "stock_count": 99},
+        {"market_name": s_m2, "name": "Car Oil Change & Inspection", "description": "Engine oil change, filter replacement, and 20-point safety check.", "price": 40.00, "category": "Vehicle Maintenance & Care", "listing_type": "service", "in_stock": True, "stock_count": 99},
+        {"market_name": s_m3, "name": "مدرسة لتعليم اللغة الفرنسية والإنجليزية", "description": "دروس خصوصية في اللغة الفرنسية والإنجليزية لجميع المراحل الدراسية", "price": 20.00, "category": "Education & Tutoring", "listing_type": "service", "in_stock": True, "stock_count": 99},
+        {"market_name": s_m3, "name": "Private Math & Physics Tutoring", "description": "Expert private tutoring in high school algebra, calculus, and physics.", "price": 25.00, "category": "Education & Tutoring", "listing_type": "service", "in_stock": True, "stock_count": 99},
+        {"market_name": s_m4, "name": "خدمات السباكة والكهرباء المنزلية", "description": "صيانة سباكة وكهرباء منازل وتصليح أعطال على مدار الساعة", "price": 30.00, "category": "Home & Maintenance Services", "listing_type": "service", "in_stock": True, "stock_count": 99},
+        {"market_name": s_m4, "name": "Home Air Conditioner Maintenance & Cleaning", "description": "AC split unit cleaning, gas refill, and cooling performance repair.", "price": 35.00, "category": "Home & Maintenance Services", "listing_type": "service", "in_stock": True, "stock_count": 99},
+        {"market_name": s_m5, "name": "تنظيف منازل وتعقيم شامل", "description": "تنظيف منازل وشقق مفروشة وتعقيم الأرضيات والسجاد", "price": 50.00, "category": "Home & Maintenance Services", "listing_type": "service", "in_stock": True, "stock_count": 99},
+        {"market_name": s_m5, "name": "جلسات مساج وعلاج طبيعي", "description": "جلسات مساج استرخائي وعلاج طبيعي لآلام الظهر والمفاصل", "price": 45.00, "category": "Beauty & Personal Care Services", "listing_type": "service", "in_stock": True, "stock_count": 99},
+        {"market_name": s_m1, "name": "خياطة وتفصيل ثوب رجالي", "description": "خياطة وتفصيل أثواب رجالية وبدل حسب الطلب", "price": 60.00, "category": "Beauty & Personal Care Services", "listing_type": "service", "in_stock": True, "stock_count": 99},
+        {"market_name": s_m2, "name": "صيانة أجهزة منزلية ومكينات", "description": "تصليح غسالات، ثلاجات، وميكروويف في المنزل", "price": 30.00, "category": "Home & Maintenance Services", "listing_type": "service", "in_stock": True, "stock_count": 99},
+        {"market_name": s_m3, "name": "تأجير معدات وأدوات مناسَبَات", "description": "تأجير كراسي وطاولات وسماعات للمناسبات والحفلات", "price": 70.00, "category": "Home & Maintenance Services", "listing_type": "service", "in_stock": True, "stock_count": 99},
+        {"market_name": s_m4, "name": "توصيل وثائق وخدمات سريعة", "description": "خدمة توصيل طرود ووثائق داخل المدينة خلال ساعات", "price": 10.00, "category": "Home & Maintenance Services", "listing_type": "service", "in_stock": True, "stock_count": 99},
+        {"market_name": s_m5, "name": "تلميع واجهات ومباني", "description": "تلميع وتنظيف واجهات زجاجية ومباني سكنية", "price": 80.00, "category": "Home & Maintenance Services", "listing_type": "service", "in_stock": True, "stock_count": 99},
+        {"market_name": s_m1, "name": "دورة تعليم قيادة السيارات", "description": "تدريب عملي على قيادة السيارات مخصص للمبتدئين", "price": 120.00, "category": "Education & Tutoring", "listing_type": "service", "in_stock": True, "stock_count": 99},
+    ]
+
     return all_products
 
 
@@ -943,47 +973,60 @@ async def seed(reset: bool = False):
     # Load embedding models
     embedding_service.load_model()
 
-    # Init Elasticsearch
-    es = init_es_client()
-    
-    # Drop index if it exists
-    if await es.indices.exists(index=settings.elasticsearch_index):
-        logger.info(f"Deleting existing Elasticsearch index: {settings.elasticsearch_index}")
-        await es.indices.delete(index=settings.elasticsearch_index)
-        
-    indexer = IndexerService(es)
-    await indexer.ensure_index()
-
     async with async_session() as db:
-        # ── Create Categories ───────────────────────────────
-        root_food = Category(name="Food & Beverages")
-        root_care = Category(name="Home & Personal Care")
-        root_tech = Category(name="Electronics & Tech")
-        root_kitchen = Category(name="Home & Kitchen")
-        db.add_all([root_food, root_care, root_tech, root_kitchen])
-        await db.flush()
+        # ── Create Categories (Bilingual Product + Service Tree) ──
+        root_specs = [
+            ("Food & Beverages", "Food & Beverages", "الأغذية والمشروبات", "product"),
+            ("Home & Personal Care", "Home & Personal Care", "العناية المنزلية والشخصية", "product"),
+            ("Electronics & Tech", "Electronics & Tech", "الإلكترونيات والتقنية", "product"),
+            ("Home & Kitchen", "Home & Kitchen", "المنزل والمطبخ", "product"),
+            ("Services", "Services", "الخدمات", "service"),
+        ]
+        roots = {}
+        for name, name_en, name_ar, ltype in root_specs:
+            res = await db.execute(select(Category).where(Category.name == name))
+            existing_root = res.scalar_one_or_none()
+            if existing_root is None:
+                existing_root = Category(name=name, name_en=name_en, name_ar=name_ar, listing_type=ltype)
+                db.add(existing_root)
+                await db.flush()
+            roots[name] = existing_root
+
+        root_food = roots["Food & Beverages"]
+        root_care = roots["Home & Personal Care"]
+        root_tech = roots["Electronics & Tech"]
+        root_kitchen = roots["Home & Kitchen"]
+        root_services = roots["Services"]
 
         subcategories = [
-            ("Fruits & Vegetables", root_food.id),
-            ("Cooking Essentials", root_food.id),
-            ("Dairy & Eggs", root_food.id),
-            ("Meat & Poultry", root_food.id),
-            ("Beverages", root_food.id),
-            ("Snacks", root_food.id),
-            ("Bakery", root_food.id),
-            ("Frozen Food", root_food.id),
-            ("Cleaning & Detergents", root_care.id),
-            ("Beauty & Personal Care", root_care.id),
-            ("Electronics", root_tech.id),
-            ("Mobiles & Tech", root_tech.id),
-            ("Cookware & Kitchenware", root_kitchen.id),
+            ("Fruits & Vegetables", "Fruits & Vegetables", "الخضار والفواكه", "product", root_food.id),
+            ("Cooking Essentials", "Cooking Essentials", "مستلزمات الطبخ", "product", root_food.id),
+            ("Dairy & Eggs", "Dairy & Eggs", "الألبان والبيض", "product", root_food.id),
+            ("Meat & Poultry", "Meat & Poultry", "اللحوم والدواجن", "product", root_food.id),
+            ("Beverages", "Beverages", "المشروبات", "product", root_food.id),
+            ("Snacks", "Snacks", "المأكولات الخفيفة", "product", root_food.id),
+            ("Bakery", "Bakery", "المخبوزات", "product", root_food.id),
+            ("Frozen Food", "Frozen Food", "الأطعمة المجمدة", "product", root_food.id),
+            ("Cleaning & Detergents", "Cleaning & Detergents", "التنظيف المنزلي", "product", root_care.id),
+            ("Beauty & Personal Care", "Beauty & Personal Care", "العناية الشخصية", "product", root_care.id),
+            ("Electronics", "Electronics", "الإلكترونيات", "product", root_tech.id),
+            ("Mobiles & Tech", "Mobiles & Tech", "الهواتف والتقنية", "product", root_tech.id),
+            ("Cookware & Kitchenware", "Cookware & Kitchenware", "أدوات المطبخ", "product", root_kitchen.id),
+            # Service Subcategories
+            ("Beauty & Personal Care Services", "Beauty & Personal Care Services", "خدمات التجميل والعناية الشخصية", "service", root_services.id),
+            ("Vehicle Maintenance & Care", "Vehicle Maintenance & Care", "صيانة وتغسيل السيارات", "service", root_services.id),
+            ("Home & Maintenance Services", "Home & Maintenance Services", "خدمات وصيانة المنازل", "service", root_services.id),
+            ("Education & Tutoring", "Education & Tutoring", "التعليم والدروس الخصوصية", "service", root_services.id),
         ]
 
         cat_map = {}
-        for name, parent_id in subcategories:
-            sub = Category(name=name, parent_category_id=parent_id)
-            db.add(sub)
-            await db.flush()
+        for name, name_en, name_ar, ltype, parent_id in subcategories:
+            res = await db.execute(select(Category).where(Category.name == name))
+            sub = res.scalar_one_or_none()
+            if sub is None:
+                sub = Category(name=name, name_en=name_en, name_ar=name_ar, listing_type=ltype, parent_category_id=parent_id)
+                db.add(sub)
+                await db.flush()
             cat_map[name] = sub
 
         # ── Create Merchants ────────────────────────────────
@@ -1043,73 +1086,106 @@ async def seed(reset: bool = False):
         # ── Create GlobalItems and MarketItems + Index ──────
         products_to_index = []
         total = len(PRODUCTS)
+
+        # 1. Identify which GlobalItems are missing and need to be created
+        gi_names_to_create = []
+        gi_mapping = {}
+
+        # Pre-load existing GlobalItems to save DB queries
+        existing_gi_res = await db.execute(select(GlobalItem))
+        for item in existing_gi_res.unique().scalars():
+            gi_mapping[item.name] = item
+
+        for p in PRODUCTS:
+            if p["name"] not in gi_mapping:
+                gi_names_to_create.append(p["name"])
+
+        # 2. Concurrently fetch all missing text embeddings
+        if gi_names_to_create:
+            logger.info(f"Generating embeddings for {len(gi_names_to_create)} new GlobalItems concurrently...")
+            sem = asyncio.Semaphore(15)  # Limit concurrency to prevent rate limit issues
+
+            async def get_emb(name_val):
+                p_item = next(x for x in PRODUCTS if x["name"] == name_val)
+                combined_text = p_item["name"]
+                if p_item["description"]:
+                    combined_text = f"{p_item['name']}. {p_item['description']}"
+                async with sem:
+                    try:
+                        text_vec_np = await embedding_service.encode_text_async(combined_text)
+                        return name_val, text_vec_np.tolist()
+                    except Exception as e:
+                        logger.error(f"Failed to embed '{name_val}': {e}")
+                        return name_val, [0.0] * settings.text_embedding_dim
+
+            # Run tasks in parallel
+            tasks = [get_emb(n) for n in gi_names_to_create]
+            emb_results = await asyncio.gather(*tasks)
+            emb_map = dict(emb_results)
+
+            # Map old category names to new hypermarket taxonomy
+            category_mapping = {
+                "Tea": "Beverages",
+                "Coffee": "Beverages",
+                "Beverages": "Beverages",
+                "Honey": "Cooking Essentials",
+                "Oils": "Cooking Essentials",
+                "Spices": "Cooking Essentials",
+                "Seeds": "Cooking Essentials",
+                "Spreads": "Cooking Essentials",
+                "Essential Oils": "Beauty & Personal Care",
+                "Grocery": "Cooking Essentials",
+                "Dried Fruits": "Snacks",
+                "Beauty & Personal Care Services": "Beauty & Personal Care Services",
+                "Vehicle Maintenance & Care": "Vehicle Maintenance & Care",
+                "Home & Maintenance Services": "Home & Maintenance Services",
+                "Education & Tutoring": "Education & Tutoring",
+            }
+
+            # 3. Create GlobalItem objects
+            for idx, name_val in enumerate(gi_names_to_create, 1):
+                p_item = next(x for x in PRODUCTS if x["name"] == name_val)
+                old_category = p_item["category"]
+                new_category = category_mapping.get(old_category, "Cooking Essentials")
+                category_obj = cat_map.get(new_category) or cat_map.get("Cooking Essentials")
+
+                try:
+                    from scripts.backfill_search_terms import build_search_terms
+                    search_terms = build_search_terms(p_item["name"], p_item["description"], new_category)
+                except Exception as e:
+                    logger.warning(f"Could not build search terms for {name_val}: {e}")
+                    search_terms = None
+
+                barcode_val = f"628{uuid.uuid4().hex[:10]}"
+                gi = GlobalItem(
+                    name=p_item["name"],
+                    description=p_item["description"],
+                    category_id=category_obj.id,
+                    listing_type=p_item.get("listing_type", "product"),
+                    search_terms=search_terms,
+                    barcode=barcode_val,
+                    text_embedding=emb_map.get(name_val, [0.0] * settings.text_embedding_dim),
+                    image_embedding=[0.0] * 512,
+                )
+                db.add(gi)
+                gi_mapping[name_val] = gi
+
+            await db.flush()
+
+            # Create ProductImage entries
+            for name_val in gi_names_to_create:
+                gi = gi_mapping[name_val]
+                primary_image = ProductImage(global_item_id=gi.id, image_url="", is_primary=True)
+                secondary_image = ProductImage(global_item_id=gi.id, image_url="", is_primary=False)
+                db.add_all([primary_image, secondary_image])
+            await db.flush()
+            logger.info("Created all missing GlobalItems and images.")
+
+        # 4. Now create MarketItems and build OpenSearch docs list
         for idx, p in enumerate(PRODUCTS, 1):
             market_info = market_map[p["market_name"]]
             market = market_info["market"]
-
-            # Create or get GlobalItem
-            existing_gi = await db.execute(
-                select(GlobalItem).where(GlobalItem.name == p["name"])
-            )
-            gi = existing_gi.unique().scalar_one_or_none()
-            if gi is None:
-                # Generate embeddings
-                combined_text = p["name"]
-                if p["description"]:
-                    combined_text = f"{p['name']}. {p['description']}"
-                
-                text_vector = embedding_service.encode_text_384(combined_text).tolist()
-                image_vector = embedding_service.encode_product(p["name"], p["description"]).tolist()
-                
-                # Map old category names to new hypermarket taxonomy
-                old_category = p["category"]
-                category_mapping = {
-                    "Tea": "Beverages",
-                    "Coffee": "Beverages",
-                    "Honey": "Cooking Essentials",
-                    "Oils": "Cooking Essentials",
-                    "Spices": "Cooking Essentials",
-                    "Seeds": "Cooking Essentials",
-                    "Spreads": "Cooking Essentials",
-                    "Essential Oils": "Beauty & Personal Care",
-                    "Grocery": "Cooking Essentials",
-                    "Dried Fruits": "Snacks"
-                }
-                new_category = category_mapping.get(old_category, "Cooking Essentials")
-                category_obj = cat_map.get(new_category)
-                if not category_obj:
-                    category_obj = cat_map.get("Cooking Essentials")
-                
-                gi = GlobalItem(
-                    name=p["name"],
-                    description=p["description"],
-                    category_id=category_obj.id,
-                    barcode=f"628101{str(idx).zfill(7)}",
-                    text_embedding=text_vector,
-                    image_embedding=image_vector,
-                )
-                db.add(gi)
-                await db.flush()
-
-                # No on-disk mock images are generated, so leave image_url=None to let the
-                # React Native app render its placeholder instead of a broken
-                # image (the legacy /uploads/mock_*.jpg paths returned 404).
-                primary_image = ProductImage(
-                    global_item_id=gi.id,
-                    image_url=None,
-                    is_primary=True
-                )
-                secondary_image = ProductImage(
-                    global_item_id=gi.id,
-                    image_url=None,
-                    is_primary=False
-                )
-                db.add_all([primary_image, secondary_image])
-                await db.flush()
-                
-                logger.info(f"[{idx}/{total}] Created global item & images: {p['name']}")
-            else:
-                logger.info(f"[{idx}/{total}] Reusing existing global item: {p['name']}")
+            gi = gi_mapping[p["name"]]
 
             # Create or get MarketItem link
             existing_mi = await db.execute(
@@ -1129,14 +1205,14 @@ async def seed(reset: bool = False):
                 )
                 db.add(mi)
                 await db.flush()
-                logger.info(f"  Linked item {p['name']} to market {p['market_name']}")
+                logger.info(f"[{idx}/{total}] Linked item {p['name']} to market {p['market_name']}")
 
-            # Prepare document for Elasticsearch
             products_to_index.append({
                 "product_id": mi.id,
                 "shop_id": market.id,
                 "name": gi.name,
                 "description": gi.description,
+                "search_terms": gi.search_terms,
                 "price": p["price"],
                 "category": gi.category,
                 "image_url": gi.image_url,
@@ -1147,13 +1223,7 @@ async def seed(reset: bool = False):
             })
 
         await db.commit()
-
-        # Bulk index all products in Elasticsearch
-        indexed = await indexer.bulk_index(products_to_index)
-        logger.info(f"Indexed {indexed} items in Elasticsearch")
-
-    await close_es_client()
-    logger.info(f"Seed complete! Total products: {total}, Markets: {len(MARKETS)}, Merchants: {len(MERCHANTS)}")
+        logger.info(f"Seed complete! Total products: {total}, Markets: {len(MARKETS)}, Merchants: {len(MERCHANTS)}")
 
 
 if __name__ == "__main__":
