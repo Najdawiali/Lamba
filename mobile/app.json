@@ -15,7 +15,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.lamba.app",
       "config": {
-        "googleMapsApiKey": "AIzaSyD6hMybeU3z0DrfqJ4OOVCtPOPlcwGDxYA"
+        "googleMapsApiKey": "AIzaSyBE961k1OZH9eyXXuPbwCrr3aGulb_pWIo"
       },
       "infoPlist": {
         "NSCameraUsageDescription": "Lamba needs camera access for visual product search",
@@ -29,16 +29,18 @@
       "package": "com.lamba.app",
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyD6hMybeU3z0DrfqJ4OOVCtPOPlcwGDxYA"
+          "apiKey": "AIzaSyBE961k1OZH9eyXXuPbwCrr3aGulb_pWIo"
         }
       },
       "permissions": [
-        "CAMERA",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "plugins": [
+      "expo-dev-client",
       "expo-router",
       "expo-camera",
       "expo-image-picker",
@@ -55,6 +57,10 @@
       "I18nManager": {
         "allowRTL": true,
         "forceRTL": false
+      },
+      "router": {},
+      "eas": {
+        "projectId": "c2916c19-6751-44fc-a8ac-669686ac2b97"
       }
     }
   }

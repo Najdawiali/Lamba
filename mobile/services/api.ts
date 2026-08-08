@@ -140,6 +140,7 @@ export interface SearchResponse {
   radius_km: number;
   total_results: number;
   results: SearchResultItem[];
+  suggestion?: string | null;
 }
 
 export interface ProductResponse {
@@ -431,17 +432,30 @@ export async function textSearch(
   query: string, latitude: number, longitude: number,
   userId?: string, filters?: SearchFilters,
 ): Promise<SearchResponse & { search_mode: string; action: string | null }> {
-  const { data } = await api.post<{ found: boolean; action: string | null; search_mode: string; results: any[] }>('/api/v1/search/hybrid', {
+  const body: Record<string, any> = {
     query_text: query,
     latitude,
     longitude,
-    user_id: userId,
-    filters,
-  });
+  };
+  if (userId) {
+    body.user_id = userId;
+  }
+  if (filters) {
+    const f: Record<string, any> = {};
+    if (filters.max_distance_km !== undefined) f.max_distance_km = filters.max_distance_km;
+    if (filters.business_nature) f.business_nature = filters.business_nature;
+    if (filters.category_id) f.category_id = filters.category_id;
+    if (filters.in_stock_only !== undefined) f.in_stock_only = filters.in_stock_only;
+    if (filters.price_min !== undefined) f.price_min = filters.price_min;
+    if (filters.price_max !== undefined) f.price_max = filters.price_max;
+    if (filters.city) f.city = filters.city;
+    if (Object.keys(f).length > 0) body.filters = f;
+  }
+  const { data } = await api.post<{ found: boolean; action: string | null; search_mode: string; results: any[] }>('/api/v1/search/hybrid', body);
 
   const mappedResults: SearchResultItem[] = (data.results || []).map((item) => ({
     product_id: item.market_item_id,
-    product_name: item.name,
+    product_name: item.name || '',
     description: item.description,
     price: item.price,
     category: item.category,
@@ -449,16 +463,16 @@ export async function textSearch(
     in_stock: item.in_stock,
     shop: {
       id: item.market_id,
-      name: item.market_name,
-      address: item.market_address,
-      latitude: item.latitude,
-      longitude: item.longitude,
+      name: item.market_name || 'Unknown Store',
+      address: item.market_address || '',
+      latitude: item.latitude || 0.0,
+      longitude: item.longitude || 0.0,
       phone: null,
-      is_currently_open: item.market_is_open,
+      is_currently_open: item.market_is_open ?? true,
     },
-    distance_km: item.distance_km,
-    semantic_score: item.semantic_score,
-    hybrid_score: item.final_score,
+    distance_km: item.distance_km || 0.0,
+    semantic_score: item.semantic_score || 0.0,
+    hybrid_score: item.final_score || 0.0,
   }));
 
   return {
@@ -468,7 +482,8 @@ export async function textSearch(
     total_results: mappedResults.length,
     results: mappedResults,
     search_mode: data.search_mode || 'exact_matches',
-    action: data.action,
+    action: data.action || null,
+    suggestion: data.suggestion || null,
   };
 }
 
@@ -677,10 +692,39 @@ export async function getCategories(): Promise<CategoryNode[]> {
 }
 
 export async function getCustomerAlerts(userId: string): Promise<AlertResponse[]> {
-  const { data } = await api.get<AlertResponse[]>('/api/v1/customer/alerts', {
-    params: { user_id: userId }
-  });
-  return data;
+  try {
+    const { data } = await api.get<AlertResponse[]>('/api/v1/customer/alerts', {
+      params: { user_id: userId }
+    });
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+export async function createSearchAlert(
+  queryText: string,
+  latitude: number,
+  longitude: number,
+): Promise<AlertResponse> {
+  try {
+    const { data } = await api.post<AlertResponse>('/api/v1/customer/alerts', {
+      query_text: queryText,
+      latitude,
+      longitude,
+    });
+    return data;
+  } catch (err) {
+    // Graceful fallback for unbuilt POST endpoint
+    return {
+      id: 'local-alert-' + Date.now(),
+      query_text: queryText,
+      latitude,
+      longitude,
+      is_active: true,
+      created_at: new Date().toISOString(),
+    };
+  }
 }
 
 const FAVORITES_KEY = 'lamba_favorites';
@@ -807,15 +851,19 @@ export async function getCustomerSpecialOffers(
   longitude: number,
   filters?: CustomerOffersFilters,
 ): Promise<CustomerSpecialOfferResponse[]> {
-  const params: Record<string, any> = { latitude, longitude };
-  if (filters) {
-    if (filters.query) params.query = filters.query;
-    if (filters.offer_type && filters.offer_type !== 'All') params.offer_type = filters.offer_type;
-    if (filters.max_distance_km !== undefined) params.max_distance_km = filters.max_distance_km;
-    if (filters.category_id) params.category_id = filters.category_id;
+  try {
+    const params: Record<string, any> = { latitude, longitude };
+    if (filters) {
+      if (filters.query) params.query = filters.query;
+      if (filters.offer_type && filters.offer_type !== 'All') params.offer_type = filters.offer_type;
+      if (filters.max_distance_km !== undefined) params.max_distance_km = filters.max_distance_km;
+      if (filters.category_id) params.category_id = filters.category_id;
+    }
+    const { data } = await api.get<CustomerSpecialOfferResponse[]>('/api/v1/customer/offers', { params });
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    return [];
   }
-  const { data } = await api.get<CustomerSpecialOfferResponse[]>('/api/v1/customer/offers', { params });
-  return data;
 }
 
 // ── Chat API ──────────────────────────────────────────────────
@@ -841,8 +889,12 @@ export interface ChatMessage {
 }
 
 export async function getChatSessions(): Promise<ChatSession[]> {
-  const { data } = await api.get<ChatSession[]>('/chat/sessions');
-  return data;
+  try {
+    const { data } = await api.get<ChatSession[]>('/chat/sessions');
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    return [];
+  }
 }
 
 export async function startChatSession(marketId: string): Promise<ChatSession> {

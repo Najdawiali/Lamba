@@ -141,7 +141,7 @@
     "refinements_applied": "Refinements applied for subsequent searches.",
     "product_found": "product found",
     "products_found": "products found",
-    "search_nearby": "Search for products nearby",
+    "search_nearby": "Search products nearby…",
     "visual_search_badge": "Visual",
     "recommendations": "Recommendations (Semantic Neighbors)",
     "recommendations_desc": "No exact matches nearby. Showing products related to your request.",
@@ -149,7 +149,6 @@
     "welcome_title": "Eagle Vision",
     "welcome_subtitle": "Find any product near you",
     "try_searching": "Try searching for",
-    "search_nearby": "Search products nearby…",
     "new_search": "New Search",
     "history": "Search History",
     "no_history": "No search history yet",
@@ -244,7 +243,9 @@
     "filters": "Filters",
     "max_distance": "Max Distance",
     "apply_filters": "Apply Filters",
-    "view_all": "View All Offers"
+    "view_all": "View All Offers",
+    "no_deals_title": "No deals nearby",
+    "no_deals_desc": "No offers available in your area right now"
   },
   "favorites": {
     "title": "Favorites",
@@ -604,6 +605,7 @@
     "general": "General",
     "no": "No",
     "yes_clear": "Yes, Clear",
-    "close": "Close"
+    "close": "Close",
+    "currency": "SAR"
   }
 }
