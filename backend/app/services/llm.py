@@ -37,7 +37,7 @@ class LLMAdapter:
     def __init__(self) -> None:
         self.api_base = settings.deepinfra_api_base.rstrip("/")
         self.api_key = settings.deepinfra_api_key
-        self.model = getattr(settings, "query_llm_model", "Qwen/Qwen3.5-35B-A3B")
+        self.model = getattr(settings, "query_llm_model", "Qwen/Qwen3.6-35B-A3B")
         self._client: Optional[httpx.AsyncClient] = None
 
     async def _get_client(self, timeout: float = 15.0) -> httpx.AsyncClient:

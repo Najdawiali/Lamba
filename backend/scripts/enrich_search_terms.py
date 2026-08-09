@@ -38,25 +38,33 @@ from app.services.arabic_norm import normalize_arabic
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("enrich_search_terms")
 
-ENRICHMENT_PROMPT = """You are a search index builder for a retail marketplace in Jordan.
+ENRICHMENT_PROMPT = """You are a search index builder for a retail marketplace serving ALL Arab countries.
 
 Given this product:
 Name: {name}
-Description: {description}
+Description: {description}  
 Category: {category}
 
-Generate a comprehensive list of search terms that Jordanian customers might use to find this product. Include:
-1. Formal Arabic (فصحى) terms
-2. Jordanian/Levantine dialectal Arabic terms
-3. Common casual abbreviations (e.g. أرز → رز, دجاج → جاج, ثوم → توم)
-4. English translations
-5. Arabizi (Franco-Arabic) spellings
-6. Common misspellings
-7. Related category terms
-8. Occasion/use-case tags: when would someone buy this? (e.g., هدية/gift, فطور/breakfast, تنظيف/cleaning, طبخ/cooking, ضيافة/hospitality, رمضان/ramadan, حفلة/party, مدرسة/school)
+Generate a comprehensive, comma-separated list of search terms. Include ALL of the following:
 
-Return ONLY a comma-separated list of terms. No explanations, no numbering.
-Example for "أرز بسمتي": أرز بسمتي, رز بسمتي, رز, ارز, basmati rice, rice, ruz, 3riz, أرز هندي, رز هندي, أرز طويل"""
+1. Formal Arabic (فصحى) name and synonyms
+2. English name and common English variants
+3. Arabizi/Franco-Arab spellings (e.g., 7aleeb, za3tar, knafeh, shawarma, falafel, labneh, mansaf)
+4. CRITICAL — Dialectal Arabic from EVERY major dialect. Be thorough:
+   Jordanian/Palestinian: e.g., دجاج→جاج, ثوم→توم, سكر→شكر, بطاطس→بطاطا, خبز→خبز كماج
+   Egyptian: e.g., دجاج→فراخ, خبز→عيش, طماطم→أوطة, بصل→بصلة, ليمون→لمون, فاصوليا→فصوليا
+   Gulf/Saudi: e.g., دجاج→دياي, شاي→چاي, فطور→ريوق, ملعقة→خاشوقة, لبن→روب
+   Iraqi: e.g., دجاج→دجاج, خبز→صمون, طماطم→طماطة
+   Levantine: e.g., بندورة→بندوره, باذنجان→بتنجان
+   Maghrebi: e.g., خبز→كسرة, بطاطا→بطاطا
+5. Common misspellings and taa marbouta variants (e.g., بامية→باميه, كوسة→كوسا, جبنة→جبنه)
+6. Brand-associated terms if applicable (do NOT translate brand names)
+7. Category and related terms
+8. Occasion/use-case tags: هدية/gift, فطور/breakfast, تنظيف/cleaning, طبخ/cooking, ضيافة/hospitality, رمضان/ramadan, حفلة/party, أطفال/kids, مدرسة/school
+9. Recipe/dish associations: If this product is a key ingredient in known dishes, include those dish names
+   e.g., for chicken: مقلوبة, مسخن, شاورما, فتة. For rice: منسف, كبسة, مقلوبة
+
+Generate at LEAST 20 terms. More is better. Return ONLY a comma-separated list, no explanations."""
 
 
 async def enrich_product(name: str, description: Optional[str], category: Optional[str]) -> str:

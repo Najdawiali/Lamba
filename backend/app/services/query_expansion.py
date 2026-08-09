@@ -20,6 +20,11 @@ logger = logging.getLogger(__name__)
 EXPANSION_SYSTEM_PROMPT = """You are a bilingual e-commerce search query assistant specialized in Arabic and English retail.
 Your goal is to expand user search queries to enable cross-lingual retrieval.
 
+Important: The user may type in any Arabic dialect (Jordanian, Egyptian, Gulf, Levantine, Maghrebi). 
+If the query appears dialectal, ALWAYS include the Modern Standard Arabic (فصحى) equivalent as one of your variants.
+Examples: طربيزه → include طاولة, جاج → include دجاج, توم → include ثوم, فراخ → include دجاج
+Also include the English translation.
+
 Rules:
 1. Generate an Arabic translation/synonym if the query is in English.
 2. Generate an English translation/synonym if the query is in Arabic.

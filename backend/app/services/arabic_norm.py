@@ -65,50 +65,14 @@ def normalize_arabic(text: str | None, normalize_taa_marbouta: bool = False) -> 
     text = _TATWEEL_RE.sub("", text)
     if normalize_taa_marbouta:
         text = _TAA_MARBOUTA_RE.sub("ه", text)
+    # Collapse consecutive duplicate Arabic letters (e.g. حلييب -> حليب, دجااج -> دجاج)
+    text = re.sub(r"([\u0600-\u06FF])\1+", r"\1", text)
     text = _WHITESPACE_RE.sub(" ", text).strip()
 
     return text.lower()
 
 
-# ── Casual Dialect Synonyms (Zero-Latency Fast Fallback) ─────────────
-_CASUAL_DIALECT_DICT: dict[str, str] = {
-    "رز": "ارز",
-    "أرز": "ارز",
-    "ارز": "ارز",
-    "جاج": "دجاج",
-    "توم": "ثوم",
-    "بتنجان": "باذنجان",
-    "بتنجانه": "باذنجان",
-    "بندورة": "بندورة",
-    "بندوره": "بندورة",
-    "طماطم": "بندورة",
-    "زهرة": "زهرة",
-    "زهره": "زهرة",
-    "قرنبيط": "زهرة",
-    "بطاطا": "بطاطا",
-    "بطاطس": "بطاطا",
-    "خبز": "خبز",
-    "عيش": "خبز",
-    "كوسا": "كوسا",
-    "كوسى": "كوسا",
-    "حليب": "حليب",
-    "لبن": "لبن",
-    "جبنة": "جبنة",
-    "جبنه": "جبنة",
-    "بيض": "بيض",
-    "زيت": "زيت",
-    "شاي": "شاي",
-    "قهوة": "قهوة",
-    "قهوه": "قهوة",
-    "عصير": "عصير",
-    "سمنة": "سمنة",
-    "سمنه": "سمنة",
-    "زبدة": "زبدة",
-    "زبده": "زبدة",
-    "سكر": "سكر",
-    "ملح": "ملح",
-    "عسل": "عسل",
-}
+
 
 
 # ── Arabizi (Franco-Arabic) → Arabic ────────────────────────────────
@@ -501,27 +465,10 @@ def arabizi_to_arabic(text: str | None) -> str:
     return " ".join(processed_words)
 
 
-def apply_casual_dialect(text: str | None) -> str:
-    """Map common casual/Levantine words (رز -> ارز, جاج -> دجاج, etc.) to canonical terms."""
-    if not text:
-        return ""
-    words = text.split()
-    converted = []
-    for w in words:
-        norm_w = normalize_arabic(w)
-        if norm_w in _CASUAL_DIALECT_DICT:
-            converted.append(_CASUAL_DIALECT_DICT[norm_w])
-        elif w in _CASUAL_DIALECT_DICT:
-            converted.append(_CASUAL_DIALECT_DICT[w])
-        else:
-            converted.append(w)
-    return " ".join(converted)
-
-
 def normalize_query(text: str | None) -> str:
     """
     Full query-time normalization pipeline:
-      Arabizi → Arabic, Casual Dialect → Formal, then Arabic normalize, then lowercase collapse.
+      Arabizi → Arabic, then Arabic normalize, then lowercase collapse.
 
     Use this on every user query before embedding AND before building the
     tsvector/tsquery lexical predicate.
@@ -529,5 +476,4 @@ def normalize_query(text: str | None) -> str:
     if not text:
         return ""
     arabicized = arabizi_to_arabic(text)
-    dialect_mapped = apply_casual_dialect(arabicized)
-    return normalize_arabic(dialect_mapped)
+    return normalize_arabic(arabicized)
