@@ -1,20 +1,17 @@
 /**
- * Auth Gateway — Role-First Selection Screen.
- * Two role cards: "Shop with Lamba" vs "Sell with Lamba".
- * Single unified register link below both cards.
- * Routes to login with role pre-set via query param.
- *
- * Design spec:
- * - Full-screen dark background, Lamba logo + eye icon centered at 40% from top
- * - Two role cards stacked vertically with 16px gap
- * - Language toggle: text-only pill (EN/ع), top-right
- * - Single "New to Lamba? Create an account" link below cards
- * - Footer: version string
+ * Auth Gateway Screen — Welcome Screen.
+ * 
+ * Simplified direct entry:
+ * - App logo and name
+ * - "تسجيل الدخول" (Sign in) button
+ * - "حساب جديد" (Create account) link
+ * - Language switcher pill (EN / ع)
+ * - Version footer
  */
 
 import React, { useRef, useEffect, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated,
+  View, Text, StyleSheet, TouchableOpacity, Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -23,295 +20,206 @@ import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/them
 import { useThemeColors } from '../../context/ThemeContext';
 import { t, toggleLanguage, i18n } from '../../services/i18n';
 
-const { width } = Dimensions.get('window');
-
 export default function AuthGatewayScreen() {
   const Colors = useThemeColors();
-
-  const styles = useMemo(() => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: Spacing.xxxl,
-    paddingHorizontal: Spacing.xl,
-  },
-  glowOrb1: {
-    position: 'absolute',
-    top: '10%',
-    left: '-20%',
-    width: 320,
-    height: 320,
-    borderRadius: 160,
-    backgroundColor: Colors.primary,
-    opacity: 0.08,
-  },
-  glowOrb2: {
-    position: 'absolute',
-    bottom: '25%',
-    right: '-15%',
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: Colors.secondary,
-    opacity: 0.06,
-  },
-  glowOrb3: {
-    position: 'absolute',
-    top: '40%',
-    right: '30%',
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: Colors.accent,
-    opacity: 0.04,
-  },
-
-  // Language toggle — centered pill between tagline and cards
-  langButton: {
-    alignSelf: 'center',
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: BorderRadius.full,
-    marginTop: Spacing.lg,
-    minWidth: 44,
-    minHeight: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  langText: {
-    fontSize: 14,
-    color: Colors.textPrimary,
-    fontWeight: '600',
-  },
-
-  // Hero — centered at ~40%
-  heroSection: {
-    alignItems: 'center',
-    marginTop: Spacing.md,
-  },
-  logoContainer: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: Spacing.lg,
-    ...Shadows.glow,
-  },
-  title: {
-    ...Typography.h1,
-    fontSize: 32,
-    color: Colors.textPrimary,
-    fontWeight: '800',
-    textAlign: 'center',
-    marginBottom: Spacing.xs,
-  },
-  taglineWrapper: {
-    paddingHorizontal: Spacing.lg,
-  },
-  tagline: {
-    ...Typography.body,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-  },
-
-  // ── Cards Section ──
-  cardsSection: {
-    width: '100%',
-    gap: Spacing.lg, // 16px gap between cards
-    marginBottom: Spacing.lg,
-  },
-  roleCard: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface, // #12122A card background
-    borderRadius: BorderRadius.lg, // 16px
-    padding: 20,
-    minHeight: 72,
-  },
-  roleIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginEnd: Spacing.lg,
-  },
-  roleCardContent: {
-    flex: 1,
-    marginEnd: Spacing.sm,
-  },
-  roleCardTitle: {
-    ...Typography.h3,
-    color: Colors.textPrimary,
-    marginBottom: 2,
-  },
-  roleCardDesc: {
-    ...Typography.caption,
-    color: Colors.textSecondary,
-  },
-
-  // Unified register link
-  unifiedRegisterLink: {
-    alignItems: 'center',
-    paddingVertical: Spacing.md,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  unifiedRegisterText: {
-    ...Typography.caption,
-    color: Colors.primary,
-    fontWeight: '600',
-  },
-
-  footerText: {
-    ...Typography.caption,
-    color: Colors.textMuted,
-  },
-  }), [Colors]);
   const router = useRouter();
-  const isAr = i18n.locale.includes('ar');
+  const isAr = i18n.locale?.startsWith('ar');
 
-  // Entrance animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideCustomer = useRef(new Animated.Value(40)).current;
-  const slideSeller = useRef(new Animated.Value(40)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
-    Animated.sequence([
+    Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 600,
         useNativeDriver: true,
       }),
-      Animated.stagger(150, [
-        Animated.spring(slideCustomer, {
-          toValue: 0,
-          tension: 60,
-          friction: 9,
-          useNativeDriver: true,
-        }),
-        Animated.spring(slideSeller, {
-          toValue: 0,
-          tension: 60,
-          friction: 9,
-          useNativeDriver: true,
-        }),
-      ]),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        tension: 50,
+        friction: 8,
+        useNativeDriver: true,
+      }),
     ]).start();
   }, []);
 
-  const navigateToLogin = (role: 'customer' | 'merchant') => {
-    router.push({ pathname: '/(auth)/login', params: { role } });
-  };
-
-  const navigateToRegister = () => {
-    // Unified registration — no role pre-set, user picks on step 1
-    router.push({ pathname: '/(auth)/register' });
-  };
+  const styles = useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: Colors.background,
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: Spacing.xxxl,
+      paddingHorizontal: Spacing.xl,
+    },
+    glowOrb1: {
+      position: 'absolute',
+      top: '12%',
+      left: '-15%',
+      width: 320,
+      height: 320,
+      borderRadius: 160,
+      backgroundColor: Colors.primary,
+      opacity: 0.08,
+    },
+    glowOrb2: {
+      position: 'absolute',
+      bottom: '20%',
+      right: '-15%',
+      width: 280,
+      height: 280,
+      borderRadius: 140,
+      backgroundColor: Colors.secondary,
+      opacity: 0.06,
+    },
+    topBar: {
+      width: '100%',
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      paddingTop: Spacing.md,
+    },
+    langButton: {
+      paddingVertical: Spacing.xs,
+      paddingHorizontal: Spacing.md,
+      backgroundColor: Colors.surfaceElevated,
+      borderRadius: BorderRadius.full,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      minWidth: 44,
+      minHeight: 36,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    langText: {
+      fontSize: 13,
+      color: Colors.textPrimary,
+      fontWeight: '700',
+    },
+    heroSection: {
+      alignItems: 'center',
+      width: '100%',
+      marginTop: -Spacing.xxl,
+    },
+    logoContainer: {
+      width: 96,
+      height: 96,
+      borderRadius: 48,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: Spacing.xl,
+      ...Shadows.glow,
+    },
+    title: {
+      ...Typography.h1,
+      fontSize: 36,
+      color: Colors.textPrimary,
+      fontWeight: '900',
+      textAlign: 'center',
+      marginBottom: Spacing.xs,
+    },
+    tagline: {
+      ...Typography.body,
+      color: Colors.textSecondary,
+      textAlign: 'center',
+      lineHeight: 22,
+      maxWidth: 280,
+    },
+    actionsSection: {
+      width: '100%',
+      gap: Spacing.md,
+      marginBottom: Spacing.lg,
+    },
+    signInButton: {
+      backgroundColor: Colors.primary,
+      borderRadius: BorderRadius.xl,
+      height: 54,
+      justifyContent: 'center',
+      alignItems: 'center',
+      flexDirection: 'row',
+      gap: Spacing.sm,
+      ...Shadows.glow,
+    },
+    signInButtonText: {
+      ...Typography.button,
+      color: Colors.textOnPrimary,
+      fontSize: 16,
+      fontWeight: '800',
+    },
+    createAccountButton: {
+      backgroundColor: Colors.surfaceElevated,
+      borderRadius: BorderRadius.xl,
+      height: 54,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: Colors.border,
+    },
+    createAccountText: {
+      ...Typography.body,
+      color: Colors.textPrimary,
+      fontWeight: '700',
+      fontSize: 15,
+    },
+    footerText: {
+      ...Typography.caption,
+      color: Colors.textMuted,
+      fontSize: 12,
+    },
+  }), [Colors]);
 
   return (
     <View style={styles.container}>
-      {/* Premium Ambient Background Glows */}
+      {/* Background glow ambiance */}
       <View style={styles.glowOrb1} />
       <View style={styles.glowOrb2} />
-      <View style={styles.glowOrb3} />
 
-      {/* Top Welcome / Branding Section — centered at ~40% from top */}
-      <Animated.View style={[styles.heroSection, { opacity: fadeAnim }]}>
+      {/* Top Bar with Language Toggle */}
+      <View style={styles.topBar}>
+        <TouchableOpacity style={styles.langButton} onPress={toggleLanguage} activeOpacity={0.7}>
+          <Text style={styles.langText}>{isAr ? 'EN' : 'ع'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Hero Branding Section */}
+      <Animated.View style={[styles.heroSection, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
         <LinearGradient
-          colors={[Colors.primary, Colors.secondary]}
+          colors={[Colors.primary, '#8B83FF']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.logoContainer}
         >
-          <Ionicons name="eye" size={48} color={Colors.textOnPrimary} />
+          <Ionicons name="eye" size={52} color={Colors.textOnPrimary} />
         </LinearGradient>
 
-        <Text style={styles.title}>{t('gateway.welcome')}</Text>
-        <View style={styles.taglineWrapper}>
-          <Text style={styles.tagline}>
-            {t('gateway.choose_role')}
-          </Text>
-        </View>
+        <Text style={styles.title}>{t('welcome.title', 'Lamba')}</Text>
+        <Text style={styles.tagline}>
+          {t('welcome.subtitle', 'Discover nearby local stores and products effortlessly')}
+        </Text>
+      </Animated.View>
 
-        {/* Language Switcher — centered pill between tagline and cards */}
-        <TouchableOpacity style={styles.langButton} onPress={toggleLanguage} activeOpacity={0.7}>
-          <Text style={styles.langText}>{isAr ? 'EN' : 'ع'}</Text>
+      {/* Action Buttons: Sign In & Create Account */}
+      <Animated.View style={[styles.actionsSection, { opacity: fadeAnim }]}>
+        <TouchableOpacity
+          style={styles.signInButton}
+          onPress={() => router.push('/(auth)/login')}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="log-in-outline" size={20} color={Colors.textOnPrimary} />
+          <Text style={styles.signInButtonText}>{t('welcome.sign_in', 'Sign In')}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.createAccountButton}
+          onPress={() => router.push('/(auth)/register')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.createAccountText}>{t('welcome.create_account', 'Create Account')}</Text>
         </TouchableOpacity>
       </Animated.View>
 
-      {/* Role Selection Cards — stacked with 16px gap */}
-      <View style={styles.cardsSection}>
-        {/* ── Customer Card ─────────────────────────────── */}
-        <Animated.View style={{ transform: [{ translateY: slideCustomer }], opacity: fadeAnim }}>
-          <TouchableOpacity
-            style={styles.roleCard}
-            onPress={() => navigateToLogin('customer')}
-            activeOpacity={0.85}
-          >
-            <View style={[styles.roleIconCircle, { backgroundColor: Colors.primary }]}>
-              <Ionicons name="cart-outline" size={24} color={Colors.textOnPrimary} />
-            </View>
-
-            <View style={styles.roleCardContent}>
-              <Text style={styles.roleCardTitle}>
-                {t('gateway.shop_with')}
-              </Text>
-              <Text style={styles.roleCardDesc}>
-                {t('gateway.discover_desc')}
-              </Text>
-            </View>
-
-            <Ionicons name="chevron-forward" size={20} color={Colors.textSecondary} />
-          </TouchableOpacity>
-        </Animated.View>
-
-        {/* 16px gap between cards (handled by cardsSection gap) */}
-
-        {/* ── Seller Card ───────────────────────────────── */}
-        <Animated.View style={{ transform: [{ translateY: slideSeller }], opacity: fadeAnim }}>
-          <TouchableOpacity
-            style={styles.roleCard}
-            onPress={() => navigateToLogin('merchant')}
-            activeOpacity={0.85}
-          >
-            <View style={[styles.roleIconCircle, { backgroundColor: Colors.secondary }]}>
-              <Ionicons name="storefront-outline" size={24} color={Colors.textOnPrimary} />
-            </View>
-
-            <View style={styles.roleCardContent}>
-              <Text style={styles.roleCardTitle}>
-                {t('gateway.sell_with')}
-              </Text>
-              <Text style={styles.roleCardDesc}>
-                {t('gateway.manage_desc')}
-              </Text>
-            </View>
-
-            <Ionicons name="chevron-forward" size={20} color={Colors.textSecondary} />
-          </TouchableOpacity>
-        </Animated.View>
-
-        {/* Unified Registration Link */}
-        <TouchableOpacity
-          style={styles.unifiedRegisterLink}
-          onPress={navigateToRegister}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.unifiedRegisterText}>
-            {t('gateway.new_to_lamba')}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
       {/* Footer Branding */}
-      <Text style={styles.footerText}>Lamba v1.2.0 • Secure & Hyper-local</Text>
+      <Text style={styles.footerText}>{t('welcome.version', 'Lamba v1.2.0 • Local & Secure')}</Text>
     </View>
   );
-
 }

@@ -216,7 +216,7 @@ export default function VerifyScreen() {
           t('verify.account_activated'),
           [
             {
-              text: 'OK',
+              text: t('common.ok', 'OK'),
               onPress: () => {
                 // Navigate to Login and pre-fill the username
                 router.replace({

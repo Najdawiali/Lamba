@@ -1,7 +1,7 @@
 /**
- * Login Screen — Role-aware premium dark UI with glassmorphism.
- * Accepts `role` query param from gateway to show role-specific branding.
- * Validates returned user_type matches selected role (mismatch guard).
+ * Login Screen — Unified Multi-channel Sign In (Email / Phone).
+ * All users navigate to the customer home after sign in.
+ * Merchants access their store dashboard via Profile -> "إدارة متجري".
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -12,204 +12,16 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { signIn, logout as doLogout } from '../../services/api';
+import { signIn } from '../../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
 import { t, toggleLanguage, i18n } from '../../services/i18n';
 
 export default function LoginScreen() {
   const Colors = useThemeColors();
-
-  const styles = useMemo(() => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.xl,
-  },
-  glowOrb1: {
-    position: 'absolute',
-    top: '15%',
-    left: '-20%',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    opacity: 0.06,
-  },
-  glowOrb2: {
-    position: 'absolute',
-    bottom: '10%',
-    right: '-15%',
-    width: 250,
-    height: 250,
-    borderRadius: 125,
-    opacity: 0.05,
-  },
-  langButton: {
-    position: 'absolute',
-    top: 60,
-    right: Spacing.xl,
-    zIndex: 10,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: BorderRadius.full,
-    minWidth: 44,
-    minHeight: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  langText: {
-    fontSize: 14,
-    color: Colors.textPrimary,
-    fontWeight: '600',
-  },
-  backButton: {
-    position: 'absolute',
-    top: 60,
-    left: Spacing.xl,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: Spacing.xxl,
-  },
-  logoContainer: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: Spacing.lg,
-    ...Shadows.glow,
-  },
-  title: {
-    ...Typography.h1,
-    color: Colors.textPrimary,
-    marginBottom: Spacing.xs,
-  },
-  subtitle: {
-    ...Typography.body,
-    color: Colors.textSecondary,
-  },
-  card: {
-    backgroundColor: Colors.surfaceGlass,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.xl,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    ...Shadows.medium,
-  },
-  cardTitle: {
-    ...Typography.h3,
-    color: Colors.textPrimary,
-    marginBottom: Spacing.xl,
-    textAlign: 'center',
-  },
-  errorBanner: {
-    backgroundColor: Colors.errorBg,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.errorBorder,
-    padding: Spacing.md,
-    marginBottom: Spacing.lg,
-  },
-  errorHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  errorText: {
-    ...Typography.bodySmall,
-    color: Colors.error,
-    flex: 1,
-  },
-  verifyActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    borderRadius: BorderRadius.sm,
-    paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.sm,
-    marginTop: Spacing.sm,
-    alignSelf: 'flex-start',
-  },
-  verifyActionBtnText: {
-    ...Typography.caption,
-    color: Colors.textOnPrimary,
-    fontWeight: '700',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.md,
-    height: 52,
-  },
-  inputIcon: {
-    marginRight: Spacing.sm,
-  },
-  input: {
-    flex: 1,
-    color: Colors.textPrimary,
-    ...Typography.body,
-  },
-  forgotPassword: {
-    alignSelf: 'flex-end',
-    marginTop: Spacing.xs,
-    marginBottom: Spacing.xs,
-  },
-  forgotPasswordText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.primary,
-  },
-  button: {
-    borderRadius: BorderRadius.md,
-    height: 52,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: Spacing.md,
-    ...Shadows.small,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    ...Typography.button,
-    color: Colors.textOnPrimary,
-  },
-  linkContainer: {
-    marginTop: Spacing.lg,
-    alignItems: 'center',
-  },
-  linkText: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
-  },
-  linkHighlight: {
-    fontWeight: '600',
-  },
-  }), [Colors]);
   const router = useRouter();
   const searchParams = useLocalSearchParams();
-
-  // Role from gateway ("customer" or "merchant")
-  const role = (searchParams.role as string) || 'customer';
-  const isMerchant = role === 'merchant';
+  const isAr = i18n.locale?.startsWith('ar');
 
   // Get prefilled username if redirected from verify screen
   const prefill = searchParams.prefill as string;
@@ -236,13 +48,6 @@ export default function LoginScreen() {
     }
   }, [prefill]);
 
-  // Role-specific styling
-  const accentColor = isMerchant ? Colors.secondary : Colors.primary;
-  const accentDark = isMerchant ? '#00B88D' : Colors.primaryDark;
-  const roleIcon = isMerchant ? 'storefront-outline' : 'cart-outline';
-  const roleLabel = isMerchant ? t('login.seller_sign_in') : t('login.shopper_sign_in');
-  const roleSubtitle = isMerchant ? t('login.seller_subtitle') : t('login.shopper_subtitle');
-
   // Determine input icon dynamically
   const getUsernameIcon = (): any => {
     const val = emailOrPhone.trim();
@@ -257,38 +62,23 @@ export default function LoginScreen() {
     setUnverifiedDetails(null);
 
     if (!emailOrPhone.trim() || !password.trim()) {
-      setErrorMessage(t('login.fill_fields'));
+      setErrorMessage(t('login.fill_fields', 'Please fill in all fields'));
       return;
     }
 
     setLoading(true);
     try {
-      const response = await signIn(emailOrPhone.trim(), password);
+      await signIn(emailOrPhone.trim(), password);
 
-      // ── Role Mismatch Guard ──
-      const returnedRole = response.user.user_type;
-      if (returnedRole !== role) {
-        setErrorMessage(
-          returnedRole === 'merchant' ? t('login.role_mismatch_merchant') : t('login.role_mismatch_customer')
-        );
-        // Clear the stored token since we don't want them logged in on wrong side
-        await doLogout();
-        return;
-      }
-
-      // Route to correct app section
-      if (returnedRole === 'merchant') {
-        router.replace('/(merchant)/dashboard');
-      } else {
-        router.replace('/(customer)/search');
-      }
+      // Always route to customer search home for all accounts
+      router.replace('/(customer)/search');
     } catch (err: any) {
       const status = err?.response?.status;
       const data = err?.response?.data;
 
       if (status === 403 && data?.user_id) {
         // Account unverified — show banner with instant activation action
-        setErrorMessage(t('login.unverified_account'));
+        setErrorMessage(t('login.unverified_account', 'Account is unverified. Please verify your account.'));
         setUnverifiedDetails({
           userId: data.user_id,
           contact: data.contact,
@@ -296,7 +86,7 @@ export default function LoginScreen() {
           userType: data.user_type,
         });
       } else {
-        setErrorMessage(data?.detail || 'Invalid email/phone or password. Please try again.');
+        setErrorMessage(data?.detail || t('login.invalid_credentials', 'Invalid email/phone or password. Please try again.'));
       }
     } finally {
       setLoading(false);
@@ -316,19 +106,209 @@ export default function LoginScreen() {
     });
   };
 
+  const styles = useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: Colors.background,
+      justifyContent: 'center',
+      paddingHorizontal: Spacing.xl,
+    },
+    glowOrb1: {
+      position: 'absolute',
+      top: '15%',
+      left: '-20%',
+      width: 300,
+      height: 300,
+      borderRadius: 150,
+      backgroundColor: Colors.primary,
+      opacity: 0.06,
+    },
+    glowOrb2: {
+      position: 'absolute',
+      bottom: '10%',
+      right: '-15%',
+      width: 250,
+      height: 250,
+      borderRadius: 125,
+      backgroundColor: Colors.secondary,
+      opacity: 0.05,
+    },
+    langButton: {
+      position: 'absolute',
+      top: 50,
+      right: Spacing.xl,
+      zIndex: 10,
+      paddingVertical: Spacing.xs,
+      paddingHorizontal: Spacing.md,
+      backgroundColor: Colors.surfaceElevated,
+      borderRadius: BorderRadius.full,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      minWidth: 44,
+      minHeight: 36,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    langText: {
+      fontSize: 13,
+      color: Colors.textPrimary,
+      fontWeight: '700',
+    },
+    backButton: {
+      position: 'absolute',
+      top: 50,
+      left: Spacing.xl,
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: Colors.surface,
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: 10,
+      borderWidth: 1,
+      borderColor: Colors.border,
+    },
+    header: {
+      alignItems: 'center',
+      marginBottom: Spacing.xl,
+    },
+    logoContainer: {
+      width: 76,
+      height: 76,
+      borderRadius: 38,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: Spacing.md,
+      ...Shadows.glow,
+    },
+    title: {
+      ...Typography.h1,
+      fontSize: 26,
+      color: Colors.textPrimary,
+      marginBottom: Spacing.xs,
+      fontWeight: '800',
+    },
+    subtitle: {
+      ...Typography.body,
+      color: Colors.textSecondary,
+    },
+    card: {
+      backgroundColor: Colors.surfaceGlass,
+      borderRadius: BorderRadius.xl,
+      padding: Spacing.xl,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      ...Shadows.medium,
+    },
+    cardTitle: {
+      ...Typography.h3,
+      color: Colors.textPrimary,
+      marginBottom: Spacing.lg,
+      textAlign: 'center',
+    },
+    errorBanner: {
+      backgroundColor: Colors.errorBg,
+      borderRadius: BorderRadius.md,
+      borderWidth: 1,
+      borderColor: Colors.errorBorder,
+      padding: Spacing.md,
+      marginBottom: Spacing.lg,
+    },
+    errorHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.sm,
+    },
+    errorText: {
+      ...Typography.bodySmall,
+      color: Colors.error,
+      flex: 1,
+    },
+    verifyActionBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+      borderRadius: BorderRadius.sm,
+      backgroundColor: Colors.primary,
+      paddingVertical: Spacing.xs,
+      paddingHorizontal: Spacing.sm,
+      marginTop: Spacing.sm,
+      alignSelf: 'flex-start',
+    },
+    verifyActionBtnText: {
+      ...Typography.caption,
+      color: Colors.textOnPrimary,
+      fontWeight: '700',
+    },
+    inputContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: Colors.surface,
+      borderRadius: BorderRadius.md,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      paddingHorizontal: Spacing.lg,
+      marginBottom: Spacing.md,
+      height: 52,
+    },
+    inputIcon: {
+      marginHorizontal: Spacing.xs,
+    },
+    input: {
+      flex: 1,
+      color: Colors.textPrimary,
+      ...Typography.body,
+    },
+    forgotPassword: {
+      alignSelf: 'flex-end',
+      marginTop: Spacing.xs,
+      marginBottom: Spacing.xs,
+    },
+    forgotPasswordText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: Colors.primary,
+    },
+    button: {
+      backgroundColor: Colors.primary,
+      borderRadius: BorderRadius.md,
+      height: 52,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginTop: Spacing.md,
+      ...Shadows.small,
+    },
+    buttonDisabled: {
+      opacity: 0.6,
+    },
+    buttonText: {
+      ...Typography.button,
+      color: Colors.textOnPrimary,
+      fontSize: 16,
+      fontWeight: '800',
+    },
+    linkContainer: {
+      marginTop: Spacing.lg,
+      alignItems: 'center',
+    },
+    linkText: {
+      ...Typography.bodySmall,
+      color: Colors.textSecondary,
+    },
+    linkHighlight: {
+      color: Colors.primary,
+      fontWeight: '700',
+    },
+  }), [Colors]);
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      {/* Ambient Glow Orbs — role-tinted */}
-      <View style={[styles.glowOrb1, { backgroundColor: accentColor }]} />
-      <View style={[styles.glowOrb2, { backgroundColor: isMerchant ? Colors.accent : Colors.secondary }]} />
-
-      {/* Language Toggle — text-only pill */}
-      <TouchableOpacity style={styles.langButton} onPress={toggleLanguage} activeOpacity={0.7}>
-        <Text style={styles.langText}>{i18n.locale.includes('ar') ? 'EN' : 'ع'}</Text>
-      </TouchableOpacity>
+      <View style={styles.glowOrb1} />
+      <View style={styles.glowOrb2} />
 
       {/* Back Button */}
       <TouchableOpacity
@@ -339,23 +319,23 @@ export default function LoginScreen() {
         <Ionicons name="arrow-back" size={22} color={Colors.textSecondary} />
       </TouchableOpacity>
 
-      {/* Logo & Header — role-branded */}
+      {/* Header */}
       <View style={styles.header}>
         <LinearGradient
-          colors={isMerchant ? [Colors.secondary, '#33E4BC'] : [Colors.primary, '#8B83FF']}
+          colors={[Colors.primary, '#8B83FF']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.logoContainer}
         >
-          <Ionicons name={roleIcon as any} size={36} color={Colors.textOnPrimary} />
+          <Ionicons name="log-in-outline" size={36} color={Colors.textOnPrimary} />
         </LinearGradient>
-        <Text style={styles.title}>{roleLabel}</Text>
-        <Text style={styles.subtitle}>{roleSubtitle}</Text>
+        <Text style={styles.title}>{t('auth.sign_in_title', 'Sign In')}</Text>
+        <Text style={styles.subtitle}>{t('login.shopper_subtitle', 'Discover products near you')}</Text>
       </View>
 
       {/* Login Card */}
-      <View style={[styles.card, { borderColor: `${accentColor}22` }]}>
-        <Text style={styles.cardTitle}>{t('login.welcome_back')}</Text>
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>{t('login.welcome_back', 'Enter your credentials')}</Text>
 
         {/* Dynamic Error Banner */}
         {errorMessage && (
@@ -370,11 +350,11 @@ export default function LoginScreen() {
 
             {unverifiedDetails && (
               <TouchableOpacity
-                style={[styles.verifyActionBtn, { backgroundColor: accentColor }]}
+                style={styles.verifyActionBtn}
                 onPress={handleVerifyNow}
                 activeOpacity={0.8}
               >
-                <Text style={styles.verifyActionBtnText}>{t('login.verify_now')}</Text>
+                <Text style={styles.verifyActionBtnText}>{t('login.verify_now', 'Verify Now')}</Text>
                 <Ionicons name="arrow-forward" size={14} color={Colors.textOnPrimary} />
               </TouchableOpacity>
             )}
@@ -391,7 +371,7 @@ export default function LoginScreen() {
           />
           <TextInput
             style={styles.input}
-            placeholder={t('login.email_placeholder')}
+            placeholder={t('auth.phone_placeholder', '07XXXXXXXX')}
             placeholderTextColor={Colors.textMuted}
             value={emailOrPhone}
             onChangeText={(val) => {
@@ -409,7 +389,7 @@ export default function LoginScreen() {
           <Ionicons name="lock-closed-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
           <TextInput
             style={styles.input}
-            placeholder={t('login.password_placeholder')}
+            placeholder={t('auth.password_placeholder', 'Password')}
             placeholderTextColor={Colors.textMuted}
             value={password}
             onChangeText={(val) => {
@@ -426,35 +406,35 @@ export default function LoginScreen() {
 
         {/* Forgot Password Link */}
         <TouchableOpacity style={styles.forgotPassword} activeOpacity={0.7}>
-          <Text style={styles.forgotPasswordText}>{t('login.forgot_password')}</Text>
+          <Text style={styles.forgotPasswordText}>{t('auth.forgot_password', 'Forgot Password?')}</Text>
         </TouchableOpacity>
 
         {/* Login Button */}
         <TouchableOpacity
-          style={[styles.button, { backgroundColor: accentColor }, loading && styles.buttonDisabled]}
+          style={[styles.button, loading && styles.buttonDisabled]}
           onPress={handleLogin}
           disabled={loading}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
         >
           {loading ? (
             <ActivityIndicator color={Colors.textOnPrimary} />
           ) : (
-            <Text style={styles.buttonText}>{t('login.sign_in')}</Text>
+            <Text style={styles.buttonText}>{t('auth.sign_in_button', 'Sign In')}</Text>
           )}
         </TouchableOpacity>
 
         {/* Register Link */}
         <TouchableOpacity
           style={styles.linkContainer}
-          onPress={() => router.push({ pathname: '/(auth)/register', params: { role } })}
+          onPress={() => router.push('/(auth)/register')}
+          activeOpacity={0.7}
         >
           <Text style={styles.linkText}>
-            {t('login.no_account')}{' '}
-            <Text style={[styles.linkHighlight, { color: accentColor }]}>{t('login.sign_up')}</Text>
+            {t('auth.no_account', "Don't have an account?")}{' '}
+            <Text style={styles.linkHighlight}>{t('auth.sign_up_title', 'Sign Up')}</Text>
           </Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
   );
-
 }
