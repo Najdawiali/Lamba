@@ -148,7 +148,7 @@ async def check_llm(settings) -> bool:
     print("=" * 60)
 
     url = f"{settings.deepinfra_api_base}/openai/chat/completions"
-    model = getattr(settings, "query_llm_model", "Qwen/Qwen3.5-35B-A3B")
+    model = getattr(settings, "query_llm_model", "Qwen/Qwen3.6-35B-A3B")
     print(f"  URL:   {url}")
     print(f"  Model: {model}")
 

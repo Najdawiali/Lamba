@@ -96,7 +96,7 @@ async def test_llm_adapter_returns_none_on_missing_key():
     with patch("app.services.llm.settings") as ms:
         ms.deepinfra_api_base = "https://api.deepinfra.com/v1"
         ms.deepinfra_api_key = ""  # Missing key
-        ms.query_llm_model = "Qwen/Qwen3.5-35B-A3B"
+        ms.query_llm_model = "Qwen/Qwen3.6-35B-A3B"
 
         adapter = LLMAdapter()
         result = await adapter.complete_chat(
@@ -116,7 +116,7 @@ async def test_llm_adapter_returns_none_on_network_error():
     with patch("app.services.llm.settings") as ms:
         ms.deepinfra_api_base = "https://api.deepinfra.com/v1"
         ms.deepinfra_api_key = "real-key"
-        ms.query_llm_model = "Qwen/Qwen3.5-35B-A3B"
+        ms.query_llm_model = "Qwen/Qwen3.6-35B-A3B"
 
         adapter = LLMAdapter()
 
