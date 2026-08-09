@@ -40,6 +40,12 @@ from tests.test_services_mocked import (
     test_llm_adapter_returns_none_on_network_error,
     test_normalize_cache_key_consistency,
 )
+from tests.test_optimizations import (
+    TestHttpPool,
+    TestRedisCaching,
+    TestQueryExpansionCacheIntegration,
+    TestBatchEmbedding,
+)
 
 
 class TestArabicNorm(unittest.TestCase):
