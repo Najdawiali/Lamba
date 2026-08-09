@@ -549,7 +549,7 @@ export default function SearchScreen() {
       fontSize: 12,
     },
     didYouMeanNoBtn: {
-      backgroundColor: Colors.surfaceVariant || Colors.background,
+      backgroundColor: Colors.surfaceElevated || Colors.background,
       paddingHorizontal: Spacing.md,
       paddingVertical: Spacing.xs,
       borderRadius: 16,
@@ -568,7 +568,7 @@ export default function SearchScreen() {
       backgroundColor: Colors.surface,
       borderRadius: BorderRadius.lg,
       padding: Spacing.lg,
-      flexDirection: 'row-reverse' as const,
+      flexDirection: 'row' as const,
       borderWidth: 1,
       borderColor: Colors.border,
     },
@@ -608,7 +608,7 @@ export default function SearchScreen() {
       marginBottom: 0,
     },
     notifyBtn: {
-      flexDirection: 'row-reverse' as const,
+      flexDirection: 'row' as const,
       alignItems: 'center' as const,
       backgroundColor: `${Colors.primary}20`,
       borderRadius: BorderRadius.sm,
@@ -641,7 +641,7 @@ export default function SearchScreen() {
       marginBottom: Spacing.xl,
     },
     notifyBtnPrimary: {
-      flexDirection: 'row-reverse' as const,
+      flexDirection: 'row' as const,
       alignItems: 'center' as const,
       backgroundColor: Colors.primary,
       borderRadius: BorderRadius.md,
@@ -662,7 +662,7 @@ export default function SearchScreen() {
       alignSelf: 'flex-end' as const,
     },
     popularChipsRow: {
-      flexDirection: 'row-reverse' as const,
+      flexDirection: 'row' as const,
       flexWrap: 'wrap' as const,
       gap: Spacing.sm,
     },
@@ -725,7 +725,7 @@ export default function SearchScreen() {
 
     // ── RTL Recent Search ─────────────────────────────────────────
     recentHeaderRow: {
-      flexDirection: 'row-reverse' as const,
+      flexDirection: 'row' as const,
       justifyContent: 'space-between' as const,
       marginBottom: Spacing.md,
       paddingHorizontal: Spacing.lg,
@@ -739,7 +739,7 @@ export default function SearchScreen() {
       color: Colors.primary,
     },
     recentItem: {
-      flexDirection: 'row-reverse' as const,
+      flexDirection: 'row' as const,
       alignItems: 'center' as const,
       paddingVertical: Spacing.md,
       paddingHorizontal: Spacing.lg,
@@ -765,7 +765,7 @@ export default function SearchScreen() {
       >
         <Ionicons name="menu" size={24} color={Colors.textPrimary} />
       </TouchableOpacity>
-      <Text style={styles.headerTitle}>Lamba</Text>
+      <Text style={styles.headerTitle}>{t('welcome.title', 'Lamba')}</Text>
       <TouchableOpacity style={styles.avatarButton} onPress={() => router.push('/(customer)/profile')}>
         <LinearGradient
           colors={[Colors.primary, '#8B83FF']}
@@ -859,17 +859,6 @@ export default function SearchScreen() {
 
   const renderExploreFeed = () => (
     <ScrollView contentContainerStyle={styles.feedContent} showsVerticalScrollIndicator={false}>
-      {/* Suggestions Row */}
-      <View style={styles.suggestionsRow}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.suggestionsScroll}>
-          {['Coffee', 'Bread', 'Water', 'Charger', 'Panadol'].map((sug) => (
-            <TouchableOpacity key={sug} style={styles.suggestionChip} onPress={() => executeSearch(sug)}>
-              <Text style={styles.suggestionChipText}>{sug}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
       {/* Nearby Markets */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -998,13 +987,13 @@ export default function SearchScreen() {
           /* ── Error State ─────────────────────────────────────────── */
           <View style={styles.errorStateContainer}>
             <Ionicons name="wifi-outline" size={48} color={Colors.error} style={{ marginBottom: Spacing.lg, opacity: 0.6 }} />
-            <Text style={styles.errorTitle}>حدث خطأ في البحث</Text>
-            <Text style={styles.errorSubtitle}>تحقق من اتصالك بالإنترنت</Text>
+            <Text style={styles.errorTitle}>{t('search.error_title', 'حدث خطأ في البحث')}</Text>
+            <Text style={styles.errorSubtitle}>{t('search.error_subtitle', 'تحقق من اتصالك بالإنترنت')}</Text>
             <TouchableOpacity
               onPress={() => { setSearchError(false); if (query.trim()) executeSearch(query); }}
               style={styles.retryBtn}
             >
-              <Text style={styles.retryBtnText}>إعادة المحاولة</Text>
+              <Text style={styles.retryBtnText}>{t('common.retry', 'إعادة المحاولة')}</Text>
             </TouchableOpacity>
           </View>
         ) : hasSearched ? (
@@ -1014,7 +1003,7 @@ export default function SearchScreen() {
               <View style={styles.didYouMeanBanner}>
                 <Ionicons name="help-circle-outline" size={20} color={Colors.primary} />
                 <View style={styles.didYouMeanContent}>
-                  <Text style={styles.didYouMeanText}>Did you mean: </Text>
+                  <Text style={styles.didYouMeanText}>{t('search.did_you_mean', 'Did you mean: ')}</Text>
                   <TouchableOpacity onPress={() => handleApplySuggestion(suggestion)}>
                     <Text style={styles.didYouMeanLink}>"{suggestion}"</Text>
                   </TouchableOpacity>
@@ -1022,10 +1011,10 @@ export default function SearchScreen() {
                 </View>
                 <View style={styles.didYouMeanActions}>
                   <TouchableOpacity style={styles.didYouMeanYesBtn} onPress={() => handleApplySuggestion(suggestion)}>
-                    <Text style={styles.didYouMeanYesText}>Yes</Text>
+                    <Text style={styles.didYouMeanYesText}>{t('common.yes', 'Yes')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.didYouMeanNoBtn} onPress={() => setSuggestion(null)}>
-                    <Text style={styles.didYouMeanNoText}>No</Text>
+                    <Text style={styles.didYouMeanNoText}>{t('common.no', 'No')}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -1035,10 +1024,10 @@ export default function SearchScreen() {
             {searchMode === 'recommendations' && results.length > 0 && (
               <View style={styles.recBannerAr}>
                 <Text style={styles.recBannerTitle}>
-                  لم نجد نتيجة مطابقة لـ "{query}"
+                  {t('search.recommendations_title', { query })}
                 </Text>
                 <Text style={styles.recBannerSubtitle}>
-                  لكن قد يعجبك:
+                  {t('search.recommendations_subtitle', 'لكن قد يعجبك:')}
                 </Text>
               </View>
             )}
@@ -1054,22 +1043,22 @@ export default function SearchScreen() {
                 <View style={styles.emptyStateAr}>
                   <Ionicons name="search-outline" size={64} color={Colors.textSecondary} style={{ marginBottom: Spacing.lg, opacity: 0.5 }} />
                   <Text style={styles.emptyStateTitle}>
-                    لم نجد "{query}" في المتاجر القريبة
+                    {t('search.no_match_title', { query })}
                   </Text>
                   <Text style={styles.emptyStateSubtitle}>
-                    جرب البحث بكلمات مختلفة أو تصفح الأقسام
+                    {t('search.no_match_subtitle', 'جرب البحث بكلمات مختلفة أو تصفح الأقسام')}
                   </Text>
 
                   {/* Notify Me Button */}
                   <TouchableOpacity onPress={handleNotifyMe} style={styles.notifyBtnPrimary}>
                     <Ionicons name="notifications-outline" size={20} color={Colors.textOnPrimary} />
                     <Text style={styles.notifyBtnPrimaryText}>
-                      أبلغني عند توفر "{query}"
+                      {t('search.notify_me', 'أبلغني عند توفره')}
                     </Text>
                   </TouchableOpacity>
 
                   {/* Popular Searches */}
-                  <Text style={styles.popularLabel}>بحث شائع</Text>
+                  <Text style={styles.popularLabel}>{t('search.popular', 'بحث شائع')}</Text>
                   <View style={styles.popularChipsRow}>
                     {['حليب', 'خبز', 'زيت زيتون', 'قهوة', 'شاي', 'عسل', 'أرز', 'سكر'].map(term => (
                       <TouchableOpacity
@@ -1089,7 +1078,7 @@ export default function SearchScreen() {
           /* ── RTL Recent Searches (input focused, empty query) ──── */
           <View style={{ flex: 1 }}>
             <View style={styles.recentHeaderRow}>
-              <Text style={styles.recentHeaderText}>بحث سابق</Text>
+              <Text style={styles.recentHeaderText}>{t('search.recent', 'بحث سابق')}</Text>
               <TouchableOpacity onPress={async () => {
                 if (!userId) return;
                 try {
@@ -1097,7 +1086,7 @@ export default function SearchScreen() {
                   setHistoryList([]);
                 } catch (err) { console.warn('Failed to clear history:', err); }
               }}>
-                <Text style={styles.recentClearText}>مسح الكل</Text>
+                <Text style={styles.recentClearText}>{t('search.clear_all', 'مسح الكل')}</Text>
               </TouchableOpacity>
             </View>
             {historyList.slice(0, 8).map(item => (

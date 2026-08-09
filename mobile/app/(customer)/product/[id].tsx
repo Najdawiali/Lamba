@@ -42,7 +42,7 @@ export default function ProductDetailScreen() {
 
   const loadProductDetails = async () => {
     if (!id) {
-      setError(isAr ? 'تعذر استرداد تفاصيل المنتج. تحقق من الاتصال.' : 'Could not retrieve product listing. Check store connectivity.');
+      setError(t('product.error_loading', 'Could not retrieve product listing. Check store connectivity.'));
       setLoading(false);
       return;
     }
@@ -53,7 +53,7 @@ export default function ProductDetailScreen() {
       setProduct(data);
     } catch (err) {
       console.error('Failed to load product details:', err);
-      setError(isAr ? 'تعذر استرداد تفاصيل المنتج. تحقق من الاتصال.' : 'Could not retrieve product listing. Check store connectivity.');
+      setError(t('product.error_loading', 'Could not retrieve product listing. Check store connectivity.'));
     } finally {
       setLoading(false);
     }
@@ -176,7 +176,7 @@ export default function ProductDetailScreen() {
         <Ionicons name="alert-circle-outline" size={48} color={Colors.error} />
         <Text style={styles.errorText}>{error || 'Product not found'}</Text>
         <TouchableOpacity style={styles.retryBtn} onPress={loadProductDetails}>
-          <Text style={styles.retryBtnText}>Retry Load</Text>
+          <Text style={styles.retryBtnText}>{t('common.retry', 'Retry')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -249,7 +249,9 @@ export default function ProductDetailScreen() {
 
         {/* Info Area */}
         <View style={styles.infoSection}>
-          <Text style={styles.productName}>{product.name}</Text>
+          <Text style={styles.productName}>
+            {i18n.locale?.startsWith('ar') ? (product.name_ar || product.name) : (product.name_en || product.name)}
+          </Text>
           {product.price != null && product.price > 0 ? (
             <Text style={styles.price}>
               {formatPrice(product.price)}
@@ -259,7 +261,11 @@ export default function ProductDetailScreen() {
           )}
           {Boolean(product.category) ? (
             <View style={styles.categoryBadge}>
-              <Text style={styles.categoryText}>{product.category}</Text>
+              <Text style={styles.categoryText}>
+                {i18n.locale?.startsWith('ar')
+                  ? (product.category_name_ar || product.category)
+                  : (product.category_name_en || product.category)}
+              </Text>
             </View>
           ) : null}
         </View>

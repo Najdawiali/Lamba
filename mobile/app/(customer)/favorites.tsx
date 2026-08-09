@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
-import { i18n } from '../../services/i18n';
+import { t, i18n } from '../../services/i18n';
 import { getFavorites, getMarketItemDetails, removeFavorite, SearchResultItem } from '../../services/api';
 import ProductCard from '../../components/ProductCard';
 
@@ -170,7 +170,6 @@ export default function FavoritesScreen() {
   const [favoritesList, setFavoritesList] = useState<SearchResultItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const isAr = i18n.locale.includes('ar');
   const [activeTab, setActiveTab] = useState<'products' | 'shops'>('products');
 
   // Animation for tabs
@@ -258,12 +257,12 @@ export default function FavoritesScreen() {
 
   const handleRemoveFav = async (itemId: string) => {
     Alert.alert(
-      isAr ? 'حذف من المفضلة' : 'Remove Favorite',
-      isAr ? 'هل تريد إزالة هذا المنتج من قائمة المفضلات؟' : 'Are you sure you want to remove this item from your favorites?',
+      t('favorites.removed', 'Remove Favorite'),
+      t('offers.confirm_delete', 'Are you sure you want to remove this item from your favorites?'),
       [
-        { text: isAr ? 'إلغاء' : 'Cancel', style: 'cancel' },
+        { text: t('common.cancel', 'Cancel'), style: 'cancel' },
         {
-          text: isAr ? 'حذف' : 'Remove',
+          text: t('common.delete', 'Delete'),
           style: 'destructive',
           onPress: async () => {
             await removeFavorite(itemId);
@@ -280,31 +279,29 @@ export default function FavoritesScreen() {
         <Ionicons name="heart" size={40} color={Colors.accent} />
       </View>
       <Text style={styles.emptyTitle}>
-        {isAr ? 'لا توجد مفضلات بعد' : 'No favorites yet'}
+        {t('favorites.empty', 'No favorites yet')}
       </Text>
       <Text style={styles.emptyDesc}>
-        {isAr
-          ? 'ابدأ باستكشاف الأسواق القريبة واحفظ منتجاتك المفضلة هنا'
-          : 'Start exploring nearby markets and save your favorite items here'}
+        {t('favorites.empty_desc', 'Start exploring nearby markets and save your favorite items here')}
       </Text>
 
       <View style={styles.featureList}>
         <View style={styles.featureItem}>
           <Ionicons name="storefront-outline" size={20} color={Colors.textSecondary} style={styles.featureIcon} />
           <Text style={styles.featureText}>
-            {isAr ? 'احفظ الأسواق المفضلة لديك' : 'Save your favorite markets'}
+            {t('favorites.save_markets', 'Save your favorite markets')}
           </Text>
         </View>
         <View style={styles.featureItem}>
           <Ionicons name="bookmark-outline" size={20} color={Colors.textSecondary} style={styles.featureIcon} />
           <Text style={styles.featureText}>
-            {isAr ? 'تتبع المنتجات التي تعجبك' : 'Track products you love'}
+            {t('favorites.track_products', 'Track products you love')}
           </Text>
         </View>
         <View style={styles.featureItem}>
           <Ionicons name="notifications-outline" size={20} color={Colors.textSecondary} style={styles.featureIcon} />
           <Text style={styles.featureText}>
-            {isAr ? 'احصل على إشعارات التوفر' : 'Get notified on price drops'}
+            {t('favorites.get_notified', 'Get notified on price drops')}
           </Text>
         </View>
       </View>
@@ -315,7 +312,7 @@ export default function FavoritesScreen() {
         onPress={() => router.replace('/(customer)/search')}
       >
         <Text style={styles.exploreBtnText}>
-          {isAr ? 'ابدأ الاستكشاف' : 'Start Exploring'}
+          {t('favorites.start_exploring', 'Start Exploring')}
         </Text>
       </TouchableOpacity>
     </View>
@@ -325,9 +322,9 @@ export default function FavoritesScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>{isAr ? 'المفضلة' : 'Favorites'}</Text>
+        <Text style={styles.title}>{t('favorites.title', 'Favorites')}</Text>
         <Text style={styles.subtitle}>
-          {isAr ? 'الأسواق والمنتجات المحفوظة' : 'Your saved markets & products'}
+          {t('favorites.subtitle', 'Your saved markets & products')}
         </Text>
       </View>
 
@@ -351,7 +348,7 @@ export default function FavoritesScreen() {
             activeOpacity={0.8}
           >
             <Text style={[styles.tabText, activeTab === 'products' && styles.tabTextActive]}>
-              {isAr ? 'المنتجات' : 'Products'}
+              {t('favorites.products_tab', 'Products')}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -360,7 +357,7 @@ export default function FavoritesScreen() {
             activeOpacity={0.8}
           >
             <Text style={[styles.tabText, activeTab === 'shops' && styles.tabTextActive]}>
-              {isAr ? 'المتاجر' : 'Shops'}
+              {t('favorites.shops_tab', 'Shops')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -370,7 +367,7 @@ export default function FavoritesScreen() {
       {loading && !refreshing ? (
         <View style={styles.loaderContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loaderText}>{isAr ? 'جاري التحميل...' : 'Loading favorites...'}</Text>
+          <Text style={styles.loaderText}>{t('common.loading', 'Loading favorites...')}</Text>
         </View>
       ) : activeTab === 'shops' ? (
         // Placeholder for shops tab
@@ -379,12 +376,10 @@ export default function FavoritesScreen() {
             <Ionicons name="storefront-outline" size={40} color={Colors.primary} />
           </View>
           <Text style={styles.emptyTitle}>
-            {isAr ? 'قائمة المتاجر المفضلة قادمة قريباً' : 'Favorite shops list — coming soon'}
+            {t('messages.coming_soon', 'Favorite shops list — coming soon')}
           </Text>
           <Text style={styles.emptyDesc}>
-            {isAr
-              ? 'احفظ المتاجر للوصول السريع إليها وتلقي التحديثات'
-              : 'Save shops for quick access and receive updates'}
+            {t('favorites.save_markets', 'Save shops for quick access and receive updates')}
           </Text>
         </View>
       ) : (
@@ -416,5 +411,4 @@ export default function FavoritesScreen() {
       )}
     </SafeAreaView>
   );
-
 }

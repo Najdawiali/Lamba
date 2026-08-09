@@ -390,10 +390,10 @@ export default function CustomerInboxScreen() {
         <View style={{ alignItems: 'center', paddingVertical: 48, paddingHorizontal: Spacing.xl }}>
           <Ionicons name="chatbubbles-outline" size={64} color={Colors.textSecondary} style={{ opacity: 0.4 }} />
           <Text style={{ color: Colors.textSecondary, fontSize: 15, marginTop: 16, textAlign: 'center', fontWeight: '600' }}>
-            {isAr ? 'المحادثات قريباً' : 'Messages Coming Soon'}
+            {t('messages.coming_soon', 'Messages Coming Soon')}
           </Text>
           <Text style={{ color: Colors.textSecondary, fontSize: 13, marginTop: 4, textAlign: 'center' }}>
-            {isAr ? 'ستتمكن من التواصل مع المتاجر مباشرة' : 'You will be able to chat with nearby stores directly'}
+            {t('messages.coming_soon_desc', 'You will be able to chat with nearby stores directly')}
           </Text>
         </View>
       ) : (

@@ -19,10 +19,10 @@ import {
   Modal, FlatList, ActivityIndicator, TextInput, Switch
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { getUser, saveUser, logout, getCustomerAlerts, AlertResponse } from '../../../services/api';
+import { getUser, saveUser, logout, getCustomerAlerts, AlertResponse, getMyStore } from '../../../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
 import { useThemeColors } from '../../../context/ThemeContext';
 import { t, i18n, toggleLanguage } from '../../../services/i18n';
@@ -219,26 +219,55 @@ export default function CustomerProfileScreen() {
   const [notifModalVisible, setNotifModalVisible] = useState(false);
   const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>(DEFAULT_NOTIF_PREFS);
 
+  // Merchant Store detection state
+  const [hasStore, setHasStore] = useState(false);
+  const [checkingStore, setCheckingStore] = useState(true);
+
   // Legal text modals state
   const [privacyModalVisible, setPrivacyModalVisible] = useState(false);
   const [termsModalVisible, setTermsModalVisible] = useState(false);
 
-  const loadUserData = async () => {
+  const loadUserData = useCallback(async () => {
     try {
       setLoadingUser(true);
       const userData = await getUser();
       setUser(userData);
+
+      // Check if user has an associated store in backend or has merchant role
+      try {
+        const store = await getMyStore();
+        if (store && store.id) {
+          setHasStore(true);
+        } else if (userData?.user_type === 'merchant' || userData?.role === 'merchant') {
+          setHasStore(true);
+        } else {
+          setHasStore(false);
+        }
+      } catch {
+        if (userData?.user_type === 'merchant' || userData?.role === 'merchant') {
+          setHasStore(true);
+        } else {
+          setHasStore(false);
+        }
+      }
     } catch (err) {
       console.error('Failed to load user profile:', err);
     } finally {
       setLoadingUser(false);
+      setCheckingStore(false);
     }
-  };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadUserData();
+    }, [loadUserData])
+  );
 
   useEffect(() => {
     loadUserData();
     loadNotifPrefs().then(setNotifPrefs);
-  }, []);
+  }, [loadUserData]);
 
   // ── Edit Profile ──────────────────────────────────────────────
   const handleOpenEditProfile = () => {
@@ -678,6 +707,58 @@ export default function CustomerProfileScreen() {
               </Text>
             )}
           </View>
+        )}
+
+        {/* ── Merchant Access Section: State 1 (No store) vs State 2 (Has store) ── */}
+        {!checkingStore && !hasStore && (
+          <TouchableOpacity
+            onPress={() => router.push('/create-store')}
+            style={{
+              backgroundColor: Colors.surfaceElevated,
+              borderRadius: 12,
+              padding: 20,
+              marginBottom: 16,
+              borderWidth: 1,
+              borderColor: Colors.primary + '40',
+              ...Shadows.small,
+            }}
+            activeOpacity={0.85}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+              <Ionicons name="storefront-outline" size={24} color={Colors.primary} />
+              <Text style={{ color: Colors.textPrimary, fontSize: 16, fontWeight: '600', marginHorizontal: 10 }}>
+                {t('profile.add_store', 'Add Your Store')}
+              </Text>
+            </View>
+            <Text style={{ color: Colors.textSecondary, fontSize: 13 }}>
+              {t('profile.add_store_desc', 'Start selling your products or offering services to the local community')}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {!checkingStore && hasStore && (
+          <TouchableOpacity
+            onPress={() => router.push('/(merchant)/dashboard')}
+            style={{
+              backgroundColor: Colors.primary,
+              borderRadius: 12,
+              padding: 16,
+              marginBottom: 16,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              ...Shadows.small,
+            }}
+            activeOpacity={0.85}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="storefront" size={22} color="#FFFFFF" />
+              <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '600', marginHorizontal: 10 }}>
+                {t('profile.manage_store', 'Manage My Store')}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
         )}
 
         {/* Settings Section */}

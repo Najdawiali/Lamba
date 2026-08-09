@@ -558,7 +558,9 @@ export default function CustomerOffersScreen() {
 
         <View style={styles.cardInfo}>
           <Text style={styles.productName} numberOfLines={1}>{item.product_name}</Text>
-          <Text style={styles.categoryName}>{item.category || t('offers.general_promo')}</Text>
+          <Text style={styles.categoryName}>
+            {(i18n.locale?.startsWith('ar') ? (item.category_name_ar || item.category) : (item.category_name_en || item.category)) || t('offers.general_promo')}
+          </Text>
 
           {item.price != null && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginTop: 4 }}>
@@ -697,17 +699,20 @@ export default function CustomerOffersScreen() {
               {t('common.all')}
             </Text>
           </TouchableOpacity>
-          {categories.map((cat) => (
-            <TouchableOpacity
-              key={cat.id}
-              style={[styles.categoryPill, selectedCategory === cat.id && styles.categoryPillActive]}
-              onPress={() => { setSelectedCategory(cat.id); fetchOffers(); }}
-            >
-              <Text style={[styles.categoryPillText, selectedCategory === cat.id && styles.categoryPillTextActive]}>
-                {cat.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          {categories.map((cat) => {
+            const catName = i18n.locale?.startsWith('ar') ? (cat.name_ar || cat.name) : (cat.name_en || cat.name);
+            return (
+              <TouchableOpacity
+                key={cat.id}
+                style={[styles.categoryPill, selectedCategory === cat.id && styles.categoryPillActive]}
+                onPress={() => { setSelectedCategory(cat.id); fetchOffers(); }}
+              >
+                <Text style={[styles.categoryPillText, selectedCategory === cat.id && styles.categoryPillTextActive]}>
+                  {catName}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
 
@@ -790,10 +795,10 @@ export default function CustomerOffersScreen() {
             <View style={{ alignItems: 'center', paddingVertical: 48, paddingHorizontal: Spacing.xl }}>
               <Ionicons name="pricetag-outline" size={64} color={Colors.textSecondary} style={{ opacity: 0.4 }} />
               <Text style={{ color: Colors.textSecondary, fontSize: 15, marginTop: 16, textAlign: 'center', fontWeight: '600' }}>
-                {isAr ? 'العروض قريباً' : 'Offers Coming Soon'}
+                {t('offers.no_deals_title', 'Offers Coming Soon')}
               </Text>
               <Text style={{ color: Colors.textSecondary, fontSize: 13, marginTop: 4, textAlign: 'center' }}>
-                {isAr ? 'ترقب العروض والتخفيضات من المتاجر القريبة' : 'Stay tuned for deals and discounts from nearby stores'}
+                {t('offers.no_deals_desc', 'Stay tuned for deals and discounts from nearby stores')}
               </Text>
             </View>
           }

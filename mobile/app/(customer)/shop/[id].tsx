@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
 import { useThemeColors } from '../../../context/ThemeContext';
 import { getMarketCatalog, MarketCatalogResponse, CustomerItemResponse } from '../../../services/api';
-import { t } from '../../../services/i18n';
+import { t, i18n } from '../../../services/i18n';
 import { getCurrencyCode } from '../../../services/currency';
 import { resolveImageUrl } from '../../../services/utils';
 
@@ -113,6 +113,7 @@ export default function ShopCatalogScreen() {
 
   const categories = Object.keys(catalog);
   const activeItems = activeCategory ? catalog[activeCategory] : [];
+  const isAr = i18n.locale?.startsWith('ar');
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -130,66 +131,77 @@ export default function ShopCatalogScreen() {
           {/* Category Tabs */}
           <View style={styles.tabsContainer}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScroll}>
-              {categories.map((cat) => (
-                <TouchableOpacity
-                  key={cat}
-                  style={[styles.tabBtn, activeCategory === cat && styles.tabBtnActive]}
-                  onPress={() => setActiveCategory(cat)}
-                >
-                  <Text style={[styles.tabText, activeCategory === cat && styles.tabTextActive]}>
-                    {cat}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              {categories.map((cat) => {
+                const firstItem = catalog[cat]?.[0];
+                const catDisplayName = isAr
+                  ? (firstItem?.category_name_ar || cat)
+                  : (firstItem?.category_name_en || cat);
+
+                return (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[styles.tabBtn, activeCategory === cat && styles.tabBtnActive]}
+                    onPress={() => setActiveCategory(cat)}
+                  >
+                    <Text style={[styles.tabText, activeCategory === cat && styles.tabTextActive]}>
+                      {catDisplayName}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
           </View>
 
           {/* Product Grid */}
           <ScrollView contentContainerStyle={styles.gridContainer} showsVerticalScrollIndicator={false}>
-            {(activeItems || []).map((item) => (
-              <TouchableOpacity
-                key={item.market_item_id}
-                style={styles.cardContainer}
-                activeOpacity={0.8}
-                onPress={() => router.push(`/(customer)/product/${item.market_item_id}`)}
-              >
-                <View style={styles.imageContainer}>
-                  {item.image_url ? (
-                    <Image source={{ uri: resolveImageUrl(item.image_url) }} style={styles.image} />
-                  ) : (
-                    <View style={styles.imagePlaceholder}>
-                      <Ionicons name="cube-outline" size={32} color={Colors.textMuted} />
-                    </View>
-                  )}
-                  {!item.in_stock ? (
-                    <View style={styles.outOfStockOverlay}>
-                      <Text style={styles.outOfStockText}>{t('product.out_of_stock', 'Out of Stock')}</Text>
-                    </View>
-                  ) : null}
-                </View>
+            {(activeItems || []).map((item) => {
+              const itemName = isAr ? (item.name_ar || item.name) : (item.name_en || item.name);
 
-                <View style={styles.cardInfo}>
-                  <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
-                  <View style={styles.priceRow}>
-                    {item.price != null && item.price > 0 ? (
-                      <Text style={styles.priceText}>
-                        {`${item.price.toFixed(2)} ${getCurrencyCode()}`}
-                      </Text>
+              return (
+                <TouchableOpacity
+                  key={item.market_item_id}
+                  style={styles.cardContainer}
+                  activeOpacity={0.8}
+                  onPress={() => router.push(`/(customer)/product/${item.market_item_id}`)}
+                >
+                  <View style={styles.imageContainer}>
+                    {item.image_url ? (
+                      <Image source={{ uri: resolveImageUrl(item.image_url) }} style={styles.image} />
                     ) : (
-                      <Text style={styles.priceFree}>{t('product.price_request', 'Price on request')}</Text>
+                      <View style={styles.imagePlaceholder}>
+                        <Ionicons name="cube-outline" size={32} color={Colors.textMuted} />
+                      </View>
                     )}
-                    {Boolean(item.in_stock) ? (
-                      <TouchableOpacity
-                        style={styles.quickAddBtn}
-                        onPress={() => router.push(`/(customer)/product/${item.market_item_id}`)}
-                      >
-                        <Ionicons name="add" size={16} color={Colors.textOnPrimary} />
-                      </TouchableOpacity>
+                    {!item.in_stock ? (
+                      <View style={styles.outOfStockOverlay}>
+                        <Text style={styles.outOfStockText}>{t('product.out_of_stock', 'Out of Stock')}</Text>
+                      </View>
                     ) : null}
                   </View>
-                </View>
-              </TouchableOpacity>
-            ))}
+
+                  <View style={styles.cardInfo}>
+                    <Text style={styles.itemName} numberOfLines={2}>{itemName}</Text>
+                    <View style={styles.priceRow}>
+                      {item.price != null && item.price > 0 ? (
+                        <Text style={styles.priceText}>
+                          {`${item.price.toFixed(2)} ${getCurrencyCode()}`}
+                        </Text>
+                      ) : (
+                        <Text style={styles.priceFree}>{t('product.price_request', 'Price on request')}</Text>
+                      )}
+                      {Boolean(item.in_stock) ? (
+                        <TouchableOpacity
+                          style={styles.quickAddBtn}
+                          onPress={() => router.push(`/(customer)/product/${item.market_item_id}`)}
+                        >
+                          <Ionicons name="add" size={16} color={Colors.textOnPrimary} />
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         </>
       ) : (
