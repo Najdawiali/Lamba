@@ -173,6 +173,12 @@ class Settings(BaseSettings):
     recommendation_tier_threshold: float = 0.35
     language_match_boost: float = 0.05
 
+    # ── Redis Cache Configuration ───────────────────────────────
+    redis_host: str = "redis"
+    redis_port: int = 6379
+    cache_expansion_ttl: int = 7200    # 2 hours — expansion results are stable
+    cache_search_ttl: int = 300        # 5 minutes — results may change with new products
+
     # ── Search ──────────────────────────────────────────────────
     default_search_radius_km: float = 5.0
     max_search_results: int = 50
@@ -187,6 +193,8 @@ class Settings(BaseSettings):
         if not in_docker:
             if "postgres" in self.database_url and "@postgres:" in self.database_url:
                 self.database_url = self.database_url.replace("@postgres:", "@localhost:")
+            if self.redis_host == "redis":
+                self.redis_host = "localhost"
 
 
 settings = Settings()

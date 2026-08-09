@@ -24,6 +24,8 @@ from app.database import engine, Base
 from app.services.embedding import embedding_service
 from app.services.indexer import IndexerService
 from app.services.reranker import reranker_service
+from app.services.http_pool import close_client
+from app.services.cache import close_redis
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -64,6 +66,8 @@ async def lifespan(app: FastAPI):
 
     # ── Shutdown ────────────────────────────────────────────
     logger.info("Shutting down Eagle Vision API...")
+    await close_redis()
+    await close_client()
     await engine.dispose()
 
 
