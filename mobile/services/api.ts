@@ -123,9 +123,13 @@ export interface ShopInfo {
 export interface SearchResultItem {
   product_id: string;
   product_name: string;
+  name_ar?: string | null;
+  name_en?: string | null;
   description: string | null;
   price: number | null;
   category: string | null;
+  category_name_ar?: string | null;
+  category_name_en?: string | null;
   image_url: string | null;
   in_stock: boolean;
   shop: ShopInfo;
@@ -233,17 +237,23 @@ export interface MarketResponse {
   business_nature?: string | null;
   operating_hours?: Record<string, string> | null;
   employee_directory?: string[] | null;
+  phone?: string | null;
   is_currently_open: boolean;
   is_manual_override: boolean;
   override_set_at: string | null;
   created_at: string;
+  access_token?: string | null;
 }
 
 export interface CatalogItemMatch {
   id: string;
   name: string;
+  name_ar?: string | null;
+  name_en?: string | null;
   description: string | null;
   category: string | null;
+  category_name_ar?: string | null;
+  category_name_en?: string | null;
   image_url: string | null;
 }
 
@@ -263,8 +273,12 @@ export interface MarketItemDashboardResponse {
   id: string; // market_item.id
   item_id: string; // global_item.id
   name: string;
+  name_ar?: string | null;
+  name_en?: string | null;
   description: string | null;
   category: string | null;
+  category_name_ar?: string | null;
+  category_name_en?: string | null;
   image_url: string | null;
   stock_count: number;
   in_stock: boolean;
@@ -276,7 +290,11 @@ export interface BarcodeLookupResponse {
   market_item_id: string | null;
   global_item_id: string;
   name: string;
+  name_ar?: string | null;
+  name_en?: string | null;
   category: string | null;
+  category_name_ar?: string | null;
+  category_name_en?: string | null;
   image_url: string | null;
   price: number | null;
   stock_count: number | null;
@@ -291,6 +309,15 @@ export async function getMyMarket(): Promise<MarketResponse> {
   return data;
 }
 
+export async function getMyStore(): Promise<MarketResponse | null> {
+  try {
+    const { data } = await api.get<MarketResponse>('/api/v1/merchant/my-store');
+    return data;
+  } catch (err: any) {
+    return null;
+  }
+}
+
 export async function createMarket(
   name: string,
   address: string,
@@ -298,6 +325,7 @@ export async function createMarket(
   longitude: number,
   options?: {
     business_nature?: string;
+    phone?: string;
     operating_hours?: Record<string, string> | null;
     is_currently_open?: boolean;
   },
@@ -305,11 +333,22 @@ export async function createMarket(
   const { data } = await api.post<MarketResponse>('/api/v1/merchant/market', {
     name, address, latitude, longitude,
     business_nature: options?.business_nature,
+    phone: options?.phone,
     operating_hours: options?.operating_hours ?? null,
     is_currently_open: options?.is_currently_open,
   });
+  if (data.access_token) {
+    await saveToken(data.access_token);
+  }
+  const currentUser = await getUser();
+  if (currentUser) {
+    const updatedUser = { ...currentUser, role: 'merchant', user_type: 'merchant' };
+    await saveUser(updatedUser);
+  }
   return data;
 }
+
+export const createStore = createMarket;
 
 export async function getMarketItems(): Promise<MarketItemDashboardResponse[]> {
   const { data } = await api.get<MarketItemDashboardResponse[]>('/api/v1/merchant/market/items');
@@ -415,6 +454,9 @@ export interface SearchFilters {
 export interface CategoryNode {
   id: string;
   name: string;
+  name_ar?: string | null;
+  name_en?: string | null;
+  listing_type?: string | null;
   subcategories: CategoryNode[];
 }
 
@@ -456,9 +498,13 @@ export async function textSearch(
   const mappedResults: SearchResultItem[] = (data.results || []).map((item) => ({
     product_id: item.market_item_id,
     product_name: item.name || '',
+    name_ar: item.name_ar,
+    name_en: item.name_en,
     description: item.description,
     price: item.price,
     category: item.category,
+    category_name_ar: item.category_name_ar,
+    category_name_en: item.category_name_en,
     image_url: item.image_url,
     in_stock: item.in_stock,
     shop: {
@@ -483,7 +529,7 @@ export async function textSearch(
     results: mappedResults,
     search_mode: data.search_mode || 'exact_matches',
     action: data.action || null,
-    suggestion: data.suggestion || null,
+    suggestion: (data as any).suggestion || null,
   };
 }
 
@@ -532,9 +578,13 @@ export async function imageSearch(
   const mappedResults: SearchResultItem[] = (data.results || []).map((item) => ({
     product_id: item.market_item_id,
     product_name: item.name,
+    name_ar: item.name_ar,
+    name_en: item.name_en,
     description: item.description,
     price: item.price,
     category: item.category,
+    category_name_ar: item.category_name_ar,
+    category_name_en: item.category_name_en,
     image_url: item.image_url,
     in_stock: item.in_stock,
     shop: {
@@ -584,8 +634,12 @@ export interface CustomerItemResponse {
   id: string;
   market_item_id: string;
   name: string;
+  name_ar?: string | null;
+  name_en?: string | null;
   description: string | null;
   category: string;
+  category_name_ar?: string | null;
+  category_name_en?: string | null;
   image_url: string | null;
   stock_count: number;
   in_stock: boolean;
@@ -671,8 +725,12 @@ export interface MarketItemDetailsResponse {
   id: string;
   item_id: string;
   name: string;
+  name_ar?: string | null;
+  name_en?: string | null;
   description: string | null;
   category: string;
+  category_name_ar?: string | null;
+  category_name_en?: string | null;
   image_url: string | null;
   images: string[];
   stock_count: number;
@@ -786,7 +844,11 @@ export interface SpecialOfferResponse {
   is_active: boolean;
   created_at: string;
   name: string;
+  name_ar?: string | null;
+  name_en?: string | null;
   category: string | null;
+  category_name_ar?: string | null;
+  category_name_en?: string | null;
   image_url: string | null;
   price: number | null;
   stock_count: number;
@@ -803,9 +865,13 @@ export interface CustomerSpecialOfferResponse {
   created_at: string;
   product_id: string;
   product_name: string;
+  product_name_ar?: string | null;
+  product_name_en?: string | null;
   product_description: string | null;
   price: number | null;
   category: string | null;
+  category_name_ar?: string | null;
+  category_name_en?: string | null;
   image_url: string | null;
   stock_count: number;
   in_stock: boolean;

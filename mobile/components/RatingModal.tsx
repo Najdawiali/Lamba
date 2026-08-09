@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { Spacing, BorderRadius, Typography, Shadows } from '../constants/theme';
 import { useThemeColors } from '../context/ThemeContext';
+import { t } from '../services/i18n';
 import { submitMarketRating, getUser } from '../services/api';
 
 interface Props {
@@ -181,7 +182,7 @@ export default function RatingModal({ visible, onClose, marketId, marketName }: 
 
   const handleSubmit = async () => {
     if (score < 1 || score > 5) {
-      setError('Please select a rating between 1 and 5 stars.');
+      setError(t('rating.validation_error', 'Please select a rating between 1 and 5 stars.'));
       return;
     }
     
@@ -191,7 +192,7 @@ export default function RatingModal({ visible, onClose, marketId, marketName }: 
     try {
       const user = await getUser();
       if (!user || !user.id) {
-        setError('You must be logged in to submit reviews.');
+        setError(t('rating.login_required', 'You must be logged in to submit reviews.'));
         setLoading(false);
         return;
       }
@@ -199,7 +200,7 @@ export default function RatingModal({ visible, onClose, marketId, marketName }: 
       // Request location to verify physical presence at shop counter
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        setError('GPS permission is required to verify you are physically at the shop.');
+        setError(t('rating.gps_permission', 'GPS permission is required to verify you are physically at the shop.'));
         setLoading(false);
         return;
       }
@@ -220,8 +221,8 @@ export default function RatingModal({ visible, onClose, marketId, marketName }: 
       setSuccess(true);
     } catch (err: any) {
       console.error('Failed to submit rating:', err);
-      const detail = err.response?.data?.detail || 'Failed to submit review. Try again.';
-      setError(typeof detail === 'string' ? detail : 'Failed to submit review.');
+      const detail = err.response?.data?.detail || t('rating.submission_failed', 'Failed to submit review. Try again.');
+      setError(typeof detail === 'string' ? detail : t('rating.submission_failed', 'Failed to submit review.'));
     } finally {
       setLoading(false);
     }
@@ -244,7 +245,7 @@ export default function RatingModal({ visible, onClose, marketId, marketName }: 
               {/* Header */}
               <View style={styles.header}>
                 <Text style={styles.headerTitle} numberOfLines={1}>
-                  {success ? 'Thank You!' : `Rate ${marketName}`}
+                  {success ? t('rating.thank_you', 'Thank You!') : `${t('common.filter', 'Rate')} ${marketName}`}
                 </Text>
                 <TouchableOpacity onPress={onClose} style={styles.closeButton}>
                   <Ionicons name="close" size={22} color={Colors.textPrimary} />
@@ -257,18 +258,18 @@ export default function RatingModal({ visible, onClose, marketId, marketName }: 
                   <View style={styles.successBadge}>
                     <Ionicons name="checkmark-circle" size={64} color={Colors.inStock} />
                   </View>
-                  <Text style={styles.successTitle}>Rating Stored!</Text>
+                  <Text style={styles.successTitle}>{t('rating.rating_stored', 'Rating Stored!')}</Text>
                   <Text style={styles.successText}>
-                    Your feedback helps others discover the best hyper-local stores.
+                    {t('rating.feedback_helps', 'Your feedback helps others discover the best hyper-local stores.')}
                   </Text>
                   <TouchableOpacity style={styles.doneButton} onPress={onClose}>
-                    <Text style={styles.doneButtonText}>Done</Text>
+                    <Text style={styles.doneButtonText}>{t('common.done', 'Done')}</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
                 /* Interactive Form View */
                 <View style={styles.formContainer}>
-                  <Text style={styles.label}>How was your experience?</Text>
+                  <Text style={styles.label}>{t('rating.how_was', 'How was your experience?')}</Text>
                   
                   {/* Star Selector */}
                   <View style={styles.starRow}>
@@ -289,10 +290,10 @@ export default function RatingModal({ visible, onClose, marketId, marketName }: 
                   </View>
 
                   {/* Review Text Input */}
-                  <Text style={styles.label}>Write a review (optional)</Text>
+                  <Text style={styles.label}>{t('rating.review_optional', 'Write a review (optional)')}</Text>
                   <TextInput
                     style={styles.textInput}
-                    placeholder="Tell us about the catalog quality, freshness, or service..."
+                    placeholder={t('rating.review_hint', 'Tell us about the catalog quality, freshness, or service...')}
                     placeholderTextColor={Colors.textMuted}
                     multiline
                     numberOfLines={4}
@@ -314,7 +315,7 @@ export default function RatingModal({ visible, onClose, marketId, marketName }: 
                       <ActivityIndicator size="small" color={Colors.background} />
                     ) : (
                       <Text style={[styles.submitText, score === 0 && styles.submitTextDisabled]}>
-                        Submit Rating
+                        {t('rating.submit_rating', 'Submit Rating')}
                       </Text>
                     )}
                   </TouchableOpacity>
@@ -326,5 +327,4 @@ export default function RatingModal({ visible, onClose, marketId, marketName }: 
       </TouchableWithoutFeedback>
     </Modal>
   );
-
 }

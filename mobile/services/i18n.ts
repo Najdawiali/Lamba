@@ -13,7 +13,8 @@ export const i18n = new I18n({
 });
 
 i18n.enableFallback = true;
-i18n.defaultLocale = 'en';
+i18n.defaultLocale = 'ar';
+i18n.locale = 'ar';
 
 const LANGUAGE_KEY = 'lamba_language';
 
@@ -21,13 +22,15 @@ const LANGUAGE_KEY = 'lamba_language';
 export const setupI18n = async () => {
   try {
     const savedLanguage = await SecureStore.getItemAsync(LANGUAGE_KEY);
-    if (savedLanguage) {
-      i18n.locale = savedLanguage;
-    } else {
-      i18n.locale = Localization.getLocales()[0].languageCode ?? 'en';
-    }
+    const lang = savedLanguage || 'ar';
+    i18n.locale = lang;
+    const isRTL = lang.startsWith('ar');
+    I18nManager.allowRTL(isRTL);
+    I18nManager.forceRTL(isRTL);
   } catch {
-    i18n.locale = Localization.getLocales()[0].languageCode ?? 'en';
+    i18n.locale = 'ar';
+    I18nManager.allowRTL(true);
+    I18nManager.forceRTL(true);
   }
 };
 

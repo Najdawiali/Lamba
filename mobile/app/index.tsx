@@ -1,26 +1,23 @@
 /**
- * App Entry — Redirects to gateway or appropriate role-specific home.
+ * App Entry — Redirects to gateway or customer search home.
+ * All users enter through the customer interface; merchants manage their store via Profile -> Manage my store.
  */
 
 import { useEffect, useState } from 'react';
 import { Redirect } from 'expo-router';
 import { View, ActivityIndicator } from 'react-native';
-import { getToken, getUser } from '../services/api';
+import { getToken } from '../services/api';
 import { useThemeColors } from '../context/ThemeContext';
 
 export default function Index() {
   const Colors = useThemeColors();
   const [loading, setLoading] = useState(true);
   const [isAuthed, setIsAuthed] = useState(false);
-  const [userRole, setUserRole] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       const token = await getToken();
-      const user = await getUser();
       setIsAuthed(!!token);
-      // Support both 'role' (legacy) and 'user_type' (v1) field names
-      setUserRole(user?.user_type ?? user?.role ?? null);
       setLoading(false);
     })();
   }, []);
@@ -33,10 +30,9 @@ export default function Index() {
     );
   }
 
-  // Not authenticated → go to role-selection gateway
+  // Not authenticated → go to welcome gateway
   if (!isAuthed) return <Redirect href="/(auth)/gateway" />;
 
-  // Authenticated → route to the correct role's home tab
-  if (userRole === 'merchant') return <Redirect href="/(merchant)/dashboard" />;
+  // Authenticated → always route to customer home
   return <Redirect href="/(customer)/search" />;
 }

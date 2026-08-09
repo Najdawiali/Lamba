@@ -313,7 +313,9 @@ export default function ProductCard({ item }: Props) {
         <View style={styles.content}>
           {/* Product Name & Stock */}
           <View style={styles.nameRow}>
-            <Text style={styles.name} numberOfLines={1}>{item.product_name}</Text>
+            <Text style={styles.name} numberOfLines={1}>
+              {i18n.locale?.startsWith('ar') ? (item.name_ar || item.product_name) : (item.name_en || item.product_name)}
+            </Text>
             <View style={[styles.stockDot, { backgroundColor: item.in_stock ? Colors.inStock : Colors.outOfStock }]} />
           </View>
 
@@ -334,7 +336,11 @@ export default function ProductCard({ item }: Props) {
             {/* Category */}
             {Boolean(item.category) ? (
               <View style={styles.categoryBadge}>
-                <Text style={styles.categoryText}>{item.category}</Text>
+                <Text style={styles.categoryText}>
+                  {i18n.locale?.startsWith('ar')
+                    ? (item.category_name_ar || item.category)
+                    : (item.category_name_en || item.category)}
+                </Text>
               </View>
             ) : null}
           </View>
