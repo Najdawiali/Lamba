@@ -9,6 +9,7 @@ import re
 import httpx
 from typing import Optional, Dict, Any, List
 from app.config import settings
+from app.services.http_pool import get_client
 
 logger = logging.getLogger(__name__)
 
@@ -38,13 +39,9 @@ class LLMAdapter:
         self.api_base = settings.deepinfra_api_base.rstrip("/")
         self.api_key = settings.deepinfra_api_key
         self.model = getattr(settings, "query_llm_model", "Qwen/Qwen3.6-35B-A3B")
-        self._client: Optional[httpx.AsyncClient] = None
 
     async def _get_client(self, timeout: float = 15.0) -> httpx.AsyncClient:
-        if self._client is None or self._client.is_closed:
-            limits = httpx.Limits(max_keepalive_connections=50, max_connections=100)
-            self._client = httpx.AsyncClient(timeout=timeout, limits=limits)
-        return self._client
+        return get_client()
 
     async def complete_chat_full(
         self,

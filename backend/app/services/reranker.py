@@ -12,6 +12,7 @@ from typing import Optional, List, Dict, Any
 
 from app.config import settings
 from app.services.local_reranker import local_reranker_provider
+from app.services.http_pool import get_client
 
 logger = logging.getLogger(__name__)
 
@@ -73,24 +74,23 @@ class RerankerService:
             )
 
         max_retries = getattr(settings, "embedding_max_retries", 3)
-        timeout = getattr(settings, "embedding_request_timeout_sec", 15.0)
+        client = get_client()
         last_error = None
         for attempt in range(max_retries):
             try:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(timeout)) as client:
-                    resp = await client.post(url, headers=headers, json=payload)
-                    if resp.status_code in (429, 500, 502, 503, 504):
-                        raise Exception(f"Retryable HTTP {resp.status_code}")
-                    resp.raise_for_status()
-                    data = resp.json()
-                    raw_scores = data["scores"]
+                resp = await client.post(url, headers=headers, json=payload)
+                if resp.status_code in (429, 500, 502, 503, 504):
+                    raise Exception(f"Retryable HTTP {resp.status_code}")
+                resp.raise_for_status()
+                data = resp.json()
+                raw_scores = data["scores"]
 
-                    # ── Diagnostic: log raw API response ──────────────
-                    logger.debug(
-                        "[RERANKER API] Raw scores from DeepInfra: %s",
-                        [round(s, 6) for s in raw_scores],
-                    )
-                    return raw_scores
+                # ── Diagnostic: log raw API response ──────────────
+                logger.debug(
+                    "[RERANKER API] Raw scores from DeepInfra: %s",
+                    [round(s, 6) for s in raw_scores],
+                )
+                return raw_scores
             except Exception as e:
                 last_error = e
                 if attempt < max_retries - 1:

@@ -29,6 +29,7 @@ settings.enable_image_search is flipped on.
 """
 
 import asyncio
+import time
 import math as _m
 import re
 import uuid
@@ -63,6 +64,7 @@ from app.services.embedding import embedding_service
 from app.services.reranker import reranker_service
 from app.services.query_expansion import query_expansion_service
 from app.services.arabic_norm import normalize_query
+from app.services.cache import get_cached_search, cache_search
 
 logger = logging.getLogger(__name__)
 
@@ -574,6 +576,42 @@ def _filter_with_guards(
     return final
 
 
+def needs_expansion(query: str, script: str = "ar") -> bool:
+    """Skip expansion for simple product queries — catalog enrichment covers dialects and synonyms."""
+    if not query or not query.strip():
+        return False
+
+    q_lower = query.strip().lower()
+
+    # Intent markers — these need expansion to generate product terms
+    intent_markers = {
+        "بدي", "ابغى", "اريد", "وين", "فين", "شي", "أغراض", "اغراض",
+        "هدية", "أحسن", "احسن", "أفضل", "افضل", "أرخص", "ارخص", "بديل", "للفطور", "للعشاء", "للغداء"
+    }
+    if any(m in q_lower for m in intent_markers):
+        return True
+
+    words = q_lower.split()
+
+    # Single word queries don't need expansion — enrichment covers dialects
+    if len(words) <= 1:
+        return False
+
+    # Two-word queries that look like product names (Arabic script) — skip expansion
+    if len(words) == 2 and (script in ("ar", "arabic") or bool(_ARABIC_RE.search(query))):
+        return False
+
+    # 3+ words — complex query
+    if len(words) >= 3:
+        return True
+
+    # Arabizi / latin queries — expansion helps translate to Arabic
+    if script in ("latin", "arabizi"):
+        return True
+
+    return False
+
+
 # ── Shared pipeline ────────────────────────────────────────────────
 async def _run_search(
     query_text: str,
@@ -589,6 +627,8 @@ async def _run_search(
     → rerank → language-aware ordering. Returns (scored results, primary
     query vector for SearchAlert caching).
     """
+    t0 = time.time()
+
     if not _is_valid_query(query_text):
         logger.debug("[SEARCH VALIDATION] Query %r is invalid (pure punctuation/empty/symbols only)", query_text)
         return [], []
@@ -607,21 +647,35 @@ async def _run_search(
     normalized_query = normalize_query(query_text)
     query_script = _script_of(query_text)
 
-    # 1. LLM multi-query expansion (graceful — never blocks search on failure).
-    variants: List[str] = []
-    if settings.enable_query_expansion:
-        try:
-            variants = await query_expansion_service.expand_async(query_text)
-            logger.debug(
-                "[EXPANSION DEBUG] original_query=%r  expansion_variants=%s",
-                query_text, variants,
-            )
-        except Exception as e:
-            logger.warning(f"Query expansion skipped: {e}")
-
     from app.services.arabic_norm import arabizi_to_arabic
 
-    texts: List[str] = [normalized_query or query_text]
+    primary_text = normalized_query or query_text
+
+    t1 = time.time()
+    logger.info(f"[TIMING] Normalization & Intent: {(t1-t0)*1000:.0f}ms")
+
+    # 1. Gate expansion: run parallel expansion only for complex/intent queries
+    should_expand = getattr(settings, "enable_query_expansion", True) and needs_expansion(query_text, query_script)
+
+    if should_expand:
+        expansion_task = asyncio.create_task(
+            query_expansion_service.expand_async(query_text)
+        )
+        original_embed_task = asyncio.create_task(
+            embedding_service.encode_text_async(primary_text, text_type="query")
+        )
+        expansion_result, original_embedding = await asyncio.gather(
+            expansion_task, original_embed_task, return_exceptions=True
+        )
+        variants = expansion_result if isinstance(expansion_result, list) else []
+        if isinstance(expansion_result, Exception):
+            logger.warning(f"Query expansion skipped due to error: {expansion_result}")
+    else:
+        logger.info(f"[TIMING] Expansion skipped via needs_expansion for query '{query_text}'")
+        variants = []
+        original_embedding = await embedding_service.encode_text_async(primary_text, text_type="query")
+
+    texts: List[str] = [primary_text]
     arabicized = arabizi_to_arabic(query_text)
     if arabicized and arabicized.strip() and arabicized.lower() != query_text.lower():
         norm_arabicized = normalize_query(arabicized)
@@ -638,14 +692,43 @@ async def _run_search(
         query_text, texts,
     )
 
-    # 2. Embed original + variants in parallel (cache-first).
-    embeddings = await asyncio.gather(
-        *[embedding_service.encode_text_async(t) for t in texts]
+    t2 = time.time()
+    logger.info(f"[TIMING] Expansion + first embed (parallel): {(t2-t1)*1000:.0f}ms")
+
+    # 2. Batch-embed ONLY the new variants (original is already embedded)
+    variant_texts = [t for t in texts if t != primary_text]
+    if variant_texts:
+        variant_embeddings = await embedding_service.embed_texts_batch(
+            variant_texts, text_type="query"
+        )
+    else:
+        variant_embeddings = []
+
+    # Combine all embeddings
+    all_embeddings = []
+    if not isinstance(original_embedding, Exception) and original_embedding is not None:
+        all_embeddings.append(original_embedding)
+    elif isinstance(original_embedding, Exception):
+        logger.warning(f"Original embedding error: {original_embedding}")
+
+    all_embeddings.extend(variant_embeddings)
+
+    primary_raw = (
+        all_embeddings[0].tolist()
+        if (all_embeddings and hasattr(all_embeddings[0], "tolist"))
+        else (all_embeddings[0] if all_embeddings else [])
     )
-    primary_raw = embeddings[0].tolist()
+
     # Zero vectors (provider failure) are dropped — search degrades to the
     # remaining vectors, or to lexical-only ranking if none survive.
-    query_vecs = [e.tolist() for e in embeddings if bool(e.any())]
+    query_vecs = [
+        (e.tolist() if hasattr(e, "tolist") else e)
+        for e in all_embeddings
+        if (hasattr(e, "any") and e.any()) or (isinstance(e, list) and any(e))
+    ]
+
+    t3 = time.time()
+    logger.info(f"[TIMING] Variant embeddings (batch): {(t3-t2)*1000:.0f}ms")
 
     # 3. Ranked branches + RRF.
     fused = await _retrieve_fused_candidates(
@@ -658,6 +741,9 @@ async def _run_search(
         filters=filters,
         listing_type=effective_listing_type,
     )
+
+    t4 = time.time()
+    logger.info(f"[TIMING] Retrieval: {(t4-t3)*1000:.0f}ms")
 
     # Diagnostic log: candidates returned by _retrieve_fused_candidates before reranking
     top_candidates_log = [
@@ -684,12 +770,17 @@ async def _run_search(
 
     # 4. Cross-encode + language-aware ordering.
     scored = await _rerank_and_finalize(rerank_query, fused, query_script)
+
+    t5 = time.time()
+    logger.info(f"[TIMING] Reranker + Finalize: {(t5-t4)*1000:.0f}ms")
+    logger.info(f"[TIMING] TOTAL _run_search: {(t5-t0)*1000:.0f}ms")
+
     return scored, primary_raw
 
 
 # ── POST /hybrid ────────────────────────────────────────────────
 @router.post("/hybrid", response_model=HybridSearchResponse)
-@limiter.limit("30/minute")
+@limiter.limit("300/minute")
 async def hybrid_search(
     request: Request,
     search_request: HybridSearchRequest,
@@ -710,6 +801,16 @@ async def hybrid_search(
                 search_mode="exact_matches",
                 results=[],
             )
+
+        # Check Redis L2 full search cache first
+        cached = await get_cached_search(
+            query=search_request.query_text,
+            lat=search_request.latitude,
+            lng=search_request.longitude,
+            listing_type=search_request.listing_type,
+        )
+        if cached is not None:
+            return cached
 
         scored, primary_vec = await _run_search(
             query_text=search_request.query_text,
@@ -732,13 +833,15 @@ async def hybrid_search(
             search_request.query_text, len(scored), len(exact), settings.exact_tier_threshold,
         )
 
+        response_obj: Optional[HybridSearchResponse] = None
+
         if len(exact) >= 3:
             guarded_exact = _filter_with_guards(exact, query_text=search_request.query_text)
             logger.debug(
                 "[HYBRID SEARCH RETURN] query=%r  exact_returning=%d",
                 search_request.query_text, len(guarded_exact),
             )
-            return HybridSearchResponse(
+            response_obj = HybridSearchResponse(
                 found=True,
                 action=None,
                 search_mode="exact_matches",
@@ -756,7 +859,7 @@ async def hybrid_search(
             )
             if recommendations:
                 guarded_recs = _filter_with_guards(recommendations, query_text=search_request.query_text)
-                return HybridSearchResponse(
+                response_obj = HybridSearchResponse(
                     found=True,
                     action=None if exact else "recommendations",
                     search_mode="exact_matches" if exact else "recommendations",
@@ -764,12 +867,22 @@ async def hybrid_search(
                 )
             elif exact:
                 guarded_exact = _filter_with_guards(exact, query_text=search_request.query_text)
-                return HybridSearchResponse(
+                response_obj = HybridSearchResponse(
                     found=True,
                     action=None,
                     search_mode="exact_matches",
                     results=guarded_exact,
                 )
+
+        if response_obj is not None:
+            await cache_search(
+                query=search_request.query_text,
+                lat=search_request.latitude,
+                lng=search_request.longitude,
+                listing_type=search_request.listing_type,
+                result=response_obj,
+            )
+            return response_obj
 
         # Nothing relevant — cache a SearchAlert (dedup on user_id + query_text).
         if user:
@@ -794,12 +907,20 @@ async def hybrid_search(
                     f"term='{search_request.query_text}'"
                 )
 
-        return HybridSearchResponse(
+        no_match_response = HybridSearchResponse(
             found=False,
             action="request_more_details",
             search_mode="exact_matches",
             results=[],
         )
+        await cache_search(
+            query=search_request.query_text,
+            lat=search_request.latitude,
+            lng=search_request.longitude,
+            listing_type=search_request.listing_type,
+            result=no_match_response,
+        )
+        return no_match_response
 
     except Exception as e:
         logger.error(f"Hybrid search failed: {e}", exc_info=True)

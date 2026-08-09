@@ -16,6 +16,7 @@ import numpy as np
 from app.config import settings
 from app.services.arabic_norm import normalize_query
 from app.services.local_embedding import local_embedding_provider
+from app.services.http_pool import get_client
 
 logger = logging.getLogger(__name__)
 
@@ -126,12 +127,7 @@ class EmbeddingService:
                 raise RuntimeError(msg)
             return np.zeros(settings.text_embedding_dim, dtype=np.float32)
 
-        if self._http is None:
-            import httpx
-            self._http = httpx.AsyncClient(
-                timeout=httpx.Timeout(settings.embedding_request_timeout_sec),
-                limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
-            )
+        client = get_client()
 
         url = f"{settings.deepinfra_api_base}{settings.embedding_api_path}"
         headers = {
@@ -149,7 +145,7 @@ class EmbeddingService:
         max_retries = settings.embedding_max_retries
         for attempt in range(max_retries):
             try:
-                resp = await self._http.post(url, headers=headers, json=payload)
+                resp = await client.post(url, headers=headers, json=payload)
                 if resp.status_code in (429, 500, 502, 503, 504):
                     raise Exception(f"Retryable HTTP {resp.status_code}")
                 resp.raise_for_status()
@@ -229,10 +225,10 @@ class EmbeddingService:
         return vec
 
     async def embed_texts_batch(
-        self, texts: List[str], text_type: str = "document"
+        self, texts: List[str], text_type: str = "query"
     ) -> List[List[float]]:
         """
-        Async batch embedding for indexing or scripts.
+        Async batch embedding for multi-query search or batch indexing.
         """
         if not texts:
             return []
@@ -263,12 +259,7 @@ class EmbeddingService:
                     )
                     continue
 
-                if self._http is None:
-                    import httpx
-                    self._http = httpx.AsyncClient(
-                        timeout=httpx.Timeout(settings.embedding_request_timeout_sec),
-                        limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
-                    )
+                client = get_client()
 
                 url = f"{settings.deepinfra_api_base}{settings.embedding_api_path}"
                 headers = {
@@ -286,13 +277,19 @@ class EmbeddingService:
                 max_retries = settings.embedding_max_retries
                 for attempt in range(max_retries):
                     try:
-                        resp = await self._http.post(url, headers=headers, json=payload)
+                        resp = await client.post(url, headers=headers, json=payload)
                         if resp.status_code in (429, 500, 502, 503, 504):
                             raise Exception(f"Retryable HTTP {resp.status_code}")
                         resp.raise_for_status()
                         data = resp.json()
-                        vecs = [item["embedding"] for item in data["data"]]
-                        all_results.extend(vecs)
+                        normed_vecs = []
+                        for item in data["data"]:
+                            v = np.asarray(item["embedding"], dtype=np.float32)
+                            n = np.linalg.norm(v)
+                            if n > 0:
+                                v = v / n
+                            normed_vecs.append(v.tolist())
+                        all_results.extend(normed_vecs)
                         last_error = None
                         break
                     except Exception as e:

@@ -14,6 +14,7 @@ from typing import List, Optional
 from app.config import settings
 from app.services.llm import llm_adapter
 from app.services.arabic_norm import normalize_query
+from app.services.cache import get_cached_expansion, cache_expansion
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,11 @@ class QueryExpansionService:
         provider = getattr(settings, "expansion_provider", "api").lower()
         if provider == "disabled" or not query or not query.strip():
             return []
+
+        # Check Redis L2 cache first (saves LLM call)
+        cached = await get_cached_expansion(query.strip())
+        if cached is not None:
+            return cached
 
         if provider in ("api", "deepinfra"):
             messages = [
@@ -117,11 +123,13 @@ class QueryExpansionService:
                                 cleaned_variants.append(val)
 
                         if cleaned_variants:
+                            final_variants = cleaned_variants[:max_v]
                             logger.debug(
                                 "[EXPANSION PARSED] query=%r  parsed_variants=%s",
-                                query, cleaned_variants[:max_v],
+                                query, final_variants,
                             )
-                            return cleaned_variants[:max_v]
+                            await cache_expansion(query.strip(), final_variants)
+                            return final_variants
 
                 logger.warning(f"[EXPANSION PARSE FAILED] query={query!r} target_text={target_text!r}")
             except Exception as e:
