@@ -272,12 +272,21 @@ async def _retrieve_fused_candidates(
         prior = sem if market_id else (0.7 * sem) + (0.3 * prox)
         price_val = float(mi.price) if getattr(mi, "price", None) is not None else None
 
+        cat_rel = getattr(gi, "category_rel", None)
+        cat_name = cat_rel.name if cat_rel else gi.category
+        cat_name_ar = cat_rel.name_ar if cat_rel else None
+        cat_name_en = cat_rel.name_en if cat_rel else None
+
         item = HybridSearchResultItem(
             item_id=gi.id,
             market_item_id=mi.id,
             name=gi.name,
+            name_ar=getattr(gi, "name_ar", None),
+            name_en=getattr(gi, "name_en", None),
             description=gi.description,
-            category=gi.category,
+            category=cat_name,
+            category_name_ar=cat_name_ar,
+            category_name_en=cat_name_en,
             listing_type=getattr(gi, "listing_type", "product") or "product",
             image_url=gi.image_url,
             price=price_val,
@@ -404,6 +413,54 @@ def _filter_top_five_unless_accuracy_above_80(
     return _filter_with_guards(results, query_text="", lenient=True)
 
 
+def _is_valid_query(query: str) -> bool:
+    """
+    A valid query must contain at least one:
+    - Arabic character (\\u0600-\\u06FF)
+    - English letter (a-zA-Z)
+    - Digit used as Arabizi / query term
+    - Emoji (\\U0001F300-\\U0001FAFF)
+    
+    Pure punctuation, whitespace, symbols, or dots only are invalid.
+    """
+    stripped = query.strip() if query else ""
+    if not stripped or len(stripped) < 1:
+        return False
+    has_arabic = bool(re.search(r"[\u0600-\u06FF]", stripped))
+    has_latin = bool(re.search(r"[a-zA-Z]", stripped))
+    has_emoji = bool(re.search(r"[\U0001F300-\U0001FAFF]", stripped))
+    has_digit = bool(re.search(r"\d", stripped))
+    if not has_arabic and not has_latin and not has_emoji and not has_digit:
+        return False
+    cleaned_chars = re.sub(r"[^\w\s\U0001F300-\U0001FAFF]", "", stripped)
+    if not cleaned_chars.strip():
+        return False
+    return True
+
+
+def _deduplicate_by_product(results: List[HybridSearchResultItem]) -> List[HybridSearchResultItem]:
+    """
+    Keep one result per global_item_id (item_id).
+    When the same product appears from multiple stores,
+    keep the one with the highest score.
+    Preserve the original sort order.
+    """
+    seen_global_ids = set()
+    deduplicated = []
+    
+    for r in results:
+        global_id = getattr(r, "item_id", None) or getattr(r, "global_item_id", None)
+        if global_id is None:
+            deduplicated.append(r)
+            continue
+        if global_id not in seen_global_ids:
+            seen_global_ids.add(global_id)
+            deduplicated.append(r)
+        # else: skip — a higher-scored version of this product is already in the list
+    
+    return deduplicated
+
+
 def _filter_with_guards(
     results: List[HybridSearchResultItem],
     query_text: str = "",
@@ -442,7 +499,8 @@ def _filter_with_guards(
     strong_threshold = getattr(settings, "reranker_strong_confidence", 0.70)
     strong = [r for r in sorted_results if r.semantic_score >= strong_threshold]
     if len(strong) >= 5:
-        final_strong = strong[: settings.reranker_final_k]
+        final_strong = _deduplicate_by_product(strong)[: settings.reranker_final_k]
+        final_strong.sort(key=lambda r: r.semantic_score, reverse=True)
         logger.debug(
             "[GUARD FILTER] query=%r  input_count=%d  output_count=%d  (strong_shelf_applied, threshold=%.2f)",
             query_text, input_count, len(final_strong), strong_threshold,
@@ -504,8 +562,15 @@ def _filter_with_guards(
                 query_text, gender_filter, before_gender, len(final),
             )
 
+    # ── De-duplicate identical products across stores ──────────
+    before_count = len(final)
+    final = _deduplicate_by_product(final)
     # Ensure output is always strictly ordered by semantic_score descending
     final.sort(key=lambda r: r.semantic_score, reverse=True)
+    logger.debug(
+        "[DEDUP] query=%r Before: %d, After: %d, Removed: %d duplicates",
+        query_text, before_count, len(final), before_count - len(final)
+    )
     return final
 
 
@@ -524,6 +589,10 @@ async def _run_search(
     → rerank → language-aware ordering. Returns (scored results, primary
     query vector for SearchAlert caching).
     """
+    if not _is_valid_query(query_text):
+        logger.debug("[SEARCH VALIDATION] Query %r is invalid (pure punctuation/empty/symbols only)", query_text)
+        return [], []
+
     from app.services.query_understanding import query_understanding_service
 
     effective_listing_type = listing_type
@@ -590,6 +659,24 @@ async def _run_search(
         listing_type=effective_listing_type,
     )
 
+    # Diagnostic log: candidates returned by _retrieve_fused_candidates before reranking
+    top_candidates_log = [
+        {
+            "name": f["result"].name,
+            "semantic_score": f["result"].semantic_score,
+            "final_score": f["result"].final_score,
+            "cosine_sim": f.get("cosine_sim"),
+            "distance_km": f["result"].distance_km,
+        }
+        for f in fused[:5]
+    ]
+    logger.info(
+        "[SEARCH DIAGNOSTIC] query=%r candidates_count=%d top_candidates_before_rerank=%s",
+        query_text,
+        len(fused),
+        top_candidates_log,
+    )
+
     # Choose the most canonical search term for cross-encoder reranking:
     # if the query was Arabizi (e.g. "7aleeb"), pass the transliterated Arabic ("حليب")
     # so the cross-encoder compares semantic concepts rather than raw Franco-Arabic chars.
@@ -615,6 +702,15 @@ async def hybrid_search(
     Single-pass tiering: exact → recommendations → SearchAlert.
     """
     try:
+        if not _is_valid_query(search_request.query_text):
+            logger.debug("[HYBRID SEARCH] Fast rejection for invalid query: %r", search_request.query_text)
+            return HybridSearchResponse(
+                found=False,
+                action="request_more_details",
+                search_mode="exact_matches",
+                results=[],
+            )
+
         scored, primary_vec = await _run_search(
             query_text=search_request.query_text,
             latitude=search_request.latitude,

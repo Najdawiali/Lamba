@@ -163,7 +163,7 @@ class Settings(BaseSettings):
     expansion_cache_ttl_sec: int = 86400
 
     # ── LLM Query Understanding ──────────────────────────────
-    query_llm_model: str = "Qwen/Qwen3.5-35B-A3B"
+    query_llm_model: str = "Qwen/Qwen3.6-35B-A3B"
     query_llm_fallback_model: str = "Qwen/Qwen2.5-7B-Instruct"
 
     # ── Hybrid fusion (RRF) & tiering ───────────────────────────
