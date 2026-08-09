@@ -194,24 +194,31 @@ async def get_market_catalog(
     
     for row in rows:
         mi, gi = row[0], row[1]
-        category = gi.category or "Grocery"
-        category = category.strip() if category.strip() else "Grocery"
+        cat_rel = getattr(gi, "category_rel", None)
+        category_name = cat_rel.name if cat_rel else (gi.category or "Grocery")
+        cat_ar = cat_rel.name_ar if cat_rel else None
+        cat_en = cat_rel.name_en if cat_rel else None
+        category_name = category_name.strip() if category_name.strip() else "Grocery"
         
         item_resp = CustomerItemResponse(
             id=gi.id,
             market_item_id=mi.id,
             name=gi.name,
+            name_ar=getattr(gi, "name_ar", None),
+            name_en=getattr(gi, "name_en", None),
             description=gi.description,
-            category=category,
+            category=category_name,
+            category_name_ar=cat_ar,
+            category_name_en=cat_en,
             image_url=gi.image_url,
             stock_count=mi.stock_count,
             in_stock=mi.stock_count > 0,
             price=float(mi.price) if mi.price is not None else None
         )
         
-        if category not in catalog:
-            catalog[category] = []
-        catalog[category].append(item_resp)
+        if category_name not in catalog:
+            catalog[category_name] = []
+        catalog[category_name].append(item_resp)
         
     return catalog
 
@@ -252,6 +259,9 @@ async def get_categories_tree(
         return {
             "id": cat.id,
             "name": cat.name,
+            "name_ar": getattr(cat, "name_ar", None),
+            "name_en": getattr(cat, "name_en", None),
+            "listing_type": getattr(cat, "listing_type", None),
             "subcategories": [format_cat(s) for s in subs]
         }
         
@@ -320,11 +330,17 @@ async def get_market_item_details(
     
     # Query category name safely
     cat_name = None
+    cat_ar = None
+    cat_en = None
     if gi.category_id:
         cat_result = await db.execute(
-            select(Category.name).where(Category.id == gi.category_id)
+            select(Category.name, Category.name_ar, Category.name_en).where(Category.id == gi.category_id)
         )
-        cat_name = cat_result.scalar()
+        cat_row = cat_result.first()
+        if cat_row:
+            cat_name = cat_row[0]
+            cat_ar = cat_row[1]
+            cat_en = cat_row[2]
         
     # Get coordinates
     coords_res = await db.execute(
@@ -373,8 +389,12 @@ async def get_market_item_details(
         "id": str(mi.id),
         "item_id": str(gi.id),
         "name": gi.name,
+        "name_ar": getattr(gi, "name_ar", None),
+        "name_en": getattr(gi, "name_en", None),
         "description": gi.description,
         "category": cat_name or "Grocery",
+        "category_name_ar": cat_ar,
+        "category_name_en": cat_en,
         "image_url": gi.image_url,
         "images": image_urls if image_urls else ([gi.image_url] if gi.image_url else []),
         "stock_count": mi.stock_count,

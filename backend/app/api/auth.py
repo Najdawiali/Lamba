@@ -62,11 +62,11 @@ def require_merchant(user: User = Depends(get_current_user)) -> User:
 
 
 def require_customer(user: User = Depends(get_current_user)) -> User:
-    """Dependency that ensures the current user is a customer."""
+    """Dependency that ensures the current user is a customer or merchant using customer features."""
     role = getattr(user, "user_type", None) or getattr(user, "role", None)
-    if role != "customer":
+    if role not in ("customer", "merchant"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Customer access required",
+            detail="Access required",
         )
-    return user
+    return user

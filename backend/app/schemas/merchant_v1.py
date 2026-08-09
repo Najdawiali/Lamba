@@ -15,6 +15,7 @@ class MarketCreate(BaseModel):
     business_nature: Optional[str] = Field(None, description="Type/nature of store business")
     operating_hours: Optional[dict] = Field(None, description="Structured weekday operating intervals")
     employee_directory: Optional[list] = Field(None, description="Directory of staff assigned to the branch")
+    phone: Optional[str] = Field(None, description="Store contact phone number")
     is_currently_open: Optional[bool] = Field(True, description="Whether the market is open or closed")
 
 
@@ -28,10 +29,12 @@ class MarketResponse(BaseModel):
     business_nature: Optional[str] = None
     operating_hours: Optional[dict] = None
     employee_directory: Optional[list] = None
+    phone: Optional[str] = None
     is_currently_open: bool
     is_manual_override: bool
     override_set_at: Optional[datetime] = None
     created_at: datetime
+    access_token: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

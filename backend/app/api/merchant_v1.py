@@ -17,7 +17,9 @@ import os
 import uuid
 import csv
 import io
+import json
 import logging
+from datetime import datetime, timezone
 from typing import Annotated, List, Optional
 import numpy as np
 
@@ -54,6 +56,7 @@ from app.services.indexer import IndexerService
 from app.services.alert_service import check_and_trigger_stock_alerts
 
 from app.config import settings
+from app.services.auth import create_access_token
 
 logger = logging.getLogger(__name__)
 
@@ -71,13 +74,14 @@ def get_merchant(user: User = Depends(get_current_user)) -> User:
     return user
 
 
-# ── GET /market ─────────────────────────────────────────────────
+# ── GET /market & /my-store ──────────────────────────────────────
+@router.get("/my-store", response_model=MarketResponse)
 @router.get("/market", response_model=MarketResponse)
 async def get_market(
-    user: User = Depends(get_merchant),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Retrieve the merchant's physical market profile, if initialized."""
+    """Retrieve the user's physical market profile if initialized, or 404 if not found."""
     result = await db.execute(
         select(
             Market,
@@ -108,6 +112,7 @@ async def get_market(
         business_nature=market.business_nature,
         operating_hours=market.operating_hours,
         employee_directory=market.employee_directory,
+        phone=market.phone,
         is_currently_open=market.is_currently_open,
         is_manual_override=market.is_manual_override,
         override_set_at=market.override_set_at,
@@ -115,15 +120,16 @@ async def get_market(
     )
 
 
-# ── POST /market ────────────────────────────────────────────────
+# ── POST /market & /store ────────────────────────────────────────
+@router.post("/store", response_model=MarketResponse, status_code=201)
 @router.post("/market", response_model=MarketResponse, status_code=201)
 async def create_market(
     data: MarketCreate,
-    user: User = Depends(get_merchant),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Initialize a merchant's physical market profile (PostGIS point integration)."""
-    # Check if a market is already initialized with the exact same name for this merchant
+    """Initialize a physical market profile (PostGIS point integration) and upgrade user to merchant."""
+    # Check if a market is already initialized with the exact same name for this user
     existing = await db.execute(
         select(Market).where(
             Market.merchant_id == user.id,
@@ -136,6 +142,12 @@ async def create_market(
             detail="A market with this name is already registered for this merchant.",
         )
     
+    # Upgrade user to merchant if they were a customer
+    if user.user_type != "merchant":
+        user.user_type = "merchant"
+    if data.phone and not user.phone_number:
+        user.phone_number = data.phone
+
     market = Market(
         merchant_id=user.id,
         name=data.name,
@@ -143,11 +155,16 @@ async def create_market(
         business_nature=data.business_nature,
         operating_hours=data.operating_hours,
         employee_directory=data.employee_directory,
+        phone=data.phone,
         location=WKTElement(f"POINT({data.longitude} {data.latitude})", srid=4326),
         is_currently_open=data.is_currently_open if data.is_currently_open is not None else True,
     )
     db.add(market)
     await db.flush()
+    await db.commit()
+
+    # Generate fresh JWT token with upgraded 'merchant' role
+    new_token = create_access_token(user.id, "merchant")
     
     return MarketResponse(
         id=market.id,
@@ -159,10 +176,12 @@ async def create_market(
         business_nature=market.business_nature,
         operating_hours=market.operating_hours,
         employee_directory=market.employee_directory,
+        phone=market.phone,
         is_currently_open=market.is_currently_open,
         is_manual_override=market.is_manual_override,
         override_set_at=market.override_set_at,
         created_at=market.created_at,
+        access_token=new_token,
     )
 
 
@@ -638,12 +657,14 @@ async def create_new_item(
     stock_count: int = Form(0),
     price: Optional[float] = Form(None),
     category_id: Optional[uuid.UUID] = Form(None),
+    listing_type: Optional[str] = Form("product"),
+    attributes: Optional[str] = Form(None),
     image: UploadFile = File(...),
     secondary_images: List[UploadFile] = File(default=[]),
     user: User = Depends(get_merchant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Ingest a brand-new catalog item utilizing local CLIP/MiniLM embedding models."""
+    """Ingest a brand-new catalog product or service utilizing local CLIP/MiniLM/Qwen embedding models."""
     # Verify market ownership
     market_result = await db.execute(
         select(Market,
@@ -658,6 +679,14 @@ async def create_new_item(
             detail="Not your market.",
         )
     market, lat, lng = market_row[0], market_row[1], market_row[2]
+
+    # Parse attributes if passed as JSON string
+    parsed_attributes = {}
+    if attributes:
+        try:
+            parsed_attributes = json.loads(attributes) if isinstance(attributes, str) else attributes
+        except Exception:
+            parsed_attributes = {}
     
     # Save Primary Upload Image
     os.makedirs(settings.upload_dir, exist_ok=True)
@@ -716,14 +745,14 @@ async def create_new_item(
             )
             cat = cat_result.scalar_one_or_none()
             if not cat:
-                cat = Category(name=category_name)
+                cat = Category(name=category_name, listing_type=listing_type or "product")
                 db.add(cat)
                 await db.flush()
     else:
         cat_result = await db.execute(select(Category).where(Category.name == category_name))
         cat = cat_result.scalar_one_or_none()
         if not cat:
-            cat = Category(name=category_name)
+            cat = Category(name=category_name, listing_type=listing_type or "product")
             db.add(cat)
             await db.flush()
     
@@ -745,10 +774,13 @@ async def create_new_item(
         logger.error(f"MiniLM encoding failed: {e}")
         
     # Save GlobalItem (preserves original inputs for display, uses VLM/translated vectors)
+    effective_barcode = barcode if (listing_type == "product" and barcode) else None
     gi = GlobalItem(
         name=name,
         description=description,
-        barcode=barcode,
+        barcode=effective_barcode,
+        listing_type=listing_type or "product",
+        attributes=parsed_attributes,
         category_id=cat.id,
         text_embedding=text_vector.tolist() if text_vector is not None else None,
         image_embedding=image_vector.tolist() if image_vector is not None else None,
@@ -780,13 +812,40 @@ async def create_new_item(
     mi = MarketItem(
         market_id=market_id,
         item_id=gi.id,
-        stock_count=stock_count,
+        stock_count=stock_count if listing_type == "product" else 99,
         price=price,
         status=True
     )
     db.add(mi)
     await db.flush()
     await check_and_trigger_stock_alerts(db, mi.id)
+    
+    # Auto-enrich search terms & vector embedding on creation
+    try:
+        from app.services.arabic_norm import normalize_arabic
+        norm_name = normalize_arabic(gi.name)
+        terms = [norm_name] if norm_name else [gi.name]
+        try:
+            from scripts.enrich_search_terms import enrich_product
+            enriched_terms = await enrich_product(gi.name, gi.description, getattr(cat, "name", None))
+            if enriched_terms:
+                terms.append(enriched_terms)
+        except Exception as e:
+            logger.warning(f"LLM search terms enrichment skipped: {e}")
+
+        gi.search_terms = ", ".join([t for t in terms if t])
+        
+        # Build dense document text for Qwen3 / MiniLM
+        doc_text = f"{gi.name} {gi.description or ''} {gi.search_terms or ''}".strip()
+        doc_embedding = await embedding_service.encode_text_async(doc_text, text_type="document")
+        gi.text_embedding = doc_embedding.tolist()
+        gi.embedding_status = "completed"
+        gi.embedded_at = datetime.now(timezone.utc)
+        
+        await db.commit()
+    except Exception as e:
+        logger.warning(f"Auto-enrich/embed failed for item {gi.id}: {e}")
+        await db.commit()
     
     # Index in Elasticsearch (CLIP ViT-B-32 512-d space)
     try:
@@ -812,7 +871,7 @@ async def create_new_item(
 
     return ItemLinkResponse(
         success=True,
-        message="Brand-new product ingested via AI pipeline and added to stock.",
+        message=f"Brand-new {listing_type} ingested via AI pipeline and added to stock.",
         market_item_id=mi.id,
         stock_count=mi.stock_count
     )

@@ -40,8 +40,12 @@ class HybridSearchResultItem(BaseModel):
     item_id: uuid.UUID
     market_item_id: uuid.UUID
     name: str
+    name_ar: Optional[str] = None
+    name_en: Optional[str] = None
     description: Optional[str] = None
     category: Optional[str] = None
+    category_name_ar: Optional[str] = None
+    category_name_en: Optional[str] = None
     listing_type: Optional[str] = "product"
     image_url: Optional[str] = None
     price: Optional[float] = None

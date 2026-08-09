@@ -29,8 +29,12 @@ class CustomerItemResponse(BaseModel):
     id: uuid.UUID  # Catalog item ID (GlobalItem.id)
     market_item_id: uuid.UUID  # MarketItem.id for transaction tracking
     name: str
+    name_ar: Optional[str] = None
+    name_en: Optional[str] = None
     description: Optional[str] = None
     category: Optional[str] = None
+    category_name_ar: Optional[str] = None
+    category_name_en: Optional[str] = None
     image_url: Optional[str] = None
     stock_count: int
     in_stock: bool
@@ -79,6 +83,9 @@ class MarketRatingSummaryResponse(BaseModel):
 class CategoryNodeResponse(BaseModel):
     id: uuid.UUID
     name: str
+    name_ar: Optional[str] = None
+    name_en: Optional[str] = None
+    listing_type: Optional[str] = None
     subcategories: List["CategoryNodeResponse"] = []
 
     model_config = {"from_attributes": True}
@@ -118,8 +125,12 @@ class MarketItemDetailsResponse(BaseModel):
     id: uuid.UUID
     item_id: uuid.UUID
     name: str
+    name_ar: Optional[str] = None
+    name_en: Optional[str] = None
     description: Optional[str] = None
     category: str
+    category_name_ar: Optional[str] = None
+    category_name_en: Optional[str] = None
     image_url: Optional[str] = None
     images: List[str] = []
     stock_count: int
