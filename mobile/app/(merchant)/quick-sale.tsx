@@ -329,7 +329,7 @@ export default function QuickSaleScreen() {
     receiptSubtle: { ...Typography.bodySmall, color: Colors.textMuted },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: Spacing.md },
     loadingText: { ...Typography.bodySmall, color: Colors.textMuted },
-  }), [Colors, isAr]);
+  }), [Colors]);
 
   if (loading) {
     return (
@@ -337,7 +337,7 @@ export default function QuickSaleScreen() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>
-            {isAr ? 'جاري تحميل المخزون...' : 'Loading inventory...'}
+            {t('common.loading', 'Loading inventory...')}
           </Text>
         </View>
       </SafeAreaView>
@@ -348,13 +348,11 @@ export default function QuickSaleScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={[styles.headerTitle, { textAlign: isAr ? 'right' : 'left' }]}>
-          {isAr ? 'بيع سريع' : 'Quick Sale'}
+        <Text style={styles.headerTitle}>
+          {t('merchant.quick_sale', 'Quick Sale')}
         </Text>
-        <Text style={[styles.headerSubtitle, { textAlign: isAr ? 'right' : 'left' }]}>
-          {isAr
-            ? 'ابحث في مخزونك وأكمل عملية بيع بدون مسح باركود.'
-            : 'Search your inventory and complete a sale without scanning a barcode.'}
+        <Text style={styles.headerSubtitle}>
+          {t('merchant.quick_sale_desc', 'Search your inventory and complete a sale without scanning a barcode.')}
         </Text>
       </View>
 
@@ -374,8 +372,8 @@ export default function QuickSaleScreen() {
             <View style={styles.searchContainer}>
               <Ionicons name="search-outline" size={18} color={Colors.textMuted} />
               <TextInput
-                style={[styles.searchInput, { textAlign: isAr ? 'right' : 'left' }]}
-                placeholder={isAr ? 'ابحث بالاسم أو الفئة...' : 'Search by name or category...'}
+                style={styles.searchInput}
+                placeholder={t('merchant.catalog_search_placeholder', 'Search by name or category...')}
                 placeholderTextColor={Colors.textMuted}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -390,32 +388,30 @@ export default function QuickSaleScreen() {
 
             <View style={styles.counterRow}>
               <Text style={styles.counterText}>
-                {isAr
-                  ? `${filteredItems.length} نتيجة`
-                  : `${filteredItems.length} item${filteredItems.length === 1 ? '' : 's'}`}
+                {t('inventory.results', `${filteredItems.length} result(s)`, { count: filteredItems.length })}
               </Text>
               {selected && (
                 <TouchableOpacity style={styles.clearBtn} onPress={handleClearSelection} activeOpacity={0.7}>
                   <Ionicons name="close" size={14} color={Colors.textSecondary} />
-                  <Text style={styles.clearBtnText}>{isAr ? 'مسح الاختيار' : 'Clear'}</Text>
+                  <Text style={styles.clearBtnText}>{t('common.clear', 'Clear')}</Text>
                 </TouchableOpacity>
               )}
             </View>
 
             {/* Item list */}
-            <Text style={styles.listLabel}>{isAr ? 'المنتجات المتاحة' : 'Available Items'}</Text>
+            <Text style={styles.listLabel}>{t('inventory.in_stock', 'Available Items')}</Text>
             {filteredItems.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <View style={styles.emptyIconCircle}>
                   <Ionicons name="cube-outline" size={26} color={Colors.textMuted} />
                 </View>
                 <Text style={styles.emptyTitle}>
-                  {isAr ? 'لا توجد منتجات' : 'No Items Found'}
+                  {t('common.no_items', 'No Items Found')}
                 </Text>
                 <Text style={styles.emptyText}>
                   {items.length === 0
-                    ? (isAr ? 'مخزونك فارغ. أضف منتجات من تبويب "إضافة".' : 'Your inventory is empty. Add products from the Add tab.')
-                    : (isAr ? 'لم نجد نتائج لبحثك.' : 'No results match your search.')}
+                    ? t('inventory.empty_desc', 'Your inventory is empty. Add products from the Add tab.')
+                    : t('explore.no_results', 'No results match your search.')}
                 </Text>
               </View>
             ) : (
@@ -425,7 +421,7 @@ export default function QuickSaleScreen() {
                 return (
                   <TouchableOpacity
                     key={item.id}
-                    style={[styles.row, isSelected && styles.rowSelected, { flexDirection: isAr ? 'row-reverse' : 'row' }]}
+                    style={[styles.row, isSelected && styles.rowSelected]}
                     onPress={() => handleSelect(item)}
                     activeOpacity={0.7}
                   >
@@ -438,14 +434,14 @@ export default function QuickSaleScreen() {
                         </View>
                       )}
                     </View>
-                    <View style={[styles.rowInfo, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
+                    <View style={styles.rowInfo}>
                       <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
                       <Text style={styles.stockText}>
-                        {isAr ? 'متوفر:' : 'In stock:'} {item.stock_count}
+                        {t('inventory.in_stock', 'In stock:')} {item.stock_count}
                       </Text>
                       {hasPrice
                         ? <Text style={styles.priceText}>{formatPrice(item.price)}</Text>
-                        : <Text style={styles.noPriceBadge}>{isAr ? 'بدون سعر' : 'No price'}</Text>}
+                        : <Text style={styles.noPriceBadge}>{t('product.price_request', 'No price')}</Text>}
                     </View>
                     {isSelected && (
                       <Ionicons name="checkmark-circle" size={22} color={Colors.primary} />
@@ -458,30 +454,30 @@ export default function QuickSaleScreen() {
             {/* Selected item summary */}
             {selected && (
               <View style={styles.summaryCard}>
-                <View style={[styles.summaryHeader, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-                  <Text style={styles.summaryLabel}>{isAr ? 'المنتج المختار' : 'Selected Item'}</Text>
+                <View style={styles.summaryHeader}>
+                  <Text style={styles.summaryLabel}>{t('common.item', 'Selected Item')}</Text>
                   <TouchableOpacity style={styles.clearBtn} onPress={handleClearSelection} activeOpacity={0.7}>
                     <Ionicons name="close" size={14} color={Colors.textSecondary} />
-                    <Text style={styles.clearBtnText}>{isAr ? 'إلغاء' : 'Deselect'}</Text>
+                    <Text style={styles.clearBtnText}>{t('common.cancel', 'Deselect')}</Text>
                   </TouchableOpacity>
                 </View>
-                <Text style={[styles.selectedItemName, { textAlign: isAr ? 'right' : 'left' }]}>
+                <Text style={styles.selectedItemName}>
                   {selected.name}
                 </Text>
-                <View style={[styles.stockBadgeRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                <View style={styles.stockBadgeRow}>
                   <View style={styles.stockPill}>
                     <Ionicons name="cube-outline" size={12} color={Colors.success} />
                     <Text style={styles.stockPillText}>
-                      {isAr ? `متوفر: ${selected.stock_count}` : `Available: ${selected.stock_count}`}
+                      {t('inventory.in_stock', 'Available:')} {selected.stock_count}
                     </Text>
                   </View>
                   <Text style={styles.unitPriceText}>
-                    {selected.price != null ? formatPrice(selected.price) : (isAr ? 'بدون سعر' : 'No price')}
+                    {selected.price != null ? formatPrice(selected.price) : t('product.price_request', 'No price')}
                   </Text>
                 </View>
 
                 {/* Quantity Stepper */}
-                <Text style={styles.inputLabel}>{isAr ? 'الكمية' : 'Quantity'}</Text>
+                <Text style={styles.inputLabel}>{t('common.quantity', 'Quantity')}</Text>
                 <View style={styles.qtyStepper}>
                   <TouchableOpacity
                     style={[styles.stepperBtn, (qtyNum <= 1) && styles.stepperDisabled]}
@@ -510,8 +506,8 @@ export default function QuickSaleScreen() {
                 </View>
 
                 {/* Total */}
-                <View style={[styles.totalRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-                  <Text style={styles.summaryLabel}>{isAr ? 'الإجمالي' : 'Total'}</Text>
+                <View style={styles.totalRow}>
+                  <Text style={styles.summaryLabel}>{t('history.receipt', 'Total')}</Text>
                   <Text style={styles.totalValue}>{formatPrice(totalCost)}</Text>
                 </View>
               </View>
@@ -520,15 +516,15 @@ export default function QuickSaleScreen() {
             {/* Last receipt */}
             {lastReceipt && (
               <View style={styles.receiptCard}>
-                <Text style={styles.receiptTitle}>{isAr ? '✓ آخر عملية بيع' : '✓ Last Sale'}</Text>
+                <Text style={styles.receiptTitle}>✓ {t('scanner.sale_complete', 'Last Sale')}</Text>
                 {lastReceipt.items.map((it, idx) => (
-                  <View key={idx} style={[styles.receiptRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                  <View key={idx} style={styles.receiptRow}>
                     <Text style={styles.receiptText}>{it.name} × {it.quantity}</Text>
                     <Text style={styles.receiptText}>{formatPrice(it.subtotal)}</Text>
                   </View>
                 ))}
-                <View style={[styles.receiptRow, { marginTop: Spacing.sm, flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-                  <Text style={[styles.receiptText, { fontWeight: '700' }]}>{isAr ? 'الإجمالي' : 'Total'}</Text>
+                <View style={[styles.receiptRow, { marginTop: Spacing.sm }]}>
+                  <Text style={[styles.receiptText, { fontWeight: '700' }]}>{t('history.receipt', 'Total')}</Text>
                   <Text style={[styles.receiptText, { fontWeight: '700' }]}>{formatPrice(lastReceipt.total_cost)}</Text>
                 </View>
                 {lastReceipt.alerts && lastReceipt.alerts.length > 0 && (

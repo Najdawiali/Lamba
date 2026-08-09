@@ -65,13 +65,13 @@ export default function ReceiptHistoryScreen() {
       console.warn('Failed to load transaction history:', err);
       Alert.alert(
         t('common.error'),
-        isAr ? 'فشل تحميل سجل المعاملات.' : 'Failed to retrieve transaction records.'
+        t('history.fetch_failed', 'Failed to retrieve transaction records.')
       );
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [isAr]);
+  }, []);
 
   useEffect(() => {
     fetchHistory();
@@ -376,13 +376,13 @@ export default function ReceiptHistoryScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
-      <View style={[styles.header, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+      <View style={styles.header}>
         <TouchableOpacity
           style={styles.backBtn}
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={24} color={Colors.textPrimary} />
+          <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
           {t('history.title')}
@@ -392,7 +392,7 @@ export default function ReceiptHistoryScreen() {
 
       {/* Metrics Banner */}
       <View style={styles.metricsContainer}>
-        <View style={[styles.mainMetricCard, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
+        <View style={styles.mainMetricCard}>
           <Text style={styles.metricLabel}>
             {t('history.total_sales')}
           </Text>
@@ -401,7 +401,7 @@ export default function ReceiptHistoryScreen() {
           </Text>
         </View>
 
-        <View style={[styles.subMetricsRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+        <View style={styles.subMetricsRow}>
           <View style={styles.subMetricCard}>
             <Ionicons name="receipt-outline" size={18} color={Colors.primary} style={{ marginBottom: 4 }} />
             <Text style={styles.subMetricValue}>{totalTransactionsCount}</Text>
@@ -464,12 +464,12 @@ export default function ReceiptHistoryScreen() {
           return (
             <View style={styles.receiptCard}>
               <TouchableOpacity
-                style={[styles.receiptHeaderRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}
+                style={styles.receiptHeaderRow}
                 onPress={() => toggleExpand(item.id)}
                 activeOpacity={0.8}
               >
-                <View style={[styles.receiptSummary, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
-                  <View style={[styles.receiptIdRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                <View style={styles.receiptSummary}>
+                  <View style={styles.receiptIdRow}>
                     <Text style={styles.receiptIdLabel}>#{item.id.substring(0, 8).toUpperCase()}</Text>
                     <View style={styles.timeBadge}>
                       <Text style={styles.timeText}>{formatTime(item.created_at)}</Text>
@@ -478,11 +478,11 @@ export default function ReceiptHistoryScreen() {
                   <Text style={styles.receiptDate}>{formatDate(item.created_at)}</Text>
                 </View>
 
-                <View style={[styles.receiptTotalCol, { alignItems: isAr ? 'flex-start' : 'flex-end' }]}>
+                <View style={styles.receiptTotalCol}>
                   <Text style={styles.receiptCostValue}>{formatPrice(item.total_cost)}</Text>
-                  <View style={[styles.itemCountRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                  <View style={styles.itemCountRow}>
                     <Text style={styles.itemCountText}>
-                      {item.items.reduce((s, i) => s + i.quantity, 0)} {isAr ? 'قطع' : t('scanner.items')}
+                      {item.items.reduce((s, i) => s + i.quantity, 0)} {t('scanner.items')}
                     </Text>
                     <Ionicons
                       name={isExpanded ? 'chevron-up' : 'chevron-down'}
@@ -497,16 +497,16 @@ export default function ReceiptHistoryScreen() {
               {isExpanded && (
                 <View style={styles.receiptDetails}>
                   <View style={styles.divider} />
-                  <Text style={[styles.detailsSectionTitle, { textAlign: isAr ? 'right' : 'left' }]}>
+                  <Text style={styles.detailsSectionTitle}>
                     {t('history.receipt')}
                   </Text>
 
                   {item.items.map((prod, idx) => (
                     <View
                       key={`${prod.name}-${idx}`}
-                      style={[styles.itemDetailRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}
+                      style={styles.itemDetailRow}
                     >
-                      <View style={{ flex: 2, alignItems: isAr ? 'flex-end' : 'flex-start' }}>
+                      <View style={{ flex: 2 }}>
                         <Text style={styles.detailItemName}>{prod.name}</Text>
                         <Text style={styles.detailItemSub}>
                           {formatPrice(prod.unit_price)} × {prod.quantity}

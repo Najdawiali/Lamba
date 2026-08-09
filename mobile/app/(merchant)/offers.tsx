@@ -74,14 +74,14 @@ export default function MerchantOffersScreen() {
     } catch (err) {
       console.error('Failed to fetch merchant offers:', err);
       Alert.alert(
-        isAr ? 'خطأ في الاتصال' : 'Connection Error',
-        isAr ? 'فشل تحميل العروض والمنتجات. اسحب للأسفل للتحديث.' : 'Failed to load offers and products. Pull down to refresh.'
+        t('common.error', 'Connection Error'),
+        t('offers.error_loading', 'Failed to load offers and products. Pull down to refresh.')
       );
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [isAr]);
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -98,20 +98,20 @@ export default function MerchantOffersScreen() {
       setOffers(prev => prev.map(o => o.id === offerId ? { ...o, is_active: updated.is_active } : o));
     } catch (err) {
       Alert.alert(
-        isAr ? 'خطأ' : 'Error',
-        isAr ? 'فشل تحديث حالة العرض.' : 'Failed to update offer status.'
+        t('common.error', 'Error'),
+        t('offers.failed_update', 'Failed to update offer status.')
       );
     }
   };
 
   const handleDeleteOffer = (offerId: string) => {
     Alert.alert(
-      isAr ? 'تأكيد الحذف' : 'Confirm Delete',
-      isAr ? 'هل أنت متأكد من رغبتك في حذف هذا العرض الخاص؟' : 'Are you sure you want to delete this special offer?',
+      t('offers.confirm_delete', 'Confirm Delete'),
+      t('offers.confirm_delete_desc', 'Are you sure you want to delete this special offer?'),
       [
-        { text: isAr ? 'إلغاء' : 'Cancel', style: 'cancel' },
+        { text: t('common.cancel', 'Cancel'), style: 'cancel' },
         {
-          text: isAr ? 'حذف' : 'Delete',
+          text: t('common.delete', 'Delete'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -119,8 +119,8 @@ export default function MerchantOffersScreen() {
               setOffers(prev => prev.filter(o => o.id !== offerId));
             } catch (err) {
               Alert.alert(
-                isAr ? 'خطأ' : 'Error',
-                isAr ? 'فشل حذف العرض.' : 'Failed to delete offer.'
+                t('common.error', 'Error'),
+                t('offers.failed_delete', 'Failed to delete offer.')
               );
             }
           }
@@ -133,8 +133,8 @@ export default function MerchantOffersScreen() {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (permissionResult.granted === false) {
       Alert.alert(
-        isAr ? 'مطلوب إذن الوصول للاستوديو' : 'Gallery Permission Required',
-        isAr ? 'إذن الوصول إلى معرض الصور مطلوب لتحميل صورة المنتج.' : 'Library permissions are required to upload a product photo.'
+        t('scanner.permission_denied', 'Gallery Permission Required'),
+        t('addProduct.media_library_permission', 'Library permissions are required to upload a product photo.')
       );
       return;
     }
@@ -162,8 +162,8 @@ export default function MerchantOffersScreen() {
     if (formMode === 'catalog') {
       if (!selectedProduct) {
         Alert.alert(
-          isAr ? 'تنبيه' : 'Alert',
-          isAr ? 'الرجاء اختيار منتج لتطبيق العرض عليه.' : 'Please select a product to apply the offer to.'
+          t('common.error', 'Alert'),
+          t('offers.select_product_prompt', 'Please select a product to apply the offer to.')
         );
         return;
       }
@@ -177,8 +177,8 @@ export default function MerchantOffersScreen() {
       // Validate brand new product inputs
       if (!newItemName.trim()) {
         Alert.alert(
-          isAr ? 'تنبيه' : 'Alert',
-          isAr ? 'الرجاء إدخال اسم المنتج.' : 'Please enter the product name.'
+          t('common.error', 'Alert'),
+          t('addProduct.product_name', 'Please enter the product name.')
         );
         return;
       }
@@ -186,16 +186,16 @@ export default function MerchantOffersScreen() {
       const priceVal = parseFloat(newItemPrice);
       if (isNaN(priceVal) || priceVal < 0) {
         Alert.alert(
-          isAr ? 'تنبيه' : 'Alert',
-          isAr ? 'الرجاء إدخال سعر صحيح للمنتج.' : 'Please enter a valid product price.'
+          t('common.error', 'Alert'),
+          t('addProduct.price', 'Please enter a valid product price.')
         );
         return;
       }
 
       if (!newItemImageUri) {
         Alert.alert(
-          isAr ? 'تنبيه' : 'Alert',
-          isAr ? 'الرجاء اختيار صورة للمنتج الجديد.' : 'Please select a picture for the new product.'
+          t('common.error', 'Alert'),
+          t('offers.select_image_prompt', 'Please select a picture for the new product.')
         );
         return;
       }
@@ -242,7 +242,7 @@ export default function MerchantOffersScreen() {
         enrichedCategory = '';
       } catch (err: any) {
         console.error('Failed to create new catalog product:', err);
-        const errMsg = err?.response?.data?.detail || (isAr ? 'فشل إنشاء المنتج الجديد.' : 'Failed to create new product in catalog.');
+        const errMsg = err?.response?.data?.detail || t('offers.failed_create_product', 'Failed to create new product in catalog.');
         Alert.alert(t('common.error'), errMsg);
         setSubmitting(false);
         return;
@@ -254,8 +254,8 @@ export default function MerchantOffersScreen() {
       const val = parseFloat(discountPercentage);
       if (isNaN(val) || val <= 0 || val > 100) {
         Alert.alert(
-          isAr ? 'تنبيه' : 'Alert',
-          isAr ? 'الرجاء إدخال نسبة تخفيض صحيحة بين 1 و 100.' : 'Please enter a valid discount percentage between 1 and 100.'
+          t('common.error', 'Alert'),
+          t('offers.invalid_discount', 'Please enter a valid discount percentage between 1 and 100.')
         );
         setSubmitting(false);
         return;
@@ -873,23 +873,23 @@ export default function MerchantOffersScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={[styles.headerTitle, { textAlign: isAr ? 'right' : 'left' }]}>
-          {isAr ? 'العروض الخاصة' : 'Special Offers'}
+        <Text style={styles.headerTitle}>
+          {t('offers.title', 'Special Offers')}
         </Text>
-        <Text style={[styles.headerSubtitle, { textAlign: isAr ? 'right' : 'left' }]}>
-          {isAr ? 'إدارة وتنشيط حملات الترويج لمنتجاتك' : 'Manage and activate product promotions'}
+        <Text style={styles.headerSubtitle}>
+          {t('offers.subtitle', 'Manage and activate product promotions')}
         </Text>
       </View>
 
       {/* Dedicated New Offer CTA — full-width bar so it's always in correct place */}
-      <View style={[styles.newOfferBar, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+      <View style={styles.newOfferBar}>
         <TouchableOpacity
           style={styles.addButton}
           onPress={() => setAddModalVisible(true)}
           activeOpacity={0.85}
         >
           <Ionicons name="add-circle-outline" size={20} color={Colors.background} />
-          <Text style={styles.addButtonText}>{isAr ? 'إنشاء عرض جديد' : 'New Offer'}</Text>
+          <Text style={styles.addButtonText}>{t('offers.new_offer', 'New Offer')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -909,15 +909,15 @@ export default function MerchantOffersScreen() {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Ionicons name="pricetags-outline" size={60} color={Colors.textMuted} />
-            <Text style={styles.emptyTitle}>{isAr ? 'لا توجد عروض ترويجية' : 'No Active Promotions'}</Text>
+            <Text style={styles.emptyTitle}>{t('offers.no_offers_yet', 'No Active Promotions')}</Text>
             <Text style={styles.emptySubtitle}>
-              {isAr ? 'ابدأ بإضافة أول عرض مميز لجذب المزيد من الزبائن!' : 'Add your first special offer to attract more customers!'}
+              {t('offers.no_offers_prompt', 'Add your first special offer to attract more customers!')}
             </Text>
             <TouchableOpacity
               style={styles.emptyButton}
               onPress={() => setAddModalVisible(true)}
             >
-              <Text style={styles.emptyButtonText}>{isAr ? 'إنشاء أول عرض' : 'Create First Offer'}</Text>
+              <Text style={styles.emptyButtonText}>{t('offers.create_offer', 'Create First Offer')}</Text>
             </TouchableOpacity>
           </View>
         }
@@ -946,10 +946,10 @@ export default function MerchantOffersScreen() {
                     }}
                     style={styles.closeButton}
                   >
-                    <Ionicons name={isAr ? "arrow-forward" : "arrow-back"} size={22} color={Colors.textPrimary} />
+                    <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
                   </TouchableOpacity>
                   <Text style={styles.modalTitle}>
-                    {isAr ? 'اختر منتجاً للعرض' : 'Select Product for Offer'}
+                    {t('offers.select_product', 'Select Product for Offer')}
                   </Text>
                   <View style={{ width: 24 }} />
                 </View>
@@ -959,7 +959,7 @@ export default function MerchantOffersScreen() {
                   <Ionicons name="search-outline" size={18} color={Colors.textMuted} style={styles.searchIconInline} />
                   <TextInput
                     style={styles.searchBarInline}
-                    placeholder={isAr ? 'البحث بالاسم أو القسم...' : 'Search by name or category...'}
+                    placeholder={t('offers.search_placeholder', 'Search by name or category...')}
                     placeholderTextColor={Colors.textMuted}
                     value={selectorSearch}
                     onChangeText={setSelectorSearch}
@@ -979,7 +979,7 @@ export default function MerchantOffersScreen() {
                     <View style={styles.emptySelector}>
                       <Ionicons name="cube-outline" size={40} color={Colors.textMuted} />
                       <Text style={styles.emptySelectorText}>
-                        {isAr ? 'لا توجد منتجات مطابقة.' : 'No matching products found.'}
+                        {t('explore.no_results', 'No matching products found.')}
                       </Text>
                     </View>
                   }
@@ -1002,12 +1002,12 @@ export default function MerchantOffersScreen() {
                       />
                       <View style={{ flex: 1, marginHorizontal: Spacing.md }}>
                         <Text style={styles.selectorItemName} numberOfLines={1}>{item.name}</Text>
-                        <Text style={styles.selectorItemCategory}>{item.category || (isAr ? 'غير مصنف' : 'Uncategorized')}</Text>
+                        <Text style={styles.selectorItemCategory}>{item.category || t('common.uncategorized', 'Uncategorized')}</Text>
                         <Text style={styles.selectorItemPrice}>
                           {formatPrice(item.price)}
                         </Text>
                       </View>
-                      <Ionicons name={isAr ? "chevron-back" : "chevron-forward"} size={18} color={Colors.textMuted} />
+                      <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
                     </TouchableOpacity>
                   )}
                 />
@@ -1015,7 +1015,7 @@ export default function MerchantOffersScreen() {
             ) : (
               <>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>{isAr ? 'إنشاء عرض خاص جديد' : 'Create Special Offer'}</Text>
+                  <Text style={styles.modalTitle}>{t('offers.create_offer', 'Create Special Offer')}</Text>
                   <TouchableOpacity
                     onPress={() => {
                       setAddModalVisible(false);
@@ -1056,7 +1056,7 @@ export default function MerchantOffersScreen() {
                   {formMode === 'catalog' ? (
                     <View>
                       {/* Product Picker Button */}
-                      <Text style={styles.inputLabel}>{isAr ? 'المنتج المستهدف' : 'Target Product'}</Text>
+                      <Text style={styles.inputLabel}>{t('offers.target_product', 'Target Product')}</Text>
                       <TouchableOpacity
                         style={styles.productPicker}
                         onPress={() => setShowSelector(true)}
@@ -1085,7 +1085,7 @@ export default function MerchantOffersScreen() {
                           <View style={styles.pickerPlaceholder}>
                             <Ionicons name="cube-outline" size={20} color={Colors.textMuted} />
                             <Text style={styles.pickerPlaceholderText}>
-                              {isAr ? 'اختر منتجاً من الكتالوج...' : 'Choose a product from catalog...'}
+                              {t('offers.choose_catalog_prompt', 'Choose a product from catalog...')}
                             </Text>
                             <Ionicons name="chevron-down" size={18} color={Colors.textMuted} />
                           </View>
@@ -1098,7 +1098,7 @@ export default function MerchantOffersScreen() {
                       <Text style={styles.inputLabel}>{t('addProduct.product_name')}</Text>
                       <TextInput
                         style={styles.textInput}
-                        placeholder={isAr ? 'اسم المنتج الجديد...' : 'New product name...'}
+                        placeholder={t('addProduct.product_name', 'New product name...')}
                         placeholderTextColor={Colors.textMuted}
                         value={newItemName}
                         onChangeText={setNewItemName}
@@ -1114,10 +1114,10 @@ export default function MerchantOffersScreen() {
                         onChangeText={setNewItemPrice}
                       />
 
-                      <Text style={styles.inputLabel}>{t('addProduct.barcode')} ({isAr ? 'اختياري' : 'Optional'})</Text>
+                      <Text style={styles.inputLabel}>{t('addProduct.barcode')}</Text>
                       <TextInput
                         style={styles.textInput}
-                        placeholder={isAr ? 'اكتب الباركود الخاص بالمنتج...' : 'Type product barcode...'}
+                        placeholder={t('scanner.enter_manually', 'Type product barcode...')}
                         placeholderTextColor={Colors.textMuted}
                         value={newItemBarcode}
                         onChangeText={setNewItemBarcode}
@@ -1141,7 +1141,7 @@ export default function MerchantOffersScreen() {
                   )}
 
                   {/* Offer Type Selection */}
-                  <Text style={styles.inputLabel}>{isAr ? 'نوع العرض الخاص' : 'Offer Type'}</Text>
+                  <Text style={styles.inputLabel}>{t('offers.offer_type', 'Offer Type')}</Text>
                   <View style={styles.typeButtonsRow}>
                     <TouchableOpacity
                       style={[
@@ -1159,7 +1159,7 @@ export default function MerchantOffersScreen() {
                         styles.typeOptionText,
                         offerType === 'BOGO' && styles.typeOptionTextActiveBogo
                       ]}>
-                        {isAr ? 'اشترِ واحداً واحصل على الثاني مجاناً' : 'Buy 1 Get 1 Free'}
+                        {t('offers.bogo', 'Buy 1 Get 1 Free')}
                       </Text>
                     </TouchableOpacity>
 

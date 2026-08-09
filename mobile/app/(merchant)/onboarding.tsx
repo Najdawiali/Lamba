@@ -304,7 +304,7 @@ export default function OnboardingScreen() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>{isAr ? 'تفاصيل ملف تعريف المتجر' : 'Store Profile Details'}</Text>
+          <Text style={styles.cardTitle}>{t('onboarding.title', 'Store Profile Details')}</Text>
 
           {/* Store Name */}
           <View style={styles.inputContainer}>
@@ -371,7 +371,7 @@ export default function OnboardingScreen() {
             <Ionicons name="pricetag-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
             <TextInput
               style={styles.input}
-              placeholder={isAr ? 'طبيعة العمل (اختياري، مثال: بقالة)' : 'Business Nature (optional, e.g. Grocery)'}
+              placeholder={t('onboarding.business_type', 'Business Nature (optional, e.g. Grocery)')}
               placeholderTextColor={Colors.textMuted}
               value={businessNature}
               onChangeText={setBusinessNature}
@@ -380,13 +380,13 @@ export default function OnboardingScreen() {
 
           {/* Operating Hours Preset */}
           <Text style={styles.presetLabel}>
-            {isAr ? 'ساعات العمل' : 'Operating Hours'}
+            {t('onboarding.operating_hours', 'Operating Hours')}
           </Text>
           <View style={styles.presetRow}>
             {([
-              { key: 'standard', label: isAr ? 'قياسي' : 'Standard' },
-              { key: 'open_24_7', label: isAr ? '24/7' : '24/7' },
-              { key: 'weekdays', label: isAr ? 'أيام الأسبوع' : 'Weekdays' },
+              { key: 'standard', label: t('common.all', 'Standard') },
+              { key: 'open_24_7', label: '24/7' },
+              { key: 'weekdays', label: t('history.this_week', 'Weekdays') },
             ] as const).map((opt) => (
               <TouchableOpacity
                 key={opt.key}
@@ -421,7 +421,7 @@ export default function OnboardingScreen() {
               <>
                 <Ionicons name="locate-outline" size={18} color={Colors.secondary} />
                 <Text style={styles.geolocateText}>
-                  {isAr ? 'الحصول على الإحداثيات الحالية (محاكاة السلط)' : 'Acquire Current Coordinates (As-Salt Mock)'}
+                  {t('onboarding.location', 'Acquire Current Coordinates')}
                 </Text>
               </>
             )}

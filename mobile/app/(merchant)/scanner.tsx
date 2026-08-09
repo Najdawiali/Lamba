@@ -984,18 +984,17 @@ const styles = useMemo(() => StyleSheet.create({
   };
 
   const handleCheckoutPOS = async () => {
-    if (cartItems.length === 0) return;
-    
+    if (cartItems.length === 0 || checkingOut) return;
     setCheckingOut(true);
+
     try {
       const payload: POSCheckoutItem[] = cartItems.map(item => ({
         market_item_id: item.market_item_id,
         quantity: item.quantity
       }));
-      
+
       const response = await checkoutPOS(payload);
-      
-      Vibration.vibrate([0, 100, 50, 100]);
+      Vibration.vibrate([0, 40, 60, 40]);
       
       setLastReceipt(response);
       setReceiptVisible(true);
@@ -1007,9 +1006,9 @@ const styles = useMemo(() => StyleSheet.create({
         const alertMessages = response.alerts.map(a => a.message).join('\n');
         setTimeout(() => {
           Alert.alert(
-            isAr ? 'تنبيه نفاذ المخزون' : 'Out of Stock Alert',
+            t('lowStock.title', 'Out of Stock Alert'),
             alertMessages,
-            [{ text: isAr ? 'موافق' : 'OK' }]
+            [{ text: t('common.ok', 'OK') }]
           );
         }, 600);
       }
@@ -1025,7 +1024,7 @@ const styles = useMemo(() => StyleSheet.create({
         return;
       }
       console.warn('POS Checkout failed:', err);
-      Alert.alert(isAr ? 'فشلت عملية الدفع' : 'Checkout Failed', isAr ? 'حدث خطأ أثناء إجراء الدفع.' : 'An error occurred during transaction checkout.');
+      Alert.alert(t('common.error', 'Checkout Failed'), t('common.error', 'An error occurred during transaction checkout.'));
     } finally {
       setCheckingOut(false);
     }
@@ -1093,7 +1092,7 @@ const styles = useMemo(() => StyleSheet.create({
         {/* Top Dark Bar containing Back and Torch controls */}
         <View style={styles.overlayTop}>
           <SafeAreaView style={styles.headerSafeArea} edges={['top']}>
-            <View style={[styles.headerOverlay, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+            <View style={styles.headerOverlay}>
               <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn} activeOpacity={0.7}>
                 <Ionicons name="arrow-back" size={24} color="#FFF" />
               </TouchableOpacity>
@@ -1169,7 +1168,7 @@ const styles = useMemo(() => StyleSheet.create({
             <View style={styles.cartCountBadge}>
               <Text style={styles.cartCountText}>{cartItems.reduce((a, b) => a + b.quantity, 0)}</Text>
             </View>
-            <Text style={styles.summaryLabel}>{isAr ? 'المنتجات المسجلة' : 'Scanned Items'}</Text>
+            <Text style={styles.summaryLabel}>{t('scanner.items', 'Scanned Items')}</Text>
           </View>
           <View style={styles.summaryAction}>
             <Text style={styles.summaryTotal}>{calculateTotal().toFixed(2)} SAR</Text>
@@ -1198,7 +1197,7 @@ const styles = useMemo(() => StyleSheet.create({
                 activeOpacity={0.7}
               >
                 <Ionicons name="keypad-outline" size={20} color={Colors.primary} />
-                <Text style={styles.keyboardDismissText}>{isAr ? 'تم' : 'Done'}</Text>
+                <Text style={styles.keyboardDismissText}>{t('common.done', 'Done')}</Text>
               </TouchableOpacity>
             ) : (
               <View style={{ width: 44 }} />
@@ -1208,13 +1207,13 @@ const styles = useMemo(() => StyleSheet.create({
           {loadingApi ? (
             <View style={styles.loadingWrapper}>
               <ActivityIndicator size="large" color={Colors.primary} />
-              <Text style={styles.loadingText}>{isAr ? 'جارٍ البحث عن المنتج...' : 'Searching database...'}</Text>
+              <Text style={styles.loadingText}>{t('common.loading', 'Searching database...')}</Text>
             </View>
           ) : (
             <View style={{ width: '100%' }}>
               {scanResult ? (
                 <View style={{ width: '100%' }}>
-                  <View style={[styles.itemSummaryCard, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                  <View style={styles.itemSummaryCard}>
                     <View style={styles.thumbWrapper}>
                       {scanResult.image_url ? (
                         <Image
@@ -1229,15 +1228,19 @@ const styles = useMemo(() => StyleSheet.create({
                       )}
                     </View>
 
-                    <View style={[styles.summaryText, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
-                      <Text style={styles.itemName} numberOfLines={1}>{scanResult.name}</Text>
-                      <Text style={styles.itemCategory}>{scanResult.category || 'General'}</Text>
+                    <View style={styles.summaryText}>
+                      <Text style={styles.itemName} numberOfLines={1}>
+                        {i18n.locale?.startsWith('ar') ? (scanResult.name_ar || scanResult.name) : (scanResult.name_en || scanResult.name)}
+                      </Text>
+                      <Text style={styles.itemCategory}>
+                        {(i18n.locale?.startsWith('ar') ? (scanResult.category_name_ar || scanResult.category) : (scanResult.category_name_en || scanResult.category)) || 'General'}
+                      </Text>
                       <View style={styles.badgeRow}>
                         <View style={[styles.badge, scanResult.exists_in_branch ? styles.badgeSuccess : styles.badgeInfo]}>
                           <Text style={[styles.badgeText, scanResult.exists_in_branch ? styles.badgeTextSuccess : styles.badgeTextInfo]}>
                             {scanResult.exists_in_branch 
-                              ? (isAr ? 'متوفر بالفرع' : 'In My Store') 
-                              : (isAr ? 'غير متوفر بالفرع' : 'Not Carrying')}
+                              ? t('inventory.in_stock', 'In My Store') 
+                              : t('scanner.not_stocked', 'Not Carrying')}
                           </Text>
                         </View>
                         <Text style={styles.barcodeText}>EAN: {scanResult.barcode}</Text>
@@ -1248,10 +1251,10 @@ const styles = useMemo(() => StyleSheet.create({
                   <View style={styles.formContainer}>
                     <View style={styles.formRow}>
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.inputLabel, { textAlign: isAr ? 'right' : 'left' }]}>
-                          {isAr ? 'الكمية المتوفرة' : 'Stock Quantity'}
+                        <Text style={styles.inputLabel}>
+                          {t('inventory.in_stock', 'Stock Quantity')}
                         </Text>
-                        <View style={[styles.adjusterRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                        <View style={styles.adjusterRow}>
                           <TouchableOpacity style={styles.adjusterBtn} onPress={() => adjustStock(-1)} activeOpacity={0.7}>
                             <Ionicons name="remove" size={20} color={Colors.textPrimary} />
                           </TouchableOpacity>
@@ -1269,8 +1272,8 @@ const styles = useMemo(() => StyleSheet.create({
                       </View>
 
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.inputLabel, { textAlign: isAr ? 'right' : 'left' }]}>
-                          {isAr ? 'سعر البيع (ر.س)' : 'Selling Price (SAR)'}
+                        <Text style={styles.inputLabel}>
+                          {t('merchant.price', 'Selling Price')}
                         </Text>
                         <View style={styles.priceInputWrapper}>
                           <TextInput
@@ -1285,14 +1288,14 @@ const styles = useMemo(() => StyleSheet.create({
 
                     <View style={styles.actionButtons}>
                       <TouchableOpacity style={[styles.btn, styles.btnCancel]} onPress={handleCloseDrawer} activeOpacity={0.7}>
-                        <Text style={styles.btnTextCancel}>{isAr ? 'إلغاء' : 'Cancel'}</Text>
+                        <Text style={styles.btnTextCancel}>{t('common.cancel', 'Cancel')}</Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity style={[styles.btn, styles.btnSubmit]} onPress={handleSave} activeOpacity={0.8}>
                         <Text style={styles.btnTextSubmit}>
                           {scanResult.exists_in_branch 
-                            ? (isAr ? 'حفظ التعديلات' : 'Save Adjustments')
-                            : (isAr ? 'إضافة للمتجر' : 'Add to My Store')}
+                            ? t('common.save', 'Save Adjustments')
+                            : t('addProduct.add_new', 'Add to My Store')}
                         </Text>
                       </TouchableOpacity>
                     </View>
@@ -1319,15 +1322,11 @@ const styles = useMemo(() => StyleSheet.create({
                       style={[styles.btn, styles.btnSubmit, { flex: 1.5, backgroundColor: Colors.error }]} 
                       activeOpacity={0.8}
                       onPress={() => {
-                        animateDrawer(false);
+                        handleCloseDrawer();
                         router.push({
                           pathname: '/(merchant)/add-product',
-                          params: { barcode: scannedBarcode }
+                          params: { initialBarcode: scannedBarcode }
                         });
-                        setTimeout(() => {
-                          setScanned(false);
-                          setScannedBarcode('');
-                        }, 500);
                       }}
                     >
                       <Text style={styles.btnTextSubmit}>{t('scanner.ingest_new_item', 'Ingest New Item')}</Text>
@@ -1363,7 +1362,7 @@ const styles = useMemo(() => StyleSheet.create({
                 activeOpacity={0.7}
               >
                 <Ionicons name="keypad-outline" size={20} color={Colors.primary} />
-                <Text style={styles.keyboardDismissText}>{isAr ? 'تم' : 'Done'}</Text>
+                <Text style={styles.keyboardDismissText}>{t('common.done', 'Done')}</Text>
               </TouchableOpacity>
             ) : (
               <View style={{ width: 44 }} />
@@ -1394,13 +1393,13 @@ const styles = useMemo(() => StyleSheet.create({
             style={styles.cartList}
             contentContainerStyle={{ paddingBottom: Spacing.md }}
             renderItem={({ item }) => (
-              <View style={[styles.cartItemRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+              <View style={styles.cartItemRow}>
                 <View style={styles.cartItemText}>
                   <Text style={styles.cartItemName} numberOfLines={1}>{item.name}</Text>
                   <Text style={styles.cartItemSub}>{item.price.toFixed(2)} SAR × {item.quantity}</Text>
                 </View>
 
-                <View style={[styles.cartItemActions, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                <View style={styles.cartItemActions}>
                   <TouchableOpacity style={styles.cartQtyBtn} onPress={() => adjustCartItemQty(item.market_item_id, -1)}>
                     <Ionicons name="remove-circle-outline" size={22} color={Colors.textPrimary} />
                   </TouchableOpacity>
@@ -1503,8 +1502,8 @@ const styles = useMemo(() => StyleSheet.create({
               keyExtractor={(item, index) => `${item.name}-${index}`}
               contentContainerStyle={{ paddingVertical: Spacing.sm }}
               renderItem={({ item }) => (
-                <View style={[styles.receiptItemDetailsRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-                  <View style={{ flex: 2, alignItems: isAr ? 'flex-end' : 'flex-start' }}>
+                <View style={styles.receiptItemDetailsRow}>
+                  <View style={{ flex: 2 }}>
                     <Text style={styles.receiptItemDetailsName}>{item.name}</Text>
                     <Text style={styles.receiptItemDetailsSub}>
                       {item.unit_price.toFixed(2)} {t('common.sar', 'SAR')} × {item.quantity}
@@ -1521,7 +1520,7 @@ const styles = useMemo(() => StyleSheet.create({
           {/* Footer - Grand Total and Close button */}
           <View style={styles.receiptScreenFooter}>
             <View style={styles.receiptScreenDivider} />
-            <View style={[styles.receiptScreenTotalRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+            <View style={styles.receiptScreenTotalRow}>
               <Text style={styles.receiptScreenTotalLabel}>{t('scanner.total', 'GRAND TOTAL')}</Text>
               <Text style={styles.receiptScreenTotalValue}>
                 {(lastReceipt?.total_cost || 0).toFixed(2)} {t('common.sar', 'SAR')}

@@ -943,8 +943,8 @@ export default function DashboardScreen() {
           styles.toastContainer,
           { transform: [{ translateY: bannerY }] }
         ]}>
-          <View style={[styles.toastInner, styles[`toast_${notification.type}` as const], { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-            <View style={[styles.toastIconWrapper, { marginRight: isAr ? 0 : Spacing.md, marginLeft: isAr ? Spacing.md : 0 }]}>
+          <View style={[styles.toastInner, styles[`toast_${notification.type}` as const]]}>
+            <View style={styles.toastIconWrapper}>
               <Ionicons
                 name={notification.type === 'success' ? 'checkmark-circle' : notification.type === 'error' ? 'alert-circle' : 'information-circle'}
                 size={26}
@@ -952,8 +952,8 @@ export default function DashboardScreen() {
               />
             </View>
             <View style={styles.toastTextWrapper}>
-              <Text style={[styles.toastTitle, { textAlign: isAr ? 'right' : 'left' }]}>{notification.title}</Text>
-              <Text style={[styles.toastMessage, { textAlign: isAr ? 'right' : 'left' }]}>{notification.message}</Text>
+              <Text style={styles.toastTitle}>{notification.title}</Text>
+              <Text style={styles.toastMessage}>{notification.message}</Text>
             </View>
             <TouchableOpacity onPress={dismissNotification} style={styles.toastCloseBtn}>
               <Ionicons name="close" size={18} color={Colors.textMuted} />
@@ -964,11 +964,11 @@ export default function DashboardScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={[styles.greeting, { textAlign: isAr ? 'right' : 'left' }]} numberOfLines={1}>
-          {market?.name || t('dashboard.title')}
+        <Text style={styles.greeting} numberOfLines={1}>
+          {market?.name || t('tabs.dashboard', 'Dashboard')}
         </Text>
-        <Text style={[styles.subtitle, { textAlign: isAr ? 'right' : 'left' }]} numberOfLines={1}>
-          {market?.address || t('dashboard.subtitle')}
+        <Text style={styles.subtitle} numberOfLines={1}>
+          {market?.address || t('merchant.dashboard', 'Manage your inventory and sales')}
         </Text>
       </View>
 
@@ -1075,8 +1075,12 @@ export default function DashboardScreen() {
 
             {/* Product Metadata Info */}
             <View style={styles.productInfo}>
-              <Text style={styles.productName} numberOfLines={1}>{truncatedName}</Text>
-              <Text style={styles.categoryLabel}>{item.category || t('common.general', 'General')}</Text>
+              <Text style={styles.productName} numberOfLines={1}>
+                {i18n.locale?.startsWith('ar') ? (item.name_ar || truncatedName) : (item.name_en || truncatedName)}
+              </Text>
+              <Text style={styles.categoryLabel}>
+                {(i18n.locale?.startsWith('ar') ? (item.category_name_ar || item.category) : (item.category_name_en || item.category)) || t('common.general', 'General')}
+              </Text>
               <Text style={styles.priceText}>{formatPrice(item.price)}</Text>
               <Text style={styles.stockCountText}>{t('dashboard.stock_label', 'Stock')}: {item.stock_count}</Text>
             </View>
@@ -1120,7 +1124,7 @@ export default function DashboardScreen() {
             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
               <View style={styles.modalContent}>
                 {/* Modal Header */}
-                <View style={[styles.modalHeader, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>{t('dashboard.edit_product', 'Edit Product Details')}</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}>
                     {keyboardVisible && (

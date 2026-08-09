@@ -31,8 +31,6 @@ export default function LowStockScreen() {
   const [savingReplenish, setSavingReplenish] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
-  const isAr = i18n.locale?.startsWith('ar');
-
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
@@ -64,14 +62,14 @@ export default function LowStockScreen() {
       
       console.warn('Failed to load replenishment items:', err);
       Alert.alert(
-        isAr ? 'خطأ في الاتصال' : 'Connection Error',
-        isAr ? 'تعذر جلب بيانات المخزون. يرجى سحب الشاشة للأسفل للتحديث.' : 'Could not query branch items. Swipe down to refresh.'
+        t('common.error', 'Connection Error'),
+        t('search.error_subtitle', 'Could not query branch items. Swipe down to refresh.')
       );
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [isAr]);
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -96,8 +94,8 @@ export default function LowStockScreen() {
     
     if (isNaN(addCount) || addCount <= 0) {
       Alert.alert(
-        isAr ? 'خطأ في التحقق' : 'Validation Error',
-        isAr ? 'الرجاء إدخال كمية صحيحة لإضافتها للمخزون' : 'Please enter a valid positive stock quantity to add'
+        t('common.error', 'Validation Error'),
+        t('offers.validation_error', 'Please enter a valid positive stock quantity to add')
       );
       return;
     }
@@ -116,15 +114,13 @@ export default function LowStockScreen() {
       Vibration.vibrate(50);
       
       Alert.alert(
-        isAr ? 'تمت إعادة تعبئة المخزون' : 'Stock Replenished',
-        isAr 
-          ? `تم تحديث كمية (${updated.name}) بنجاح لتصبح: ${newStockTotal} قطع.`
-          : `Successfully incremented (${updated.name}) stock level by ${addCount} units.`
+        t('common.done', 'Stock Replenished'),
+        `${updated.name}: ${newStockTotal}`
       );
     } catch (err) {
       Alert.alert(
-        isAr ? 'فشل التحديث' : 'Replenish Failed',
-        isAr ? 'تعذر حفظ المخزون الجديد. يرجى المحاولة مرة أخرى.' : 'Could not update stock levels. Please check connection and try again.'
+        t('common.error', 'Replenish Failed'),
+        t('common.error', 'Could not update stock levels. Please check connection and try again.')
       );
     } finally {
       setSavingReplenish(false);
@@ -155,7 +151,7 @@ export default function LowStockScreen() {
     // 4. Group sorted items by category
     const categoriesMap: Record<string, MarketItemDashboardResponse[]> = {};
     sortedItems.forEach(item => {
-      const cat = item.category || (isAr ? 'عام' : 'General');
+      const cat = (i18n.locale?.startsWith('ar') ? (item.category_name_ar || item.category) : (item.category_name_en || item.category)) || t('market.all_items', 'General');
       if (!categoriesMap[cat]) {
         categoriesMap[cat] = [];
       }
@@ -168,7 +164,7 @@ export default function LowStockScreen() {
     })).sort((a, b) => a.categoryName.localeCompare(b.categoryName));
 
     return { lowStockItems: lowStock, categoryGroups: groups };
-  }, [products, filterMode, isAr]);
+  }, [products, filterMode]);
 
   const getPriorityColor = (stock: number) => {
     if (stock === 0) return Colors.error;
@@ -177,9 +173,9 @@ export default function LowStockScreen() {
   };
 
   const getPriorityText = (stock: number) => {
-    if (stock === 0) return isAr ? 'نفذ المخزون' : 'OUT OF STOCK';
-    if (stock <= 5) return isAr ? 'حرج' : 'CRITICAL';
-    return isAr ? 'منخفض' : 'LOW STOCK';
+    if (stock === 0) return t('product.out_of_stock', 'Out of Stock');
+    if (stock <= 5) return t('merchant.stock_out', 'Critical');
+    return t('product.limited_stock', 'Low Stock');
   };
 
   const styles = useMemo(() => StyleSheet.create({
@@ -194,6 +190,7 @@ export default function LowStockScreen() {
     backgroundColor: Colors.background,
   },
   header: {
+    flexDirection: 'row',
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.lg,
     alignItems: 'center',
@@ -219,6 +216,7 @@ export default function LowStockScreen() {
     borderBottomColor: Colors.border,
   },
   filterScroll: {
+    flexDirection: 'row',
     paddingHorizontal: Spacing.lg,
     gap: Spacing.xs,
   },
@@ -260,6 +258,7 @@ export default function LowStockScreen() {
     marginTop: Spacing.lg,
   },
   categoryHeaderRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
     marginBottom: Spacing.md,
@@ -278,6 +277,7 @@ export default function LowStockScreen() {
     marginStart: Spacing.sm,
   },
   productCard: {
+    flexDirection: 'row',
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.md,
     padding: Spacing.md,
@@ -544,16 +544,16 @@ export default function LowStockScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
-      <View style={[styles.header, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+      <View style={styles.header}>
         <TouchableOpacity
           style={styles.backBtn}
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={24} color={Colors.textPrimary} />
+          <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
-          {isAr ? 'لوحة إعادة تعبئة المخزون' : 'Replenishment Board'}
+          {t('merchant.inventory', 'Replenishment Board')}
         </Text>
         <View style={{ width: 40 }} />
       </View>
@@ -563,14 +563,14 @@ export default function LowStockScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[styles.filterScroll, { flexDirection: isAr ? 'row-reverse' : 'row' }]}
+          contentContainerStyle={styles.filterScroll}
         >
           <TouchableOpacity
             style={[styles.filterTab, filterMode === 'all' && styles.filterTabActive]}
             onPress={() => setFilterMode('all')}
           >
             <Text style={[styles.filterTabText, filterMode === 'all' && styles.filterTabTextActive]}>
-              {isAr ? 'الكل' : 'All Alerts'} ({lowStockItems.length})
+              {t('common.all', 'All')} ({lowStockItems.length})
             </Text>
           </TouchableOpacity>
 
@@ -580,7 +580,7 @@ export default function LowStockScreen() {
           >
             <View style={[styles.tabBadge, { backgroundColor: Colors.error }]} />
             <Text style={[styles.filterTabText, filterMode === 'out_of_stock' && styles.filterTabTextActive]}>
-              {isAr ? 'نفذ المخزون' : 'Out of Stock'} ({lowStockItems.filter(p => p.stock_count === 0).length})
+              {t('product.out_of_stock', 'Out of Stock')} ({lowStockItems.filter(p => p.stock_count === 0).length})
             </Text>
           </TouchableOpacity>
 
@@ -590,7 +590,7 @@ export default function LowStockScreen() {
           >
             <View style={[styles.tabBadge, { backgroundColor: '#FF9500' }]} />
             <Text style={[styles.filterTabText, filterMode === 'critical' && styles.filterTabTextActive]}>
-              {isAr ? 'حرج' : 'Critical'} ({lowStockItems.filter(p => p.stock_count >= 1 && p.stock_count <= 5).length})
+              {t('merchant.stock_out', 'Critical')} ({lowStockItems.filter(p => p.stock_count >= 1 && p.stock_count <= 5).length})
             </Text>
           </TouchableOpacity>
 
@@ -600,7 +600,7 @@ export default function LowStockScreen() {
           >
             <View style={[styles.tabBadge, { backgroundColor: '#FFCC00' }]} />
             <Text style={[styles.filterTabText, filterMode === 'low' && styles.filterTabTextActive]}>
-              {isAr ? 'منخفض' : 'Low'} ({lowStockItems.filter(p => p.stock_count >= 6 && p.stock_count <= 10).length})
+              {t('product.limited_stock', 'Low')} ({lowStockItems.filter(p => p.stock_count >= 6 && p.stock_count <= 10).length})
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -621,7 +621,7 @@ export default function LowStockScreen() {
         renderItem={({ item: group }) => (
           <View style={styles.categorySection}>
             {/* Category Header */}
-            <View style={[styles.categoryHeaderRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+            <View style={styles.categoryHeaderRow}>
               <Ionicons name="folder-open-outline" size={16} color={Colors.primary} />
               <Text style={styles.categoryHeaderTitle}>{group.categoryName}</Text>
               <View style={styles.categoryHeaderLine} />
@@ -629,7 +629,7 @@ export default function LowStockScreen() {
 
             {/* Items inside this category */}
             {group.items.map(item => (
-              <View key={item.id} style={[styles.productCard, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+              <View key={item.id} style={styles.productCard}>
                 {/* Image */}
                 <View style={styles.imageWrapper}>
                   {item.image_url ? (
@@ -646,10 +646,10 @@ export default function LowStockScreen() {
                 </View>
 
                 {/* Details */}
-                <View style={[styles.productDetails, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
+                <View style={styles.productDetails}>
                   <Text style={styles.productName} numberOfLines={1}>{item.name}</Text>
                   
-                  <View style={[styles.badgeRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                  <View style={styles.badgeRow}>
                     {/* Priority Alert Badge */}
                     <View style={[styles.priorityBadge, { borderColor: getPriorityColor(item.stock_count) }]}>
                       <Text style={[styles.priorityBadgeText, { color: getPriorityColor(item.stock_count) }]}>
@@ -657,7 +657,7 @@ export default function LowStockScreen() {
                       </Text>
                     </View>
                     <Text style={styles.stockCountLabel}>
-                      {isAr ? `الكمية الحالية: ${item.stock_count}` : `Qty Remaining: ${item.stock_count}`}
+                      {item.stock_count}
                     </Text>
                   </View>
                 </View>
@@ -669,7 +669,7 @@ export default function LowStockScreen() {
                   activeOpacity={0.8}
                 >
                   <Ionicons name="add" size={16} color="#FFF" />
-                  <Text style={styles.replenishBtnText}>{isAr ? 'تعبئة' : 'Replenish'}</Text>
+                  <Text style={styles.replenishBtnText}>{t('common.edit', 'Replenish')}</Text>
                 </TouchableOpacity>
               </View>
             ))}
@@ -681,9 +681,7 @@ export default function LowStockScreen() {
               <Ionicons name="checkmark-circle-outline" size={44} color={Colors.success} />
             </View>
             <Text style={styles.emptyText}>
-              {isAr
-                ? 'رائع! لا توجد منتجات أوشكت على النفاذ في متجرك حالياً.'
-                : 'Excellent! No items are currently running low or out of stock.'}
+              {t('merchant.dashboard', 'Excellent! No items are currently running low or out of stock.')}
             </Text>
           </View>
         }
@@ -711,8 +709,8 @@ export default function LowStockScreen() {
                 {selectedProduct && (
                   <View style={{ width: '100%' }}>
                     {/* Header */}
-                    <View style={[styles.modalHeader, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-                      <Text style={styles.modalTitle}>{isAr ? 'شحن المخزون السريع' : 'Quick Stock Replenish'}</Text>
+                    <View style={styles.modalHeader}>
+                      <Text style={styles.modalTitle}>{t('merchant.add_product_title', 'Quick Stock Replenish')}</Text>
                       {keyboardVisible && (
                         <TouchableOpacity
                           onPress={() => Keyboard.dismiss()}
@@ -720,13 +718,13 @@ export default function LowStockScreen() {
                           activeOpacity={0.7}
                         >
                           <Ionicons name="keypad-outline" size={16} color={Colors.primary} />
-                          <Text style={styles.keyboardDismissText}>{isAr ? 'تم' : 'Done'}</Text>
+                          <Text style={styles.keyboardDismissText}>{t('common.done', 'Done')}</Text>
                         </TouchableOpacity>
                       )}
                     </View>
 
                     {/* Product Summary */}
-                    <View style={[styles.productModalSummary, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                    <View style={styles.productModalSummary}>
                       <View style={styles.modalThumbWrapper}>
                         {selectedProduct.image_url ? (
                           <Image
@@ -739,22 +737,20 @@ export default function LowStockScreen() {
                           </View>
                         )}
                       </View>
-                      <View style={[styles.modalTextWrapper, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
+                      <View style={styles.modalTextWrapper}>
                         <Text style={styles.modalItemName} numberOfLines={1}>{selectedProduct.name}</Text>
                         <Text style={styles.modalItemSub}>
-                          {isAr 
-                            ? `المخزون الحالي: ${selectedProduct.stock_count} قطع` 
-                            : `Current Stock Count: ${selectedProduct.stock_count}`}
+                          {selectedProduct.stock_count}
                         </Text>
                       </View>
                     </View>
 
                     {/* Incrementor Fields */}
-                    <Text style={[styles.inputLabel, { textAlign: isAr ? 'right' : 'left' }]}>
-                      {isAr ? 'الكمية المراد إضافتها للمخزون' : 'Add Stock Quantity'}
+                    <Text style={styles.inputLabel}>
+                      {t('merchant.stock_status', 'Add Stock Quantity')}
                     </Text>
 
-                    <View style={[styles.adjusterRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                    <View style={styles.adjusterRow}>
                       <TouchableOpacity style={styles.adjusterBtn} onPress={() => adjustReplenishQty(-5)} activeOpacity={0.7}>
                         <Text style={styles.adjusterBtnText}>-5</Text>
                       </TouchableOpacity>
@@ -783,7 +779,7 @@ export default function LowStockScreen() {
                         onPress={() => { setReplenishModalVisible(false); setSelectedProduct(null); }}
                         disabled={savingReplenish}
                       >
-                        <Text style={styles.modalBtnTextCancel}>{isAr ? 'إلغاء' : 'Cancel'}</Text>
+                        <Text style={styles.modalBtnTextCancel}>{t('common.cancel', 'Cancel')}</Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity
@@ -796,7 +792,7 @@ export default function LowStockScreen() {
                         ) : (
                           <>
                             <Ionicons name="cube-outline" size={16} color="#FFF" style={{ marginRight: 6 }} />
-                            <Text style={styles.modalBtnTextSave}>{isAr ? 'تأكيد الشحن' : 'Replenish'}</Text>
+                            <Text style={styles.modalBtnTextSave}>{t('common.save', 'Replenish')}</Text>
                           </>
                         )}
                       </TouchableOpacity>

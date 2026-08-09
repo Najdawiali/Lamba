@@ -726,13 +726,13 @@ export default function MerchantProfileScreen() {
           <View style={styles.roleBadge}>
             <Ionicons name="storefront-outline" size={14} color={Colors.secondary} />
             <Text style={styles.roleBadgeText}>
-              {isAr ? 'حساب بائع' : 'Seller Account'}
+              {t('merchant.seller_account', 'Seller Account')}
             </Text>
           </View>
 
           {user?.created_at && (
             <Text style={styles.memberSince}>
-              {isAr ? 'عضو منذ' : 'Member since'}{' '}
+              {t('profile.member_since', 'Member since')}{' '}
               {new Date(user.created_at).toLocaleDateString()}
             </Text>
           )}
@@ -740,7 +740,7 @@ export default function MerchantProfileScreen() {
 
         {/* Market Info Card */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>{isAr ? 'متجري' : 'My Store'}</Text>
+          <Text style={styles.sectionTitle}>{t('merchant.my_store', 'My Store')}</Text>
 
           {loadingMarket ? (
             <View style={styles.loadingRow}>
@@ -762,7 +762,7 @@ export default function MerchantProfileScreen() {
                   <Ionicons name="location" size={20} color={Colors.primary} />
                 </View>
                 <View style={styles.menuContent}>
-                  <Text style={styles.menuLabel}>{isAr ? 'الإحداثيات' : 'Coordinates'}</Text>
+                  <Text style={styles.menuLabel}>{t('merchant.coordinates', 'Coordinates')}</Text>
                   <Text style={styles.menuValue}>
                     {market.latitude.toFixed(4)}, {market.longitude.toFixed(4)}
                   </Text>
@@ -776,15 +776,15 @@ export default function MerchantProfileScreen() {
                 onPress={() => setAnalyticsVisible(true)}
                 activeOpacity={0.7}
                 accessibilityRole="button"
-                accessibilityLabel={isAr ? 'تحليلات المتجر وحالته' : 'Store Analytics & Status'}
+                accessibilityLabel={t('merchant.analytics_status', 'Store Analytics & Status')}
               >
                 <View style={[styles.menuIcon, { backgroundColor: 'rgba(0, 217, 166, 0.1)' }]}>
                   <Ionicons name="bar-chart-outline" size={20} color={Colors.secondary} />
                 </View>
                 <View style={styles.menuContent}>
-                  <Text style={styles.menuLabel}>{isAr ? 'تحليلات المتجر وحالته' : 'Store Analytics & Status'}</Text>
+                  <Text style={styles.menuLabel}>{t('merchant.analytics_status', 'Store Analytics & Status')}</Text>
                   <Text style={styles.menuValue}>
-                    {isAr ? 'تتبع الإيرادات، قيم المخزون، والتحليلات وحالة المتجر' : 'Track revenue metrics, asset valuation, and toggle status'}
+                    {t('merchant.analytics_desc', 'Track revenue metrics, asset valuation, and toggle status')}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
@@ -798,7 +798,7 @@ export default function MerchantProfileScreen() {
             >
               <Ionicons name="add-circle-outline" size={20} color={Colors.secondary} />
               <Text style={styles.setupText}>
-                {isAr ? 'إعداد المتجر' : 'Set Up Your Store'}
+                {t('onboarding.title', 'Set Up Your Store')}
               </Text>
             </TouchableOpacity>
           )}
@@ -814,7 +814,7 @@ export default function MerchantProfileScreen() {
             </View>
             <View style={styles.menuContent}>
               <Text style={styles.menuLabel}>{t('profile.language')}</Text>
-              <Text style={styles.menuValue}>{isAr ? 'العربية' : 'English'}</Text>
+              <Text style={styles.menuValue}>{t('profile.language_name', 'العربية')}</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
           </TouchableOpacity>
@@ -825,7 +825,7 @@ export default function MerchantProfileScreen() {
             </View>
             <View style={styles.menuContent}>
               <Text style={styles.menuLabel}>{t('profile.notifications')}</Text>
-              <Text style={styles.menuValue}>{isAr ? 'مفعّلة' : 'Enabled'}</Text>
+              <Text style={styles.menuValue}>{t('profile.enabled', 'Enabled')}</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
           </TouchableOpacity>
@@ -836,7 +836,7 @@ export default function MerchantProfileScreen() {
 
         {/* About */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>{isAr ? 'حول' : 'About'}</Text>
+          <Text style={styles.sectionTitle}>{t('profile.about', 'About')}</Text>
 
           <View style={styles.menuItem}>
             <View style={[styles.menuIcon, { backgroundColor: 'rgba(255, 107, 157, 0.1)' }]}>
@@ -866,8 +866,8 @@ export default function MerchantProfileScreen() {
       >
         <SafeAreaView style={styles.modalContainer} edges={['top']}>
           {/* Modal Header */}
-          <View style={[styles.modalHeader, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-            <Text style={styles.modalTitle}>{isAr ? 'تحليلات المتجر وحالته' : 'Store Analytics & Status'}</Text>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>{t('merchant.analytics_status', 'Store Analytics & Status')}</Text>
             <TouchableOpacity 
               onPress={() => setAnalyticsVisible(false)}
               style={styles.modalCloseBtn}
@@ -879,7 +879,7 @@ export default function MerchantProfileScreen() {
           {loadingStats && !refreshingStats ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={Colors.secondary} />
-              <Text style={styles.loadingText}>{isAr ? 'جاري تحميل التحليلات...' : 'Loading analytics...'}</Text>
+              <Text style={styles.loadingText}>{t('common.loading', 'Loading analytics...')}</Text>
             </View>
           ) : (
             <ScrollView
@@ -972,11 +972,11 @@ export default function MerchantProfileScreen() {
               {/* Inventory Assets Value Glow Card */}
               {market && (
                 <View style={styles.assetsGlowCard}>
-                  <View style={[styles.assetsGlowInner, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                  <View style={styles.assetsGlowInner}>
                     <View style={styles.assetsIconWrapper}>
                       <Ionicons name="calculator-outline" size={22} color={Colors.primary} />
                     </View>
-                    <View style={[styles.assetsTextWrapper, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
+                    <View style={styles.assetsTextWrapper}>
                       <Text style={styles.assetsLabel}>{t('dashboard.inventory_value', 'Total Inventory Assets Value')}</Text>
                       <Text style={styles.assetsValue}>
                         {formatPrice(totalAssetsValue)}
@@ -989,7 +989,7 @@ export default function MerchantProfileScreen() {
               {/* Sales Performance Card */}
               {market && (
                 <View style={styles.analyticsCard}>
-                  <View style={[styles.analyticsHeader, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                  <View style={styles.analyticsHeader}>
                     <Ionicons name="trending-up-outline" size={20} color={Colors.secondary} />
                     <Text style={styles.analyticsTitle}>
                       {t('dashboard.sales_performance', 'Sales Performance & Daily Insights')}
@@ -1000,13 +1000,13 @@ export default function MerchantProfileScreen() {
 
                   <View style={styles.trendRows}>
                     {/* Daily Trend */}
-                    <View style={[styles.trendRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-                      <View style={[styles.trendLabelCol, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
+                    <View style={styles.trendRow}>
+                      <View style={styles.trendLabelCol}>
                         <Text style={styles.trendLabel}>{t('dashboard.todays_sales', "TODAY'S SALES")}</Text>
                         <Text style={styles.trendVal}>{formatPrice(stats.todaySales)}</Text>
                       </View>
                       
-                      <View style={[styles.trendBadge, stats.todaySales >= stats.yesterdaySales ? styles.trendBadgeUp : styles.trendBadgeDown, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                      <View style={[styles.trendBadge, stats.todaySales >= stats.yesterdaySales ? styles.trendBadgeUp : styles.trendBadgeDown]}>
                         <Ionicons 
                           name={stats.todaySales >= stats.yesterdaySales ? 'trending-up' : 'trending-down'} 
                           size={14} 
@@ -1021,13 +1021,13 @@ export default function MerchantProfileScreen() {
                     <View style={styles.trendRowDivider} />
 
                     {/* Weekly Trend */}
-                    <View style={[styles.trendRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-                      <View style={[styles.trendLabelCol, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
+                    <View style={styles.trendRow}>
+                      <View style={styles.trendLabelCol}>
                         <Text style={styles.trendLabel}>{t('dashboard.this_weeks_sales', "THIS WEEK'S SALES")}</Text>
                         <Text style={styles.trendVal}>{formatPrice(stats.thisWeekSales)}</Text>
                       </View>
                       
-                      <View style={[styles.trendBadge, stats.thisWeekSales >= stats.lastWeekSales ? styles.trendBadgeUp : styles.trendBadgeDown, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                      <View style={[styles.trendBadge, stats.thisWeekSales >= stats.lastWeekSales ? styles.trendBadgeUp : styles.trendBadgeDown]}>
                         <Ionicons 
                           name={stats.thisWeekSales >= stats.lastWeekSales ? 'trending-up' : 'trending-down'} 
                           size={14} 
@@ -1042,13 +1042,13 @@ export default function MerchantProfileScreen() {
 
                   {/* Daily Dynamic Analysis Insights box */}
                   <View style={styles.insightsBox}>
-                    <View style={[styles.insightsHeaderRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                    <View style={styles.insightsHeaderRow}>
                       <Ionicons name="sparkles-outline" size={16} color={Colors.primary} />
                       <Text style={styles.insightsHeaderTitle}>
                         {t('dashboard.daily_summary_analysis', 'DAILY SUMMARY ANALYSIS')}
                       </Text>
                     </View>
-                    <Text style={[styles.insightsBodyText, { textAlign: isAr ? 'right' : 'left' }]}>
+                    <Text style={styles.insightsBodyText}>
                       {stats.summaryAnalysis}
                     </Text>
                   </View>
@@ -1082,19 +1082,19 @@ export default function MerchantProfileScreen() {
                 }}
                 activeOpacity={0.8}
               >
-                <View style={[styles.lowStockInner, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                <View style={styles.lowStockInner}>
                   <View style={styles.lowStockIconWrapper}>
                     <Ionicons name="warning-outline" size={22} color={Colors.error} />
                   </View>
-                  <View style={[styles.lowStockTextWrapper, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
+                  <View style={styles.lowStockTextWrapper}>
                     <Text style={styles.lowStockLabel}>
                       {t('lowStock.title', 'Stock Deficiency Warnings')}
                     </Text>
                     <Text style={styles.lowStockSubText}>
-                      {isAr ? 'اضغط لعرض المنتجات منخفضة المخزون' : 'Tap to manage depleting inventory items'}
+                      {t('merchant.low_stock_manage', 'Tap to manage depleting inventory items')}
                     </Text>
                   </View>
-                  <Ionicons name={isAr ? 'chevron-back' : 'chevron-forward'} size={20} color={Colors.textMuted} />
+                  <Ionicons name="chevron-forward" size={20} color={Colors.textMuted} />
                 </View>
               </TouchableOpacity>
 
