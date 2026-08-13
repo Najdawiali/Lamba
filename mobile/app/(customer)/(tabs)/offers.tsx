@@ -24,7 +24,7 @@ import { getCurrencyCode, formatPrice } from '../../../services/currency';
 import { resolveImageUrl } from '../../../services/utils';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
-const DEFAULT_COORDS = { latitude: 24.7136, longitude: 46.6753 }; // Riyadh Fallback
+const DEFAULT_COORDS = { latitude: 32.0385, longitude: 35.7275 }; // As-Salt Fallback
 
 export default function CustomerOffersScreen() {
   const Colors = useThemeColors();

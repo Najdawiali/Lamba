@@ -33,6 +33,8 @@ import { useThemeColors } from '../../../context/ThemeContext';
 import { t } from '../../../services/i18n';
 import { formatPrice } from '../../../services/currency';
 
+const DEFAULT_COORDS = { latitude: 32.0385, longitude: 35.7275 }; // As-Salt center (catalog stores location)
+
 export default function SearchScreen() {
   const Colors = useThemeColors();
   const router = useRouter();
@@ -71,7 +73,7 @@ export default function SearchScreen() {
 
   const [categoriesList, setCategoriesList] = useState<any[]>([]);
   const [locationStatus, setLocationStatus] = useState<'loading' | 'granted' | 'denied'>('loading');
-  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number }>(DEFAULT_COORDS);
 
   const searchInputRef = useRef<TextInput>(null);
 
@@ -85,9 +87,9 @@ export default function SearchScreen() {
       setLocationStatus('loading');
       setError(null);
       
+      let coords = DEFAULT_COORDS;
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === 'granted') {
-        let coords: { latitude: number; longitude: number };
         try {
           const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
           coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
@@ -97,14 +99,9 @@ export default function SearchScreen() {
             const lastLoc = await Location.getLastKnownPositionAsync();
             if (lastLoc) {
               coords = { latitude: lastLoc.coords.latitude, longitude: lastLoc.coords.longitude };
-            } else {
-              // Default to Amman center when no location available
-              console.warn('No last known location, using default Amman coordinates');
-              coords = { latitude: 31.9539, longitude: 35.9106 };
             }
           } catch {
-            console.warn('getLastKnownPositionAsync also failed, using default Amman coordinates');
-            coords = { latitude: 31.9539, longitude: 35.9106 };
+            console.warn('getLastKnownPositionAsync also failed, using default coordinates');
           }
         }
         setUserLocation(coords);
@@ -114,11 +111,6 @@ export default function SearchScreen() {
           const address = await Location.reverseGeocodeAsync(coords);
           if (address && address[0]) {
             const detectedCity = address[0].city || address[0].region || address[0].subregion || '';
-            // NOTE: deliberately NOT auto-populating filterCity. The 5km radius
-            // filter on the API already constrains proximity, and pre-filling
-            // the city string created false-negative ILIKE mismatches (e.g.
-            // "As Salt" vs DB "As-Salt"). The city filter is left for the user
-            // to set manually if they want to narrow further.
           }
         } catch (geoErr) {
           console.warn('Reverse geocoding failed:', geoErr);
@@ -139,6 +131,7 @@ export default function SearchScreen() {
           console.warn('Explore feed load failed:', exploreErr);
         }
       } else {
+        setUserLocation(DEFAULT_COORDS);
         setLocationStatus('denied');
       }
 
@@ -193,7 +186,7 @@ export default function SearchScreen() {
   };
 
   const executeSearch = async (searchQuery: string, type: 'text' | 'image' = 'text', imageUri?: string) => {
-    if (!userLocation) return;
+    const coords = userLocation || DEFAULT_COORDS;
     Keyboard.dismiss();
     setLoading(true);
     setError(null);
@@ -224,10 +217,10 @@ export default function SearchScreen() {
 
       let response;
       if (type === 'image' && imageUri) {
-        response = await imageSearch(imageUri, userLocation.latitude, userLocation.longitude, parsedFilters);
+        response = await imageSearch(imageUri, coords.latitude, coords.longitude, parsedFilters);
         setSuggestion(null);
       } else {
-        response = await textSearch(searchQuery.trim(), userLocation.latitude, userLocation.longitude, userId || undefined, parsedFilters);
+        response = await textSearch(searchQuery.trim(), coords.latitude, coords.longitude, userId || undefined, parsedFilters);
         setSuggestion(response.suggestion || null);
       }
 
