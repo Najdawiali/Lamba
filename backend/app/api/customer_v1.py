@@ -18,7 +18,7 @@ from sqlalchemy.orm import selectinload, joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.auth import get_current_user, require_customer
+from app.api.auth import require_customer
 from app.models.market import Market
 from app.models.global_item import GlobalItem
 from app.models.market_item import MarketItem
@@ -54,7 +54,6 @@ async def get_near_markets(
     latitude: float = Query(..., ge=-90.0, le=90.0, description="Latitude of user"),
     longitude: float = Query(..., ge=-180.0, le=180.0, description="Longitude of user"),
     radius_km: float = Query(5.0, gt=0.0, description="Proximity radius in kilometers"),
-    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -148,7 +147,6 @@ async def get_near_markets(
 @router.get("/market/{market_id}/items", response_model=MarketCatalogResponse)
 async def get_market_catalog(
     market_id: uuid.UUID,
-    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -232,7 +230,6 @@ async def get_market_catalog(
 
 @router.get("/categories", response_model=List[CategoryNodeResponse])
 async def get_categories_tree(
-    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -288,7 +285,6 @@ async def get_customer_alerts(
 @router.get("/item/{market_item_id}", response_model=MarketItemDetailsResponse)
 async def get_market_item_details(
     market_item_id: uuid.UUID,
-    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -428,7 +424,6 @@ async def get_customer_offers(
     offer_type: Optional[str] = Query(None, description="Filter by BOGO or DISCOUNT"),
     max_distance_km: Optional[float] = Query(None, gt=0.0, description="Optional maximum distance filter in km"),
     category_id: Optional[uuid.UUID] = Query(None, description="Optional category filter ID"),
-    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -649,7 +644,6 @@ async def create_location_verified_rating(
 @router.get("/market/{market_id}/ratings", response_model=MarketRatingSummaryResponse)
 async def get_market_ratings(
     market_id: uuid.UUID,
-    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """

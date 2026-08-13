@@ -7,7 +7,7 @@ dependencies that other V1 routers consume.
 """
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -18,18 +18,25 @@ from app.database import get_db
 from app.models.user import User
 from app.services.auth import decode_access_token
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 # ── Dependencies ────────────────────────────────────────────────
 async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(security)],
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """
     FastAPI dependency that extracts and validates the JWT token
     from the Authorization header, then loads the user from the database.
     """
+    if not credentials or not credentials.credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     try:
         payload = decode_access_token(credentials.credentials)
         user_id = uuid.UUID(payload["sub"])
@@ -37,6 +44,7 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     result = await db.execute(select(User).where(User.id == user_id))
@@ -46,8 +54,30 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
+            headers={"WWW-Authenticate": "Bearer"},
         )
     return user
+
+
+async def get_optional_current_user(
+    credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(security)],
+    db: AsyncSession = Depends(get_db),
+) -> Optional[User]:
+    """
+    FastAPI dependency that optionally extracts and validates the JWT token.
+    Returns the User instance if a valid token is provided, or None if omitted/invalid.
+    """
+    if not credentials or not credentials.credentials:
+        return None
+
+    try:
+        payload = decode_access_token(credentials.credentials)
+        user_id = uuid.UUID(payload["sub"])
+    except Exception:
+        return None
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    return result.scalar_one_or_none()
 
 
 def require_merchant(user: User = Depends(get_current_user)) -> User:
@@ -67,6 +97,6 @@ def require_customer(user: User = Depends(get_current_user)) -> User:
     if role not in ("customer", "merchant"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access required",
+            detail="Customer access required",
         )
     return user
