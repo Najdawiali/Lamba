@@ -179,6 +179,14 @@ async def enrich(limit: int | None = None, batch_size: int = 32, qps: int = 3) -
             await db.commit()
             logger.info(f"LLM enrichment complete. {updated} items enriched.")
 
+            # Rebuild synonym table from enriched catalog
+            try:
+                from scripts.build_synonym_table import build_synonym_table
+                await build_synonym_table()
+            except Exception as e:
+                logger.warning(f"Synonym table rebuild failed/skipped: {e}")
+
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(

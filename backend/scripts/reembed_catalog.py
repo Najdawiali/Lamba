@@ -98,5 +98,12 @@ async def main():
                 
         print("Re-embedding completed successfully.")
 
+        # Rebuild synonym table from catalog
+        try:
+            from scripts.build_synonym_table import build_synonym_table
+            await build_synonym_table()
+        except Exception as e:
+            print(f"Synonym table rebuild failed/skipped: {e}")
+
 if __name__ == "__main__":
     asyncio.run(main())

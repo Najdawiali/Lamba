@@ -166,6 +166,14 @@ async def run_enrichment(limit: Optional[int] = None, batch_size: int = 20, conc
         await db.commit()
         logger.info(f"Enrichment completed successfully! Enriched {updated_count}/{total_items} products.")
 
+        # Rebuild synonym table from enriched catalog
+        try:
+            from scripts.build_synonym_table import build_synonym_table
+            await build_synonym_table()
+        except Exception as e:
+            logger.warning(f"Synonym table rebuild failed/skipped: {e}")
+
+
 
 def main():
     if sys.platform == "win32":
