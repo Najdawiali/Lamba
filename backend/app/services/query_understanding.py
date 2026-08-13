@@ -72,8 +72,9 @@ def needs_llm(query_text: str | None) -> bool:
     if q in _SIMPLE_PRODUCT_TERMS or (len(word_list) <= 2 and all(w in _SIMPLE_PRODUCT_TERMS for w in word_list)):
         return False
 
-    # Default to False for short queries to preserve sub-second latency
-    return len(word_list) >= 3
+    # 2-word queries with a non-simple modifier (e.g., "جبنة حلوم", "جنط مرسيدس")
+    # likely carry type/brand info that needs structured extraction.
+    return len(word_list) >= 2
 
 
 _QU_SYSTEM_PROMPT = """You are a search query analyzer for a local marketplace in Jordan.
@@ -156,6 +157,7 @@ class QueryUnderstandingService:
                 temperature=0.0,
                 max_tokens=250,
                 timeout=5.0,  # Strict 5s timeout to prevent latency spikes
+                chat_template_kwargs={"enable_thinking": False},
             )
 
             if res:
