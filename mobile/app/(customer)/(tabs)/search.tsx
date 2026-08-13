@@ -87,8 +87,26 @@ export default function SearchScreen() {
       
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === 'granted') {
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        const coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+        let coords: { latitude: number; longitude: number };
+        try {
+          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+        } catch (locErr) {
+          console.warn('getCurrentPositionAsync failed, trying last known:', locErr);
+          try {
+            const lastLoc = await Location.getLastKnownPositionAsync();
+            if (lastLoc) {
+              coords = { latitude: lastLoc.coords.latitude, longitude: lastLoc.coords.longitude };
+            } else {
+              // Default to Amman center when no location available
+              console.warn('No last known location, using default Amman coordinates');
+              coords = { latitude: 31.9539, longitude: 35.9106 };
+            }
+          } catch {
+            console.warn('getLastKnownPositionAsync also failed, using default Amman coordinates');
+            coords = { latitude: 31.9539, longitude: 35.9106 };
+          }
+        }
         setUserLocation(coords);
         setLocationStatus('granted');
         
