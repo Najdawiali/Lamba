@@ -47,7 +47,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.config import settings
-from app.api.auth import get_current_user
+from app.api.auth import get_optional_current_user
 from app.models.market import Market
 from app.models.global_item import GlobalItem
 from app.models.market_item import MarketItem
@@ -64,7 +64,7 @@ from app.services.embedding import embedding_service
 from app.services.reranker import reranker_service
 from app.services.query_expansion import query_expansion_service
 from app.services.arabic_norm import normalize_query
-from app.services.cache import get_cached_search, cache_search
+from app.services.cache import get_cached_search, cache_search, lookup_synonym
 
 logger = logging.getLogger(__name__)
 
@@ -576,9 +576,15 @@ def _filter_with_guards(
     return final
 
 
-def needs_expansion(query: str, script: str = "ar") -> bool:
+def needs_expansion(query: str, script: str = "ar", has_synonym: bool = False) -> bool:
     """Skip expansion for simple product queries — catalog enrichment covers dialects and synonyms."""
     if not query or not query.strip():
+        return False
+
+    words = query.strip().lower().split()
+
+    # Synonym table already provided the formal term — skip LLM
+    if has_synonym and len(words) <= 2:
         return False
 
     q_lower = query.strip().lower()
@@ -590,8 +596,6 @@ def needs_expansion(query: str, script: str = "ar") -> bool:
     }
     if any(m in q_lower for m in intent_markers):
         return True
-
-    words = q_lower.split()
 
     # Single word queries don't need expansion — enrichment covers dialects
     if len(words) <= 1:
@@ -651,11 +655,27 @@ async def _run_search(
 
     primary_text = normalized_query or query_text
 
+    # Synonym expansion from pre-built table (<1ms)
+    words = primary_text.split()
+    synonym_variants: List[str] = []
+
+    for word in words:
+        synonym = await lookup_synonym(word)
+        if synonym and synonym != word:
+            # Build a variant query with the formal term
+            variant = primary_text.replace(word, synonym)
+            if variant not in synonym_variants and variant != primary_text:
+                synonym_variants.append(variant)
+            # Also add the formal term alone for single-word queries
+            if len(words) == 1 and synonym not in synonym_variants and synonym != primary_text:
+                synonym_variants.append(synonym)
+
     t1 = time.time()
-    logger.info(f"[TIMING] Normalization & Intent: {(t1-t0)*1000:.0f}ms")
+    logger.info(f"[TIMING] Normalization, Intent & Synonyms: {(t1-t0)*1000:.0f}ms")
 
     # 1. Gate expansion: run parallel expansion only for complex/intent queries
-    should_expand = getattr(settings, "enable_query_expansion", True) and needs_expansion(query_text, query_script)
+    has_synonym = len(synonym_variants) > 0
+    should_expand = getattr(settings, "enable_query_expansion", True) and needs_expansion(query_text, query_script, has_synonym=has_synonym)
 
     if should_expand:
         expansion_task = asyncio.create_task(
@@ -671,11 +691,15 @@ async def _run_search(
         if isinstance(expansion_result, Exception):
             logger.warning(f"Query expansion skipped due to error: {expansion_result}")
     else:
-        logger.info(f"[TIMING] Expansion skipped via needs_expansion for query '{query_text}'")
+        logger.info(f"[TIMING] Expansion skipped via needs_expansion (has_synonym={has_synonym}) for query '{query_text}'")
         variants = []
         original_embedding = await embedding_service.encode_text_async(primary_text, text_type="query")
 
     texts: List[str] = [primary_text]
+    for sv in synonym_variants:
+        if sv and sv not in texts:
+            texts.append(sv)
+
     arabicized = arabizi_to_arabic(query_text)
     if arabicized and arabicized.strip() and arabicized.lower() != query_text.lower():
         norm_arabicized = normalize_query(arabicized)
@@ -688,8 +712,8 @@ async def _run_search(
             texts.append(nv)
 
     logger.debug(
-        "[SEARCH BRANCHES] query=%r  all_text_branches=%s",
-        query_text, texts,
+        "[SEARCH BRANCHES] query=%r  synonyms=%s  all_text_branches=%s",
+        query_text, synonym_variants, texts,
     )
 
     t2 = time.time()
@@ -784,7 +808,7 @@ async def _run_search(
 async def hybrid_search(
     request: Request,
     search_request: HybridSearchRequest,
-    user: Optional[User] = Depends(get_current_user),
+    user: Optional[User] = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -938,7 +962,7 @@ async def image_search(
     longitude: float = Form(...),
     market_id: Optional[uuid.UUID] = Form(None),
     limit: int = Form(15),
-    user: User = Depends(get_current_user),
+    user: Optional[User] = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -954,11 +978,11 @@ async def image_search(
 
 # ── POST /double-check ──────────────────────────────────────────
 @router.post("/double-check", response_model=HybridSearchResponse)
-@limiter.limit("30/minute")
+@limiter.limit("300/minute")
 async def double_check_search(
     request: Request,
     search_request: DoubleCheckSearchRequest,
-    user: User = Depends(get_current_user),
+    user: Optional[User] = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """

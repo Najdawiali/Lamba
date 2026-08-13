@@ -1,9 +1,11 @@
+import asyncio
 import json
 import hashlib
 import logging
 from typing import Optional, List, Dict, Any
 import redis.asyncio as redis
 from app.config import settings
+from app.services.arabic_norm import normalize_arabic
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +46,41 @@ def _cache_key(prefix: str, text: str, **kwargs) -> str:
     raw = f"{text.strip().lower()}:{json.dumps(kwargs, sort_keys=True, default=str)}"
     hashed = hashlib.md5(raw.encode("utf-8")).hexdigest()
     return f"lamba:{prefix}:{hashed}"
+
+
+# ── Synonym Lookup Table (<1ms O(1) Redis HGET) ─────────────────────
+async def lookup_synonym(term: str) -> Optional[str]:
+    """
+    O(1) Redis lookup for dialect → formal Arabic mapping.
+    Returns the formal equivalent or None if not found.
+    """
+    try:
+        r = await get_redis()
+        normalized = normalize_arabic(term.strip())
+        result = await r.hget("lamba:synonyms", normalized)
+        if result:
+            logger.debug(f"[SYNONYM HIT] '{term}' → '{result}'")
+        return result
+    except Exception:
+        return None
+
+
+async def lookup_synonyms_multi(terms: List[str]) -> Dict[str, str]:
+    """Batch lookup for multiple terms."""
+    try:
+        r = await get_redis()
+        pipe = r.pipeline()
+        normalized_terms = [normalize_arabic(t.strip()) for t in terms]
+        for nt in normalized_terms:
+            pipe.hget("lamba:synonyms", nt)
+        results = await pipe.execute()
+        return {
+            terms[i]: results[i]
+            for i in range(len(terms))
+            if results[i] is not None
+        }
+    except Exception:
+        return {}
 
 
 # ── Expansion cache (saves expensive LLM call) ──────────────────────
@@ -132,3 +169,4 @@ async def close_redis() -> None:
         except Exception:
             pass
         _redis = None
+
