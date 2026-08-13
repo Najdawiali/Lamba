@@ -46,6 +46,8 @@ from tests.test_optimizations import (
     TestQueryExpansionCacheIntegration,
     TestBatchEmbedding,
 )
+from tests.test_customer_auth import TestCustomerAuth
+from tests.test_synonym_table import TestSynonymTable
 
 
 class TestArabicNorm(unittest.TestCase):
