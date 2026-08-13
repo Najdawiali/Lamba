@@ -35,12 +35,13 @@ import re
 import uuid
 import logging
 from collections import defaultdict
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status, File, Form, UploadFile, Request
 from app.rate_limit import limiter
 from geoalchemy2.elements import WKTElement
 from geoalchemy2 import Geometry, Geography
+import sqlalchemy as sa
 from sqlalchemy import select, func, literal
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -88,29 +89,8 @@ def _safe(v, default: float = 0.0) -> float:
     return fv
 
 
-# ── Gender exclusion filter (keyword-based) ────────────────────────
-_FEMALE_KEYWORDS = {"نسائي", "نسائية", "نساء", "بنات", "حريم", "ستات", "women", "female", "ladies"}
-_MALE_KEYWORDS = {"رجالي", "رجالية", "رجال", "اولاد", "شباب", "men", "male"}
-
-
-def _get_gender_filter(query: str) -> str | None:
-    """Returns 'female', 'male', or None based on query keywords."""
-    query_words = set(query.lower().split())
-    if query_words & _FEMALE_KEYWORDS:
-        return "female"
-    if query_words & _MALE_KEYWORDS:
-        return "male"
-    return None
-
-
-def _is_gender_excluded(item_text: str, gender_filter: str) -> bool:
-    """Returns True if this item should be excluded based on the opposite gender keywords."""
-    item_words = set(item_text.lower().split())
-    if gender_filter == "female":
-        return bool(item_words & _MALE_KEYWORDS)
-    if gender_filter == "male":
-        return bool(item_words & _FEMALE_KEYWORDS)
-    return False
+# ── Gender filter: now handled via attribute extraction in query
+# understanding + JSONB filtering in _retrieve_fused_candidates ──────
 
 
 # ── Retrieval: ranked branches + Reciprocal Rank Fusion ────────────
@@ -123,6 +103,7 @@ async def _retrieve_fused_candidates(
     market_id: Optional[uuid.UUID],
     filters: Optional[SearchFilters],
     listing_type: Optional[str] = None,
+    extracted_attrs: Optional[Dict[str, Any]] = None,
 ) -> List[dict]:
     """
     Run one ranked semantic branch per query vector plus one ranked lexical
@@ -203,6 +184,30 @@ async def _retrieve_fused_candidates(
             stmt = stmt.where(MarketItem.market_id == market_id)
         else:
             stmt = stmt.where(func.ST_DWithin(geog_location, geog_point, radius_meters))
+
+        # ── Attribute filters — whitelisted JSONB containment ──────
+        _ALLOWED_ATTR_KEYS = {
+            "type", "color", "flavor", "origin", "organic", "size",
+            "brand", "temperature", "dietary", "material", "gender",
+        }
+        if extracted_attrs:
+            for attr_key, attr_value in extracted_attrs.items():
+                if attr_key not in _ALLOWED_ATTR_KEYS or attr_value is None:
+                    continue
+                if isinstance(attr_value, bool):
+                    stmt = stmt.where(
+                        func.cast(
+                            GlobalItem.attributes[attr_key].as_string(),
+                            sa.Boolean,
+                        ) == attr_value
+                    )
+                else:
+                    stmt = stmt.where(
+                        GlobalItem.attributes[attr_key].as_string().ilike(
+                            f"%{attr_value}%"
+                        )
+                    )
+
         return stmt
 
     ranked_lists: List[List[uuid.UUID]] = []
@@ -550,19 +555,8 @@ def _filter_with_guards(
         query_text, input_count, len(final), len(kept), max(0, len(final) - len(kept)), cap,
     )
 
-    # ── Gender exclusion: remove opposite-gender items ──────────
-    gender_filter = _get_gender_filter(query_text)
-    if gender_filter:
-        before_gender = len(final)
-        final = [
-            r for r in final
-            if not _is_gender_excluded(f"{r.name} {r.description or ''}", gender_filter)
-        ]
-        if len(final) < before_gender:
-            logger.debug(
-                "[GENDER FILTER] query=%r  filter=%s  before=%d  after=%d",
-                query_text, gender_filter, before_gender, len(final),
-            )
+    # Gender exclusion is now handled by attribute-based JSONB filtering
+    # in _retrieve_fused_candidates (extracted from query understanding).
 
     # ── De-duplicate identical products across stores ──────────
     before_count = len(final)
@@ -640,16 +634,24 @@ async def _run_search(
     from app.services.query_understanding import query_understanding_service
 
     effective_listing_type = listing_type
-    if not effective_listing_type:
-        try:
-            intent_analysis = await query_understanding_service.analyze_query_async(query_text)
-            if intent_analysis.intent in ("product", "service"):
-                effective_listing_type = intent_analysis.intent
-        except Exception as e:
-            logger.warning(f"Query understanding skipped: {e}")
+    extracted_attrs: Dict[str, Any] = {}
+    query_clean: Optional[str] = None
+    try:
+        intent_analysis = await query_understanding_service.analyze_query_async(query_text)
+        if not effective_listing_type and intent_analysis.intent in ("product", "service"):
+            effective_listing_type = intent_analysis.intent
+        extracted_attrs = intent_analysis.attributes or {}
+        query_clean = intent_analysis.query_clean
+        if extracted_attrs:
+            logger.info(f"[ATTR FILTER] query={query_text!r} attrs={extracted_attrs} query_clean={query_clean!r}")
+    except Exception as e:
+        logger.warning(f"Query understanding skipped: {e}")
 
-    normalized_query = normalize_query(query_text)
-    query_script = _script_of(query_text)
+    # Use query_clean (core product term without attribute modifiers) for embedding
+    # so semantic search finds ALL products of that type, then attributes filter
+    effective_query = query_clean or query_text
+    normalized_query = normalize_query(effective_query)
+    query_script = _script_of(effective_query)
 
     from app.services.arabic_norm import arabizi_to_arabic
 
@@ -754,7 +756,7 @@ async def _run_search(
     t3 = time.time()
     logger.info(f"[TIMING] Variant embeddings (batch): {(t3-t2)*1000:.0f}ms")
 
-    # 3. Ranked branches + RRF.
+    # 3. Ranked branches + RRF (with attribute filters if extracted)
     fused = await _retrieve_fused_candidates(
         db=db,
         query_vecs=query_vecs,
@@ -764,7 +766,27 @@ async def _run_search(
         market_id=market_id,
         filters=filters,
         listing_type=effective_listing_type,
+        extracted_attrs=extracted_attrs,
     )
+
+    # Soft fallback: if attribute-filtered retrieval returns too few results,
+    # re-run without attribute filters to avoid empty result pages.
+    if extracted_attrs and len(fused) < 1:
+        logger.info(
+            f"[ATTR FALLBACK] Attribute-filtered retrieval returned {len(fused)} results "
+            f"for query={query_text!r} attrs={extracted_attrs}. Retrying without filters."
+        )
+        fused = await _retrieve_fused_candidates(
+            db=db,
+            query_vecs=query_vecs,
+            lexical_variants=texts,
+            latitude=latitude,
+            longitude=longitude,
+            market_id=market_id,
+            filters=filters,
+            listing_type=effective_listing_type,
+            extracted_attrs=None,
+        )
 
     t4 = time.time()
     logger.info(f"[TIMING] Retrieval: {(t4-t3)*1000:.0f}ms")
