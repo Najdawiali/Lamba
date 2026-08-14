@@ -336,6 +336,8 @@ async def _retrieve_fused_candidates(
             market_id=market.id,
             market_name=market.name,
             market_address=market.address,
+            market_phone=market.phone,
+            phone=market.phone,
             latitude=float(lat),
             longitude=float(lng),
             market_is_open=market.is_currently_open,

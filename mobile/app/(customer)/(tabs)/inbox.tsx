@@ -387,13 +387,13 @@ export default function CustomerInboxScreen() {
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
       ) : sessions.length === 0 ? (
-        <View style={{ alignItems: 'center', paddingVertical: 48, paddingHorizontal: Spacing.xl }}>
-          <Ionicons name="chatbubbles-outline" size={64} color={Colors.textSecondary} style={{ opacity: 0.4 }} />
-          <Text style={{ color: Colors.textSecondary, fontSize: 15, marginTop: 16, textAlign: 'center', fontWeight: '600' }}>
-            {t('messages.coming_soon', 'Messages Coming Soon')}
+        <View style={{ alignItems: 'center', justifyContent: 'center', flex: 1, paddingVertical: 48, paddingHorizontal: Spacing.xl }}>
+          <Ionicons name="logo-whatsapp" size={64} color="#25D366" style={{ marginBottom: 16 }} />
+          <Text style={{ color: Colors.textPrimary, fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 8 }}>
+            {t('messages.whatsapp_title', 'تواصل عبر واتساب')}
           </Text>
-          <Text style={{ color: Colors.textSecondary, fontSize: 13, marginTop: 4, textAlign: 'center' }}>
-            {t('messages.coming_soon_desc', 'You will be able to chat with nearby stores directly')}
+          <Text style={{ color: Colors.textSecondary, fontSize: 14, textAlign: 'center', lineHeight: 22, maxWidth: 300 }}>
+            {t('messages.whatsapp_desc', 'يمكنك التواصل مع أي متجر مباشرة عبر واتساب من صفحة المنتج أو المتجر')}
           </Text>
         </View>
       ) : (

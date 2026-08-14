@@ -20,6 +20,7 @@ import {
 import { t, isRTL } from '../../../services/i18n';
 import { formatPrice } from '../../../services/currency';
 import { resolveImageUrl } from '../../../services/utils';
+import { openWhatsApp } from '../../../utils/whatsapp';
 
 const openDirections = (latitude: number, longitude: number, storeName: string) => {
   const encodedName = encodeURIComponent(storeName);
@@ -154,8 +155,26 @@ export default function ProductDetailScreen() {
     priceFree: { fontSize: 20, fontWeight: '700', color: Colors.textSecondary, marginBottom: Spacing.md },
     currency: { ...Typography.body, color: Colors.textSecondary },
 
-    categoryBadge: { alignSelf: 'flex-start', backgroundColor: Colors.surfaceElevated, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: BorderRadius.full, borderWidth: 1, borderColor: Colors.border },
+    categoryBadge: { alignSelf: 'flex-start', backgroundColor: Colors.surfaceElevated, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: BorderRadius.full, borderWidth: 1, borderColor: Colors.border, marginBottom: Spacing.sm },
     categoryText: { ...Typography.label, color: Colors.textSecondary },
+
+    whatsAppProductBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#25D366',
+      borderRadius: BorderRadius.md,
+      paddingVertical: 12,
+      paddingHorizontal: Spacing.xl,
+      marginTop: Spacing.sm,
+      gap: 8,
+      ...Shadows.small,
+    },
+    whatsAppProductBtnText: {
+      ...Typography.button,
+      color: '#FFFFFF',
+      fontWeight: '700',
+    },
 
     section: { paddingHorizontal: Spacing.xl, paddingTop: Spacing.xl },
     sectionTitle: { ...Typography.h3, color: Colors.textPrimary, marginBottom: Spacing.md },
@@ -167,21 +186,44 @@ export default function ProductDetailScreen() {
     shopName: { ...Typography.h3, color: Colors.textPrimary },
     shopAddress: { ...Typography.bodySmall, color: Colors.textMuted, marginTop: 2 },
 
+    shopActionButtonsRow: {
+      flexDirection: 'row',
+      gap: Spacing.sm,
+      marginBottom: Spacing.md,
+    },
     directionsBtn: {
+      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: Colors.primary,
       borderRadius: BorderRadius.md,
-      paddingVertical: 12,
-      paddingHorizontal: Spacing.xl,
-      marginBottom: Spacing.md,
-      gap: 8,
+      paddingVertical: 11,
+      paddingHorizontal: Spacing.md,
+      gap: 6,
       ...Shadows.small,
     },
     directionsBtnText: {
       ...Typography.button,
       color: Colors.textOnPrimary,
+      fontSize: 13,
+    },
+    whatsAppShopBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#25D366',
+      borderRadius: BorderRadius.md,
+      paddingVertical: 11,
+      paddingHorizontal: Spacing.md,
+      gap: 6,
+      ...Shadows.small,
+    },
+    whatsAppShopBtnText: {
+      ...Typography.button,
+      color: '#FFFFFF',
+      fontSize: 13,
     },
 
     viewShopLink: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: Spacing.lg, marginLeft: 4 },
@@ -303,6 +345,21 @@ export default function ProductDetailScreen() {
               </Text>
             </View>
           ) : null}
+
+          {/* Contact Seller via WhatsApp */}
+          <TouchableOpacity
+            onPress={() => openWhatsApp(
+              product.shop?.phone,
+              `مرحباً، أستفسر عن المنتج: ${productName}\nالسعر: ${product.price != null ? formatPrice(product.price) : ''}`
+            )}
+            style={styles.whatsAppProductBtn}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="logo-whatsapp" size={20} color="#FFFFFF" />
+            <Text style={styles.whatsAppProductBtnText}>
+              {t('product.contact_seller', 'Contact Seller')}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Description */}
@@ -332,16 +389,32 @@ export default function ProductDetailScreen() {
               </View>
             </View>
 
-            <TouchableOpacity
-              onPress={() => openDirections(product.shop.latitude, product.shop.longitude, shopDisplayName)}
-              style={styles.directionsBtn}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="navigate-outline" size={18} color={Colors.textOnPrimary} />
-              <Text style={styles.directionsBtnText}>
-                {t('market.directions', 'Directions')}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.shopActionButtonsRow}>
+              <TouchableOpacity
+                onPress={() => openDirections(product.shop.latitude, product.shop.longitude, shopDisplayName)}
+                style={styles.directionsBtn}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="navigate-outline" size={18} color={Colors.textOnPrimary} />
+                <Text style={styles.directionsBtnText}>
+                  {t('market.directions', 'Directions')}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => openWhatsApp(
+                  product.shop?.phone,
+                  `مرحباً، أستفسر عن متجركم ${shopDisplayName}`
+                )}
+                style={styles.whatsAppShopBtn}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="logo-whatsapp" size={18} color="#FFFFFF" />
+                <Text style={styles.whatsAppShopBtnText}>
+                  {t('market.whatsapp', 'WhatsApp')}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
             <TouchableOpacity style={styles.viewShopLink} onPress={() => router.push(`/(customer)/shop/${product.shop.id}`)}>
               <Text style={styles.viewShopText}>{t('product.view_full_shop', 'View Full Shop')}</Text>

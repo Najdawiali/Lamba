@@ -10,12 +10,13 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { SearchResultItem, isFavorite, addFavorite, removeFavorite, startChatSession } from '../services/api';
+import { SearchResultItem, isFavorite, addFavorite, removeFavorite } from '../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../constants/theme';
 import { useThemeColors } from '../context/ThemeContext';
 import { t, i18n } from '../services/i18n';
 import { resolveImageUrl } from '../services/utils';
 import { formatPrice } from '../services/currency';
+import { openWhatsApp } from '../utils/whatsapp';
 
 interface Props {
   item: SearchResultItem;
@@ -373,22 +374,20 @@ export default function ProductCard({ item }: Props) {
               </Text>
             </View>
 
-            {/* Chat / Message Shop Pill */}
+            {/* WhatsApp Contact Shop Pill */}
             <TouchableOpacity
               style={[styles.ratePill, styles.chatPill]}
-              onPress={async () => {
-                try {
-                  const session = await startChatSession(item.shop.id);
-                  router.push(`/(customer)/inbox?sessionId=${session.id}` as any);
-                } catch (err) {
-                  // Navigate to inbox smoothly without blocking alert dialog
-                  router.push('/(customer)/inbox');
-                }
+              onPress={() => {
+                const productName = i18n.locale?.startsWith('ar')
+                  ? (item.name_ar || item.product_name)
+                  : (item.name_en || item.product_name);
+                const phone = item.shop?.phone || item.market_phone || item.phone || '';
+                openWhatsApp(phone, `مرحباً، أستفسر عن: ${productName}`);
               }}
               activeOpacity={0.6}
             >
-              <Ionicons name="chatbubbles" size={11} color={Colors.primary} />
-              <Text style={[styles.rateText, { color: Colors.primary }]}>{t('inbox.title')}</Text>
+              <Ionicons name="logo-whatsapp" size={12} color="#25D366" />
+              <Text style={[styles.rateText, { color: '#25D366' }]}>{t('market.whatsapp', 'WhatsApp')}</Text>
             </TouchableOpacity>
           </View>
         </View>

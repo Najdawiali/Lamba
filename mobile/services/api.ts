@@ -132,6 +132,8 @@ export interface SearchResultItem {
   category_name_en?: string | null;
   image_url: string | null;
   in_stock: boolean;
+  market_phone?: string | null;
+  phone?: string | null;
   shop: ShopInfo;
   distance_km: number;
   semantic_score: number;
@@ -511,13 +513,15 @@ export async function textSearch(
     category_name_en: item.category_name_en,
     image_url: item.image_url,
     in_stock: item.in_stock,
+    market_phone: item.market_phone || item.phone || null,
+    phone: item.market_phone || item.phone || null,
     shop: {
       id: item.market_id,
       name: item.market_name || 'Unknown Store',
       address: item.market_address || '',
       latitude: item.latitude || 0.0,
       longitude: item.longitude || 0.0,
-      phone: null,
+      phone: item.market_phone || item.phone || null,
       is_currently_open: item.market_is_open ?? true,
     },
     distance_km: item.distance_km || 0.0,
@@ -591,13 +595,15 @@ export async function imageSearch(
     category_name_en: item.category_name_en,
     image_url: item.image_url,
     in_stock: item.in_stock,
+    market_phone: item.market_phone || item.phone || null,
+    phone: item.market_phone || item.phone || null,
     shop: {
       id: item.market_id,
       name: item.market_name,
       address: item.market_address,
       latitude: item.latitude,
       longitude: item.longitude,
-      phone: null,
+      phone: item.market_phone || item.phone || null,
       is_currently_open: item.market_is_open,
     },
     distance_km: item.distance_km,

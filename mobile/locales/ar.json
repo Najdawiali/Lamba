@@ -402,7 +402,9 @@
     "price": "السعر",
     "category": "القسم",
     "limited_stock": "كمية محدودة",
-    "message_seller": "راسل البائع"
+    "message_seller": "راسل البائع",
+    "contact_seller": "تواصل مع البائع",
+    "whatsapp": "تواصل واتساب"
   },
   "rating": {
     "title": "تقييمات وآراء العملاء",
@@ -697,7 +699,9 @@
     "title": "المحادثات",
     "coming_soon": "المحادثات قريباً",
     "coming_soon_desc": "ستتمكن من التواصل مع المتاجر مباشرة",
-    "no_messages": "لا توجد محادثات"
+    "no_messages": "لا توجد محادثات",
+    "whatsapp_title": "تواصل عبر واتساب",
+    "whatsapp_desc": "يمكنك التواصل مع أي متجر مباشرة عبر واتساب من صفحة المنتج أو المتجر"
   },
   "market": {
     "title": "المتجر",
@@ -717,7 +721,12 @@
     "review_count": "تقييم",
     "no_reviews": "لا توجد تقييمات بعد. كن أول من يقيّم!",
     "review_placeholder": "شاركنا رأيك عن هذا المتجر...",
-    "submit_review": "إرسال التقييم"
+    "submit_review": "إرسال التقييم",
+    "whatsapp": "تواصل واتساب",
+    "contact_seller": "تواصل مع البائع",
+    "whatsapp_unavailable": "واتساب غير متوفر",
+    "whatsapp_install": "يرجى تثبيت واتساب للتواصل مع المتجر",
+    "whatsapp_no_phone": "رقم هاتف المتجر غير متوفر للتواصل حالياً"
   },
   "merchant": {
     "dashboard": "لوحة التحكم",

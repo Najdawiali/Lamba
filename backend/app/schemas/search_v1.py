@@ -56,6 +56,8 @@ class HybridSearchResultItem(BaseModel):
     market_id: uuid.UUID
     market_name: str
     market_address: str
+    market_phone: Optional[str] = None
+    phone: Optional[str] = None
     latitude: float
     longitude: float
     market_is_open: bool

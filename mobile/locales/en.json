@@ -423,7 +423,9 @@
     "price": "Price",
     "category": "Category",
     "limited_stock": "Limited Stock",
-    "message_seller": "Message Seller"
+    "message_seller": "Message Seller",
+    "contact_seller": "Contact Seller",
+    "whatsapp": "WhatsApp"
   },
   "rating": {
     "title": "Customer Ratings & Reviews",
@@ -696,8 +698,10 @@
   "messages": {
     "title": "Messages",
     "coming_soon": "Messages Coming Soon",
-    "coming_soon_desc": "You will be able to chat with shops directly",
-    "no_messages": "No conversations yet"
+    "coming_soon_desc": "You will be able to chat with nearby stores directly",
+    "no_messages": "No conversations yet",
+    "whatsapp_title": "Contact via WhatsApp",
+    "whatsapp_desc": "You can contact any store directly via WhatsApp from the product or store page"
   },
   "market": {
     "title": "Store",
@@ -717,7 +721,12 @@
     "review_count": "reviews",
     "no_reviews": "No reviews yet. Be the first to review!",
     "review_placeholder": "Share your experience about this store...",
-    "submit_review": "Submit Review"
+    "submit_review": "Submit Review",
+    "whatsapp": "WhatsApp",
+    "contact_seller": "Contact Seller",
+    "whatsapp_unavailable": "WhatsApp not available",
+    "whatsapp_install": "Please install WhatsApp to contact the store",
+    "whatsapp_no_phone": "Store phone number is currently not available"
   },
   "merchant": {
     "dashboard": "Dashboard",

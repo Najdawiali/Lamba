@@ -15,6 +15,7 @@ import {
 import { t, isRTL } from '../../../services/i18n';
 import { formatPrice } from '../../../services/currency';
 import { resolveImageUrl } from '../../../services/utils';
+import { openWhatsApp } from '../../../utils/whatsapp';
 import RatingModal from '../../../components/RatingModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -150,20 +151,44 @@ export default function ShopCatalogScreen() {
     },
     statusDot: { width: 6, height: 6, borderRadius: 3 },
     statusText: { fontSize: 11, fontWeight: '700' },
+    actionButtonsRow: {
+      flexDirection: 'row',
+      gap: Spacing.sm,
+      marginTop: Spacing.xs,
+    },
     directionsBtn: {
+      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: Colors.primary,
       borderRadius: BorderRadius.md,
       paddingVertical: 10,
-      paddingHorizontal: Spacing.lg,
-      gap: 8,
+      paddingHorizontal: Spacing.md,
+      gap: 6,
       ...Shadows.small,
     },
     directionsBtnText: {
       ...Typography.button,
       color: Colors.textOnPrimary,
+      fontSize: 13,
+    },
+    whatsAppBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#25D366',
+      borderRadius: BorderRadius.md,
+      paddingVertical: 10,
+      paddingHorizontal: Spacing.md,
+      gap: 6,
+      ...Shadows.small,
+    },
+    whatsAppBtnText: {
+      ...Typography.button,
+      color: '#FFFFFF',
+      fontSize: 13,
     },
 
     tabsContainer: { borderBottomWidth: 1, borderBottomColor: Colors.border },
@@ -338,16 +363,32 @@ export default function ShopCatalogScreen() {
                 </View>
               </View>
             </View>
-            <TouchableOpacity
-              onPress={() => openDirections(market.latitude, market.longitude, marketDisplayName)}
-              style={styles.directionsBtn}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="navigate-outline" size={18} color={Colors.textOnPrimary} />
-              <Text style={styles.directionsBtnText}>
-                {t('market.directions', 'Directions')}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.actionButtonsRow}>
+              <TouchableOpacity
+                onPress={() => openDirections(market.latitude, market.longitude, marketDisplayName)}
+                style={styles.directionsBtn}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="navigate-outline" size={18} color={Colors.textOnPrimary} />
+                <Text style={styles.directionsBtnText}>
+                  {t('market.directions', 'Directions')}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => openWhatsApp(
+                  market.phone,
+                  `مرحباً، أستفسر عن متجركم ${marketDisplayName}`
+                )}
+                style={styles.whatsAppBtn}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="logo-whatsapp" size={18} color="#FFFFFF" />
+                <Text style={styles.whatsAppBtnText}>
+                  {t('market.whatsapp', 'WhatsApp')}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         ) : null}
 
