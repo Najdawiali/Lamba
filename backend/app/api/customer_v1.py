@@ -181,7 +181,7 @@ async def get_nearby_items(
                 MarketItem.stock_count > 0,
                 func.ST_DWithin(geog_location, geog_point, radius_meters),
             )
-            .order_by(MarketItem.updated_at.desc())
+            .order_by(MarketItem.id)
             .limit(limit)
         )
 

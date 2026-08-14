@@ -1,244 +1,293 @@
-from typing import List
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy.orm import selectinload
-from sqlalchemy import or_, desc, func
-import uuid
-from pydantic import BaseModel
-from datetime import datetime
+from sqlalchemy import select, or_, desc
+import sqlalchemy as sa
+from uuid import UUID
+from datetime import datetime, timezone
 
 from app.database import get_db
 from app.api.auth import get_current_user
-from app.models import User, Market, ChatSession, ChatMessage
+from app.models.user import User
+from app.models.market import Market
+from app.models.market_item import MarketItem
+from app.models.conversation import Conversation, Message
+from app.models.global_item import GlobalItem
+from app.schemas.chat import (
+    StartConversationRequest, SendMessageRequest,
+    MessageResponse, ConversationListItem,
+)
+from app.services.push_notifications import send_push_notification
 
-router = APIRouter(tags=["Chat V1"])
+logger = logging.getLogger(__name__)
 
-# ── Pydantic Schemas ─────────────────────────────────────────
+router = APIRouter(prefix="/api/v1/chat", tags=["Chat"])
 
-class ChatMessageResponse(BaseModel):
-    id: uuid.UUID
-    session_id: uuid.UUID
-    sender_id: uuid.UUID
-    text: str
-    is_read: bool
-    created_at: datetime
-    
-    class Config:
-        from_attributes = True
 
-class ChatSessionResponse(BaseModel):
-    id: uuid.UUID
-    customer_id: uuid.UUID
-    market_id: uuid.UUID
-    created_at: datetime
-    updated_at: datetime
-
-    # Optional fields for UI convenience
-    partner_name: str | None = None
-    last_message: str | None = None
-    unread_count: int = 0
-
-    class Config:
-        from_attributes = True
-
-class SendMessageRequest(BaseModel):
-    text: str
-
-# ── Endpoints ───────────────────────────────────────────────
-
-@router.post("/chat/start/{market_id}", response_model=ChatSessionResponse)
-async def start_or_get_chat_session(
-    market_id: uuid.UUID,
+@router.post("/conversations", status_code=201)
+async def start_conversation(
+    body: StartConversationRequest,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    """
-    Start a new chat session with a market, or return the existing one.
-    Only customers should initiate chats with markets.
-    """
-    if user.user_type != "customer":
-        raise HTTPException(status_code=403, detail="Only customers can initiate a chat with a market.")
-        
-    # Check if market exists
-    market_result = await db.execute(select(Market).where(Market.id == market_id))
-    market = market_result.scalar_one_or_none()
-    if not market:
-        raise HTTPException(status_code=404, detail="Market not found.")
-        
-    # Check for existing session
-    session_result = await db.execute(
-        select(ChatSession).where(
-            ChatSession.customer_id == user.id,
-            ChatSession.market_id == market_id
+    """Start a new conversation or return existing one, send first message."""
+    # Check if conversation already exists
+    result = await db.execute(
+        select(Conversation).where(
+            Conversation.customer_id == user.id,
+            Conversation.market_id == body.market_id,
         )
     )
-    chat_session = session_result.scalar_one_or_none()
-    
-    if not chat_session:
-        # Create a new session
-        chat_session = ChatSession(
+    conv = result.scalar_one_or_none()
+
+    if conv is None:
+        # Resolve product_id: mobile may send a market_items.id instead of global_items.id
+        resolved_product_id = None
+        if body.product_id:
+            # First check if it's a valid global_items.id
+            gi = await db.get(GlobalItem, body.product_id)
+            if gi:
+                resolved_product_id = gi.id
+            else:
+                # Try as a market_items.id and get its item_id (global_items FK)
+                mi = await db.get(MarketItem, body.product_id)
+                if mi:
+                    resolved_product_id = mi.item_id
+
+        # Create new conversation
+        conv = Conversation(
             customer_id=user.id,
-            market_id=market_id
+            market_id=body.market_id,
+            product_id=resolved_product_id,
         )
-        db.add(chat_session)
-        await db.commit()
-        await db.refresh(chat_session)
-        
-    response = ChatSessionResponse.model_validate(chat_session)
-    response.partner_name = market.name
-    return response
+        db.add(conv)
+        await db.flush()
+        conv_id = conv.id
+    else:
+        conv_id = conv.id
 
+    # Only create a message if one was provided
+    msg_id = None
+    if body.message and body.message.strip():
+        msg = Message(
+            conversation_id=conv_id,
+            sender_id=user.id,
+            text=body.message,
+        )
+        db.add(msg)
+        msg_id = str(msg.id)
 
-@router.get("/chat/sessions", response_model=List[ChatSessionResponse])
-async def list_chat_sessions(
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    List all active chat sessions.
-    - If customer: returns sessions where they are the customer_id.
-    - If merchant: returns sessions for their market(s).
-    """
-    if user.user_type == "customer":
-        stmt = select(ChatSession).where(ChatSession.customer_id == user.id).options(selectinload(ChatSession.market))
-        result = await db.execute(stmt)
-        sessions = result.scalars().all()
-        
-        responses = []
-        for s in sessions:
-            r = ChatSessionResponse.model_validate(s)
-            r.partner_name = s.market.name if s.market else "Unknown Market"
-
-            # Get last message
-            msg_stmt = select(ChatMessage).where(ChatMessage.session_id == s.id).order_by(desc(ChatMessage.created_at)).limit(1)
-            msg_res = await db.execute(msg_stmt)
-            last_msg = msg_res.scalar_one_or_none()
-            if last_msg:
-                r.last_message = last_msg.text
-
-            # Unread count = messages from the other side not yet read by this customer
-            unread_stmt = (
-                select(func.count(ChatMessage.id))
-                .where(
-                    ChatMessage.session_id == s.id,
-                    ChatMessage.sender_id != user.id,
-                    ChatMessage.is_read == False,
-                )
+        # Update conversation preview using raw SQL to avoid session issues
+        await db.execute(
+            sa.update(Conversation)
+            .where(Conversation.id == conv_id)
+            .values(
+                last_message_text=body.message[:100],
+                last_message_at=datetime.now(timezone.utc),
             )
-            unread_res = await db.execute(unread_stmt)
-            r.unread_count = unread_res.scalar() or 0
+        )
 
-            responses.append(r)
+    await db.commit()
 
-        return responses
-
-    elif user.user_type == "merchant":
-        # Find merchant's markets
-        market_res = await db.execute(select(Market).where(Market.merchant_id == user.id))
-        market = market_res.scalar_one_or_none()
-        if not market:
-            return []
-            
-        stmt = select(ChatSession).where(ChatSession.market_id == market.id).options(selectinload(ChatSession.customer))
-        result = await db.execute(stmt)
-        sessions = result.scalars().all()
-        
-        responses = []
-        for s in sessions:
-            r = ChatSessionResponse.model_validate(s)
-            r.partner_name = s.customer.email or s.customer.phone_number or "Customer"
-
-            # Get last message
-            msg_stmt = select(ChatMessage).where(ChatMessage.session_id == s.id).order_by(desc(ChatMessage.created_at)).limit(1)
-            msg_res = await db.execute(msg_stmt)
-            last_msg = msg_res.scalar_one_or_none()
-            if last_msg:
-                r.last_message = last_msg.text
-
-            # Unread count = messages from the customer not yet read by this merchant
-            unread_stmt = (
-                select(func.count(ChatMessage.id))
-                .where(
-                    ChatMessage.session_id == s.id,
-                    ChatMessage.sender_id != user.id,
-                    ChatMessage.is_read == False,
-                )
+    # Send push notification to merchant only if a message was sent
+    if msg_id:
+        try:
+            market_result = await db.execute(
+                select(Market).where(Market.id == body.market_id)
             )
-            unread_res = await db.execute(unread_stmt)
-            r.unread_count = unread_res.scalar() or 0
+            market = market_result.scalar_one_or_none()
+            if market and market.merchant_id:
+                owner_result = await db.execute(
+                    select(User).where(User.id == market.merchant_id)
+                )
+                owner = owner_result.scalar_one_or_none()
+                if owner and owner.push_token:
+                    await send_push_notification(
+                        push_token=owner.push_token,
+                        title="رسالة جديدة",
+                        body=body.message[:100],
+                        data={"conversation_id": str(conv_id), "type": "new_message"},
+                    )
+        except Exception as e:
+            logger.warning(f"Push notification failed: {e}")
 
-            responses.append(r)
-
-        return responses
-    
-    return []
+    return {"conversation_id": str(conv_id), "message_id": msg_id}
 
 
-@router.get("/chat/sessions/{session_id}/messages", response_model=List[ChatMessageResponse])
-async def get_chat_messages(
-    session_id: uuid.UUID,
+@router.get("/conversations", response_model=list[ConversationListItem])
+async def list_conversations(
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    """
-    Fetch all messages in a specific chat session.
-    """
-    # Verify participant
-    session_res = await db.execute(select(ChatSession).where(ChatSession.id == session_id).options(selectinload(ChatSession.market)))
-    chat_session = session_res.scalar_one_or_none()
-    
-    if not chat_session:
-        raise HTTPException(status_code=404, detail="Chat session not found.")
-        
-    if user.user_type == "customer" and chat_session.customer_id != user.id:
-        raise HTTPException(status_code=403, detail="Not a participant.")
-    
-    if user.user_type == "merchant" and chat_session.market.merchant_id != user.id:
-        raise HTTPException(status_code=403, detail="Not a participant.")
-        
-    stmt = select(ChatMessage).where(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at)
-    result = await db.execute(stmt)
+    """List all conversations for the current user."""
+    # Find markets owned by this user
+    owned_result = await db.execute(
+        select(Market.id).where(Market.merchant_id == user.id)
+    )
+    owned_market_ids = [row[0] for row in owned_result.all()]
+
+    # Conversations where user is customer OR market owner
+    conditions = [Conversation.customer_id == user.id]
+    if owned_market_ids:
+        conditions.append(Conversation.market_id.in_(owned_market_ids))
+
+    result = await db.execute(
+        select(Conversation)
+        .where(or_(*conditions))
+        .order_by(desc(Conversation.last_message_at))
+    )
+    conversations = result.scalars().all()
+
+    items = []
+    for conv in conversations:
+        market = await db.get(Market, conv.market_id)
+        product = await db.get(GlobalItem, conv.product_id) if conv.product_id else None
+
+        items.append(ConversationListItem(
+            id=conv.id,
+            market_id=conv.market_id,
+            market_name=market.name if market else "Unknown",
+            market_name_ar=getattr(market, 'name_ar', None),
+            product_name=product.name if product else None,
+            product_name_ar=getattr(product, 'name_ar', None),
+            last_message=conv.last_message_text,
+            last_message_at=conv.last_message_at,
+        ))
+
+    return items
+
+
+@router.get("/conversations/{conversation_id}/messages", response_model=list[MessageResponse])
+async def get_messages(
+    conversation_id: UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all messages in a conversation."""
+    conv = await db.get(Conversation, conversation_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    # Verify access
+    owned_result = await db.execute(
+        select(Market.id).where(Market.merchant_id == user.id)
+    )
+    owned_ids = [row[0] for row in owned_result.all()]
+
+    if conv.customer_id != user.id and conv.market_id not in owned_ids:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    result = await db.execute(
+        select(Message)
+        .where(Message.conversation_id == conversation_id)
+        .order_by(Message.created_at)
+    )
     messages = result.scalars().all()
-    
-    return messages
+
+    items = []
+    for msg in messages:
+        sender = await db.get(User, msg.sender_id)
+        items.append(MessageResponse(
+            id=msg.id,
+            sender_id=msg.sender_id,
+            sender_name=getattr(sender, 'full_name', None),
+            is_me=(msg.sender_id == user.id),
+            text=msg.text,
+            created_at=msg.created_at,
+        ))
+
+    return items
 
 
-@router.post("/chat/sessions/{session_id}/messages", response_model=ChatMessageResponse)
-async def send_chat_message(
-    session_id: uuid.UUID,
-    request: SendMessageRequest,
+@router.post("/conversations/{conversation_id}/messages", response_model=MessageResponse, status_code=201)
+async def send_message(
+    conversation_id: UUID,
+    body: SendMessageRequest,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    """
-    Send a message in a chat session.
-    """
-    # Verify participant
-    session_res = await db.execute(select(ChatSession).where(ChatSession.id == session_id).options(selectinload(ChatSession.market)))
-    chat_session = session_res.scalar_one_or_none()
-    
-    if not chat_session:
-        raise HTTPException(status_code=404, detail="Chat session not found.")
-        
-    if user.user_type == "customer" and chat_session.customer_id != user.id:
-        raise HTTPException(status_code=403, detail="Not a participant.")
-    
-    if user.user_type == "merchant" and chat_session.market.merchant_id != user.id:
-        raise HTTPException(status_code=403, detail="Not a participant.")
-        
-    msg = ChatMessage(
-        session_id=session_id,
+    """Send a message in a conversation."""
+    conv = await db.get(Conversation, conversation_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    # Verify access
+    owned_result = await db.execute(
+        select(Market.id).where(Market.merchant_id == user.id)
+    )
+    owned_ids = [row[0] for row in owned_result.all()]
+
+    if conv.customer_id != user.id and conv.market_id not in owned_ids:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    customer_id = conv.customer_id
+    market_id = conv.market_id
+
+    msg = Message(
+        conversation_id=conversation_id,
         sender_id=user.id,
-        text=request.text
+        text=body.text,
     )
     db.add(msg)
-    
-    # Update session updated_at
-    from datetime import datetime, timezone
-    chat_session.updated_at = datetime.now(timezone.utc)
-    
+
+    # Update conversation preview using sa.update
+    await db.execute(
+        sa.update(Conversation)
+        .where(Conversation.id == conversation_id)
+        .values(
+            last_message_text=body.text[:100],
+            last_message_at=datetime.now(timezone.utc),
+        )
+    )
+
     await db.commit()
-    await db.refresh(msg)
-    
-    return msg
+
+    # Notify the OTHER participant
+    try:
+        if user.id == customer_id:
+            # Customer sent → notify merchant
+            market = await db.get(Market, market_id)
+            if market and market.merchant_id:
+                owner = await db.get(User, market.merchant_id)
+                if owner and owner.push_token:
+                    await send_push_notification(
+                        push_token=owner.push_token,
+                        title="رسالة جديدة",
+                        body=body.text[:100],
+                        data={"conversation_id": str(conversation_id), "type": "new_message"},
+                    )
+        else:
+            # Merchant sent → notify customer
+            customer = await db.get(User, customer_id)
+            if customer and customer.push_token:
+                await send_push_notification(
+                    push_token=customer.push_token,
+                    title="رد من المتجر",
+                    body=body.text[:100],
+                    data={"conversation_id": str(conversation_id), "type": "new_message"},
+                )
+    except Exception as e:
+        logger.warning(f"Push notification failed: {e}")
+
+    return MessageResponse(
+        id=msg.id,
+        sender_id=user.id,
+        sender_name=getattr(user, 'full_name', None),
+        is_me=True,
+        text=body.text,
+        created_at=msg.created_at,
+    )
+
+
+@router.post("/push-token")
+async def register_push_token(
+    body: dict,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Register Expo push token for the current user."""
+    token = body.get("token")
+    if token:
+        user.push_token = token
+        await db.commit()
+    return {"status": "ok"}
