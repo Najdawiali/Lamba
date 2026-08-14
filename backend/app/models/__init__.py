@@ -10,6 +10,7 @@ from app.models.search_history import SearchHistory
 from app.models.special_offer import SpecialOffer
 from app.models.chat import ChatSession, ChatMessage
 from app.models.pos_receipt import POSReceipt, POSReceiptItem
+from app.models.conversation import Conversation, Message
 
 __all__ = [
     "User",
@@ -26,4 +27,6 @@ __all__ = [
     "ChatMessage",
     "POSReceipt",
     "POSReceiptItem",
+    "Conversation",
+    "Message",
 ]
