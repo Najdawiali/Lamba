@@ -40,6 +40,8 @@ from app.schemas.customer_v1 import (
     MarketItemDetailsResponse,
     SearchHistoryEntry,
     SearchHistoryCreate,
+    ProfileUpdateRequest,
+    ProfileUpdateResponse,
 )
 from app.schemas.special_offer import CustomerSpecialOfferResponse
 
@@ -380,7 +382,11 @@ async def get_customer_alerts(
 ):
     """
     Get all active and inactive search alerts for the authenticated customer.
+    Auto-resolves alerts if matching items now exist in the catalog.
     """
+    from app.services.alert_service import resolve_matching_alerts
+    await resolve_matching_alerts(db)
+
     result = await db.execute(
         select(SearchAlert)
         .where(SearchAlert.user_id == user.id)
@@ -915,6 +921,27 @@ async def clear_search_history(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while clearing search history."
         )
+
+
+# ── PATCH /profile ────────────────────────────────────────────
+@router.patch("/profile", response_model=ProfileUpdateResponse)
+async def update_customer_profile(
+    body: ProfileUpdateRequest,
+    user: User = Depends(require_customer),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Update the authenticated customer's profile (display name, phone).
+    Only provided (non-None) fields are updated.
+    """
+    if body.full_name is not None:
+        user.full_name = body.full_name.strip()
+    if body.phone_number is not None:
+        user.phone_number = body.phone_number.strip()
+    await db.commit()
+    await db.refresh(user)
+    return user
+
 
 
 

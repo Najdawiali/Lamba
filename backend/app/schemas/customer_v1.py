@@ -180,3 +180,20 @@ class SearchHistoryCreate(BaseModel):
     result_count: int = Field(0, ge=0)
 
 
+class ProfileUpdateRequest(BaseModel):
+    full_name: Optional[str] = Field(None, max_length=255)
+    phone_number: Optional[str] = Field(None, max_length=50)
+
+
+class ProfileUpdateResponse(BaseModel):
+    id: uuid.UUID
+    email: Optional[str] = None
+    phone_number: Optional[str] = None
+    full_name: Optional[str] = None
+    user_type: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+

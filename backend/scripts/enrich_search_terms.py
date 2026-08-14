@@ -173,6 +173,14 @@ async def run_enrichment(limit: Optional[int] = None, batch_size: int = 20, conc
         except Exception as e:
             logger.warning(f"Synonym table rebuild failed/skipped: {e}")
 
+        # Resolve pending search alerts for newly enriched catalog items
+        try:
+            from app.services.alert_service import resolve_matching_alerts
+            resolved = await resolve_matching_alerts(db)
+            logger.info(f"Auto-resolved {resolved} search alerts matching newly enriched catalog items.")
+        except Exception as e:
+            logger.warning(f"Alert resolution step failed: {e}")
+
 
 
 def main():

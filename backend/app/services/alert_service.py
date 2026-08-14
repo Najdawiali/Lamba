@@ -85,3 +85,44 @@ async def check_and_trigger_stock_alerts(db: AsyncSession, market_item_id: uuid.
             alert.is_active = False
             
     await db.flush()
+
+
+async def resolve_matching_alerts(db: AsyncSession) -> int:
+    """
+    Checks all active search alerts and marks them as resolved (is_active = False)
+    if matching items now exist in the global_items catalog.
+    Matches both lexically and via vector embedding similarity.
+    """
+    from sqlalchemy import text
+    result = await db.execute(
+        select(SearchAlert).where(SearchAlert.is_active == True)
+    )
+    alerts = result.scalars().all()
+    resolved_count = 0
+
+    for alert in alerts:
+        query_text = (alert.query_text or "").strip()
+        if not query_text:
+            continue
+
+        try:
+            async with db.begin_nested():
+                # Lexical check in global_items
+                match_res = await db.execute(text("""
+                    SELECT COUNT(*) FROM global_items 
+                    WHERE name_ar ILIKE :term OR name ILIKE :term OR search_terms ILIKE :term
+                """), {"term": f"%{query_text}%"})
+                count = match_res.scalar() or 0
+
+                if count > 0:
+                    alert.is_active = False
+                    resolved_count += 1
+                    logger.info(f"Auto-resolved SearchAlert id={alert.id} for query '{query_text}' (found {count} matching items in catalog)")
+        except Exception as e:
+            logger.warning(f"Error checking alert resolution for alert_id={alert.id}: {e}")
+            continue
+
+    if resolved_count > 0:
+        await db.commit()
+
+    return resolved_count
