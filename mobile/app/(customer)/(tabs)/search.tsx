@@ -23,17 +23,42 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   textSearch, imageSearch, getCategories, getUser,
-  getNearMarkets, getCustomerSpecialOffers, createSearchAlert,
+  getNearMarkets, getCustomerSpecialOffers, getNearbyItems, createSearchAlert,
   SearchResultItem, SearchFilters, getSearchHistory, addSearchHistory, clearSearchHistory, SearchHistoryEntry,
-  NearMarketResponse, CustomerSpecialOfferResponse,
+  NearMarketResponse, CustomerSpecialOfferResponse, NearbyItemResponse,
 } from '../../../services/api';
 import ProductCard from '../../../components/ProductCard';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
 import { useThemeColors } from '../../../context/ThemeContext';
-import { t } from '../../../services/i18n';
+import { t, i18n } from '../../../services/i18n';
 import { formatPrice } from '../../../services/currency';
 
 const DEFAULT_COORDS = { latitude: 32.0385, longitude: 35.7275 }; // As-Salt center (catalog stores location)
+
+const CATEGORY_AR_FALLBACK: Record<string, string> = {
+  'Food & Beverages': 'الأغذية والمشروبات',
+  'Home & Personal Care': 'العناية المنزلية والشخصية',
+  'Electronics & Tech': 'الإلكترونيات والتقنية',
+  'Home & Kitchen': 'المنزل والمطبخ',
+  'Services': 'الخدمات',
+  'Fruits & Vegetables': 'الخضار والفواكه',
+  'Cooking Essentials': 'مستلزمات الطبخ',
+  'Dairy & Eggs': 'الألبان والبيض',
+  'Meat & Poultry': 'اللحوم والدواجن',
+  'Beverages': 'المشروبات',
+  'Snacks': 'المأكولات الخفيفة',
+  'Bakery': 'المخبوزات',
+  'Frozen Food': 'الأطعمة المجمدة',
+  'Cleaning & Detergents': 'التنظيف المنزلي',
+  'Beauty & Personal Care': 'العناية الشخصية',
+  'Electronics': 'الإلكترونيات',
+  'Mobiles & Tech': 'الهواتف والتقنية',
+  'Cookware & Kitchenware': 'أدوات المطبخ',
+  'Beauty & Personal Care Services': 'خدمات التجميل والعناية الشخصية',
+  'Vehicle Maintenance & Care': 'صيانة وتغسيل السيارات',
+  'Home & Maintenance Services': 'خدمات وصيانة المنازل',
+  'Education & Tutoring': 'التعليم والدروس الخصوصية',
+};
 
 export default function SearchScreen() {
   const Colors = useThemeColors();
@@ -63,15 +88,57 @@ export default function SearchScreen() {
 
   // Faceted Filters State
   const [showFilters, setShowFilters] = useState(false);
+  const [filterListingType, setFilterListingType] = useState<'product' | 'service' | null>(null);
   const [filterDistance, setFilterDistance] = useState<number>(5);
-  const [filterCity, setFilterCity] = useState<string>('');
-  const [filterNature, setFilterNature] = useState<string>('');
-  const [filterCategory, setFilterCategory] = useState<string>('');
+  const [filterCategory, setFilterCategory] = useState<string | null>(null);
   const [filterInStock, setFilterInStock] = useState<boolean>(true);
   const [filterPriceMin, setFilterPriceMin] = useState<string>('');
   const [filterPriceMax, setFilterPriceMax] = useState<string>('');
 
   const [categoriesList, setCategoriesList] = useState<any[]>([]);
+
+  // Categories filtered by selected listing type
+  const filteredCategories = useMemo(() => {
+    if (filterListingType === 'service') {
+      const serviceCats: any[] = [];
+      const traverse = (nodes: any[]) => {
+        for (const node of nodes) {
+          // Hide the parent "الخدمات" / "Services" category — it's redundant
+          if (node.listing_type === 'service' && node.name !== 'Services' && node.name_ar !== 'الخدمات') {
+            serviceCats.push(node);
+          }
+          if (node.subcategories && node.subcategories.length > 0) {
+            traverse(node.subcategories);
+          }
+        }
+      };
+      traverse(categoriesList);
+      return serviceCats;
+    }
+
+    if (filterListingType === 'product') {
+      return categoriesList.filter((cat) => {
+        return (
+          (cat.listing_type === 'product' || cat.listing_type === 'both' || !cat.listing_type) &&
+          cat.name !== 'Services' &&
+          cat.name_ar !== 'الخدمات'
+        );
+      });
+    }
+
+    // "الكل" (All) — show product root categories + service subcategories, keeping parent "Services" / "الخدمات" hidden
+    const allCats: any[] = [];
+    for (const cat of categoriesList) {
+      if (cat.name === 'Services' || cat.name_ar === 'الخدمات') {
+        if (cat.subcategories && cat.subcategories.length > 0) {
+          allCats.push(...cat.subcategories);
+        }
+      } else {
+        allCats.push(cat);
+      }
+    }
+    return allCats;
+  }, [categoriesList, filterListingType]);
   const [locationStatus, setLocationStatus] = useState<'loading' | 'granted' | 'denied'>('loading');
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number }>(DEFAULT_COORDS);
 
@@ -81,6 +148,7 @@ export default function SearchScreen() {
   // dummy cards with "Supermarket N" / "Special Offer N" / "12.00 SAR").
   const [exploreMarkets, setExploreMarkets] = useState<NearMarketResponse[]>([]);
   const [exploreDeals, setExploreDeals] = useState<CustomerSpecialOfferResponse[]>([]);
+  const [nearbyProducts, setNearbyProducts] = useState<NearbyItemResponse[]>([]);
 
   const initPermissionsAndData = async () => {
     try {
@@ -116,17 +184,22 @@ export default function SearchScreen() {
           console.warn('Reverse geocoding failed:', geoErr);
         }
 
-        // Pull real nearby markets + active special offers for the Explore feed.
+        // Pull real nearby markets + active special offers + nearby products for the Explore feed.
         try {
-          const [markets, deals] = await Promise.all([
-            getNearMarkets(coords.latitude, coords.longitude, 10),
+          const [markets, deals, items] = await Promise.all([
+            getNearMarkets(coords.latitude, coords.longitude, 10).catch(() => [] as NearMarketResponse[]),
             getCustomerSpecialOffers(coords.latitude, coords.longitude).catch((e) => {
               console.warn('Explore: getCustomerSpecialOffers failed', e);
               return [] as CustomerSpecialOfferResponse[];
             }),
+            getNearbyItems(coords.latitude, coords.longitude, 15, 10).catch((e) => {
+              console.warn('Explore: getNearbyItems failed', e);
+              return [] as NearbyItemResponse[];
+            }),
           ]);
           setExploreMarkets(markets || []);
           setExploreDeals((deals || []).slice(0, 10));
+          setNearbyProducts(items || []);
         } catch (exploreErr) {
           console.warn('Explore feed load failed:', exploreErr);
         }
@@ -207,12 +280,11 @@ export default function SearchScreen() {
       
       const parsedFilters: SearchFilters = {
         max_distance_km: filterDistance,
-        business_nature: filterNature || undefined,
         category_id: filterCategory || undefined,
         in_stock_only: filterInStock,
         price_min: minP,
         price_max: maxP,
-        city: filterCity || undefined,
+        listing_type: filterListingType,
       };
 
       let response;
@@ -282,7 +354,7 @@ export default function SearchScreen() {
 
     if (result.canceled || !result.assets[0]) return;
     executeSearch('', 'image', result.assets[0].uri);
-  }, [userLocation, filterDistance, filterNature, filterCategory, filterInStock, filterPriceMin, filterPriceMax, filterCity, userId]);
+  }, [userLocation, filterDistance, filterListingType, filterCategory, filterInStock, filterPriceMin, filterPriceMax, userId]);
 
   const handleOpenSettings = () => {
     if (Platform.OS === 'ios') Linking.openURL('app-settings:');
@@ -376,6 +448,60 @@ export default function SearchScreen() {
     },
 
     feedContent: { paddingBottom: 100 },
+    
+    // Greeting
+    greetingContainer: {
+      paddingHorizontal: Spacing.lg,
+      paddingTop: Spacing.xs,
+      paddingBottom: Spacing.md,
+    },
+    greetingText: {
+      ...Typography.body,
+      color: Colors.textSecondary,
+      fontWeight: '600',
+      textAlign: 'right' as const,
+    },
+
+    // Quick Categories
+    quickCategoriesScroll: {
+      paddingHorizontal: Spacing.lg,
+      gap: 16,
+      paddingBottom: Spacing.xs,
+    },
+    quickCategoryItem: {
+      alignItems: 'center',
+      width: 64,
+    },
+    quickCategoryCircle: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: Colors.surfaceElevated,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 6,
+      borderWidth: 1,
+      borderColor: Colors.primary + '35',
+    },
+    quickCategoryEmoji: {
+      fontSize: 24,
+    },
+    quickCategoryLabel: {
+      ...Typography.caption,
+      color: Colors.textPrimary,
+      textAlign: 'center' as const,
+      fontWeight: '500',
+    },
+
+    // Section Divider
+    sectionDivider: {
+      height: 1,
+      backgroundColor: Colors.border,
+      marginHorizontal: Spacing.xl,
+      marginVertical: Spacing.lg,
+      opacity: 0.5,
+    },
+
     suggestionsRow: { marginBottom: Spacing.xl, marginTop: Spacing.sm },
     suggestionsScroll: { paddingHorizontal: Spacing.lg, gap: Spacing.sm },
     suggestionChip: {
@@ -384,12 +510,98 @@ export default function SearchScreen() {
     },
     suggestionChipText: { ...Typography.bodySmall, color: Colors.textPrimary },
 
-    section: { marginBottom: Spacing.xxl },
+    section: { marginBottom: Spacing.md },
     sectionHeader: { paddingHorizontal: Spacing.lg, marginBottom: Spacing.md },
-    sectionTitle: { ...Typography.h2, color: Colors.textPrimary },
+    sectionTitle: { ...Typography.h3, color: Colors.textPrimary, fontWeight: '700' },
     horizontalScroll: { paddingHorizontal: Spacing.lg, gap: Spacing.md },
 
     marketCard: { width: 160, gap: Spacing.xs },
+    marketCardEnhanced: {
+      backgroundColor: Colors.surfaceElevated,
+      borderRadius: BorderRadius.lg,
+      padding: Spacing.md,
+      width: 135,
+      borderWidth: 1,
+      borderColor: Colors.border,
+    },
+    marketIconWrapper: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: Colors.primary + '20',
+      justifyContent: 'center',
+      alignItems: 'center',
+      alignSelf: 'center',
+      marginBottom: 8,
+    },
+    marketCardTitle: {
+      ...Typography.bodySmall,
+      color: Colors.textPrimary,
+      fontWeight: '600',
+      textAlign: 'center' as const,
+    },
+    marketStatusRow: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginTop: 6,
+      gap: 6,
+    },
+    marketStatusDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+    },
+    marketDistanceText: {
+      ...Typography.caption,
+      color: Colors.textSecondary,
+      fontSize: 11,
+    },
+
+    // Nearby Products
+    productCard: {
+      backgroundColor: Colors.surfaceElevated,
+      borderRadius: BorderRadius.lg,
+      padding: Spacing.md,
+      width: 155,
+      borderWidth: 1,
+      borderColor: Colors.border,
+    },
+    productImageWrapper: {
+      width: '100%',
+      height: 85,
+      backgroundColor: Colors.surface,
+      borderRadius: BorderRadius.md,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 8,
+      overflow: 'hidden',
+    },
+    productImage: {
+      width: '100%',
+      height: '100%',
+      resizeMode: 'cover' as const,
+    },
+    productName: {
+      ...Typography.bodySmall,
+      color: Colors.textPrimary,
+      fontWeight: '600',
+      textAlign: 'right' as const,
+    },
+    productPrice: {
+      ...Typography.bodySmall,
+      color: Colors.accent || Colors.primary,
+      fontWeight: '700',
+      textAlign: 'right' as const,
+      marginTop: 4,
+    },
+    productStoreName: {
+      ...Typography.caption,
+      color: Colors.textSecondary,
+      textAlign: 'right' as const,
+      marginTop: 2,
+    },
+
     marketImagePlaceholder: {
       width: 160, height: 100, backgroundColor: 'rgba(108, 99, 255, 0.1)',
       borderRadius: BorderRadius.md, justifyContent: 'center', alignItems: 'center',
@@ -412,15 +624,22 @@ export default function SearchScreen() {
     dealName: { ...Typography.bodySmall, color: Colors.textPrimary, marginTop: 4 },
     dealPrice: { ...Typography.bodySmall, color: Colors.secondary, fontWeight: '700' },
 
-    recentCard: {
-      width: 120, height: 80, backgroundColor: Colors.surface, borderRadius: BorderRadius.md,
-      borderWidth: 1, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center', gap: Spacing.xs
+    recentSearchChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: Colors.surfaceElevated,
+      borderRadius: BorderRadius.full,
+      paddingVertical: Spacing.sm,
+      paddingHorizontal: Spacing.lg,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      marginRight: Spacing.xs,
     },
-    recentIconWrapper: {
-      width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surfaceElevated,
-      justifyContent: 'center', alignItems: 'center'
+    recentSearchText: {
+      ...Typography.bodySmall,
+      color: Colors.textPrimary,
+      fontWeight: '500',
     },
-    recentText: { ...Typography.caption, color: Colors.textSecondary, paddingHorizontal: Spacing.sm, textAlign: 'center' },
 
     // Results State
     resultsContainer: { flex: 1 },
@@ -495,6 +714,24 @@ export default function SearchScreen() {
     modalTitle: { ...Typography.h2, color: Colors.textPrimary },
     modalCloseBtn: { padding: Spacing.xs },
     modalBody: { flex: 1 },
+    toggleRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.xs },
+    toggleBtn: {
+      flex: 1, paddingVertical: 10, borderRadius: BorderRadius.md,
+      backgroundColor: Colors.surfaceElevated, alignItems: 'center',
+      borderWidth: 1, borderColor: Colors.border,
+    },
+    toggleBtnActive: {
+      backgroundColor: Colors.primary,
+      borderColor: Colors.primary,
+    },
+    toggleBtnText: {
+      color: Colors.textSecondary,
+      fontWeight: '600',
+      fontSize: 13,
+    },
+    toggleBtnTextActive: {
+      color: Colors.textOnPrimary,
+    },
     filterLabel: { ...Typography.h3, color: Colors.textPrimary, marginTop: Spacing.xl, marginBottom: Spacing.md },
     filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
     filterChip: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: BorderRadius.full, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.background },
@@ -769,13 +1006,7 @@ export default function SearchScreen() {
   // ── Rendering components ──────────────────────────────────
   const renderHeader = () => (
     <View style={styles.header}>
-      <TouchableOpacity
-        style={styles.iconButton}
-        activeOpacity={0.7}
-        onPress={() => router.push('/(customer)/profile')}
-      >
-        <Ionicons name="menu" size={24} color={Colors.textPrimary} />
-      </TouchableOpacity>
+      <View style={{ width: 40 }} />
       <Text style={styles.headerTitle}>{t('welcome.title', 'Lamba')}</Text>
       <TouchableOpacity style={styles.avatarButton} onPress={() => router.push('/(customer)/profile')}>
         <LinearGradient
@@ -868,90 +1099,222 @@ export default function SearchScreen() {
     </View>
   );
 
-  const renderExploreFeed = () => (
-    <ScrollView contentContainerStyle={styles.feedContent} showsVerticalScrollIndicator={false}>
-      {/* Nearby Markets */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{t('explore.nearby_markets')}</Text>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
-          {exploreMarkets.length === 0 ? (
-            <Text style={[styles.marketName, { color: Colors.textMuted, padding: Spacing.md }]}>{t('common.no_items', 'No nearby markets found.')}</Text>
-          ) : (
-            exploreMarkets.map((m) => (
-              <TouchableOpacity
-                key={m.id}
-                style={styles.marketCard}
-                activeOpacity={0.8}
-                onPress={() => router.push(`/(customer)/shop/${m.id}`)}
-              >
-                <View style={styles.marketImagePlaceholder}>
-                  <Ionicons name="storefront-outline" size={32} color={Colors.primary} />
-                </View>
-                <Text style={styles.marketName} numberOfLines={1}>{m.name}</Text>
-                <Text style={styles.marketDistance}>
-                  {typeof m.distance_km === 'number' ? `${m.distance_km.toFixed(1)} ` : `${m.distance_km || 0} `}{t('common.km')}
-                </Text>
-              </TouchableOpacity>
-            ))
-          )}
-        </ScrollView>
-      </View>
+  const renderExploreFeed = () => {
+    const isAr = !i18n.locale || i18n.locale.includes('ar');
 
-      {/* Hot Deals Near You */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{t('explore.hot_deals')}</Text>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
-          {exploreDeals.length === 0 ? (
-            <Text style={[styles.dealName, { color: Colors.textMuted, padding: Spacing.md }]}>{t('common.no_items', 'No active offers right now.')}</Text>
-          ) : (
-            exploreDeals.map((deal) => {
-              const discount = deal.discount_percentage ?? 0;
-              return (
-                <TouchableOpacity
-                  key={deal.id}
-                  style={styles.dealCard}
-                  activeOpacity={0.8}
-                  onPress={() => router.push(`/(customer)/product/${deal.market_item_id}`)}
-                >
-                  <View style={styles.dealImagePlaceholder}>
-                    <View style={styles.dealBadge}>
-                      <Text style={styles.dealBadgeText}>-{discount}%</Text>
-                    </View>
-                    <Ionicons name="pricetag-outline" size={32} color={Colors.secondary} />
-                  </View>
-                  <Text style={styles.dealName} numberOfLines={1}>{deal.product_name}</Text>
-                  <Text style={styles.dealPrice}>{formatPrice(deal.price)}</Text>
-                </TouchableOpacity>
-              );
-            })
-          )}
-        </ScrollView>
-      </View>
+    const getGreeting = () => {
+      const hour = new Date().getHours();
+      if (hour < 12) return t('explore.good_morning', 'صباح الخير');
+      if (hour < 17) return t('explore.good_afternoon', 'مساء الخير');
+      return t('explore.good_evening', 'مساء النور');
+    };
 
-      {/* Recently Viewed */}
-      {historyList.length > 0 ? (
+    const QUICK_CATEGORIES = [
+      { emoji: '🥬', label: t('explore.quick_veg', 'خضار'), query: isAr ? 'خضار' : 'Vegetables' },
+      { emoji: '🥩', label: t('explore.quick_meat', 'لحوم'), query: isAr ? 'لحوم' : 'Meat' },
+      { emoji: '🧴', label: t('explore.quick_cleaning', 'تنظيف'), query: isAr ? 'أغراض تنظيف' : 'Cleaning' },
+      { emoji: '✂️', label: t('explore.quick_services', 'خدمات'), query: isAr ? 'خدمات' : 'Services' },
+      { emoji: '☕', label: t('explore.quick_drinks', 'مشروبات'), query: isAr ? 'مشروبات' : 'Beverages' },
+    ];
+
+    return (
+      <ScrollView contentContainerStyle={styles.feedContent} showsVerticalScrollIndicator={false}>
+        {/* 1. Time-based Greeting */}
+        <View style={styles.greetingContainer}>
+          <Text style={styles.greetingText}>
+            {getGreeting()} 👋 {t('explore.what_looking_for', 'شو عم تدور عليه اليوم؟')}
+          </Text>
+        </View>
+
+        {/* 2. Quick Category Shortcuts */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.quickCategoriesScroll}
+        >
+          {QUICK_CATEGORIES.map((cat) => (
+            <TouchableOpacity
+              key={cat.label}
+              onPress={() => {
+                setQuery(cat.query);
+                executeSearch(cat.query);
+              }}
+              style={styles.quickCategoryItem}
+              activeOpacity={0.7}
+            >
+              <View style={styles.quickCategoryCircle}>
+                <Text style={styles.quickCategoryEmoji}>{cat.emoji}</Text>
+              </View>
+              <Text style={styles.quickCategoryLabel} numberOfLines={1}>
+                {cat.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        <View style={styles.sectionDivider} />
+
+        {/* 3. Nearby Markets */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{t('explore.recently_viewed')}</Text>
+            <Text style={styles.sectionTitle}>{t('explore.nearby_markets')}</Text>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
-            {historyList.slice(0, 3).map((item, i) => (
-              <TouchableOpacity key={item.id} style={styles.recentCard} activeOpacity={0.8} onPress={() => executeSearch(item.query_text)}>
-                <View style={styles.recentIconWrapper}>
-                  <Ionicons name="time-outline" size={24} color={Colors.textSecondary} />
-                </View>
-                <Text style={styles.recentText} numberOfLines={1}>{item.query_text}</Text>
-              </TouchableOpacity>
-            ))}
+            {exploreMarkets.length === 0 ? (
+              <Text style={[styles.marketName, { color: Colors.textMuted, padding: Spacing.md }]}>
+                {t('common.no_items', 'No nearby markets found.')}
+              </Text>
+            ) : (
+              exploreMarkets.map((m) => {
+                const marketDisplayName = isAr ? (m.name_ar || m.name) : (m.name_en || m.name);
+                const dist = typeof m.distance_km === 'number' ? m.distance_km : parseFloat(String(m.distance_km || 0));
+                const distanceText = dist < 0.05
+                  ? t('common.very_close', 'قريب جداً')
+                  : `${dist.toFixed(1)} ${t('common.km', 'كم')}`;
+
+                return (
+                  <TouchableOpacity
+                    key={m.id}
+                    style={[
+                      styles.marketCardEnhanced,
+                      {
+                        borderColor: m.is_currently_open ? (Colors.accent ? Colors.accent + '40' : Colors.primary + '40') : Colors.border,
+                      },
+                    ]}
+                    activeOpacity={0.8}
+                    onPress={() => router.push(`/(customer)/shop/${m.id}`)}
+                  >
+                    <View style={styles.marketIconWrapper}>
+                      <Ionicons name="storefront" size={22} color={Colors.primary} />
+                    </View>
+                    <Text style={styles.marketCardTitle} numberOfLines={1}>
+                      {marketDisplayName}
+                    </Text>
+                    <View style={styles.marketStatusRow}>
+                      <View
+                        style={[
+                          styles.marketStatusDot,
+                          { backgroundColor: m.is_currently_open ? Colors.accent || '#10B981' : Colors.error },
+                        ]}
+                      />
+                      <Text style={styles.marketDistanceText}>{distanceText}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })
+            )}
           </ScrollView>
         </View>
-      ) : null}
-    </ScrollView>
-  );
+
+        {/* 4. Nearby Products */}
+        {nearbyProducts && nearbyProducts.length > 0 && (
+          <>
+            <View style={styles.sectionDivider} />
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>{t('explore.nearby_products', 'منتجات قريبة')}</Text>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
+                {nearbyProducts.map((product) => {
+                  const prodName = isAr ? (product.name_ar || product.name) : (product.name_en || product.name);
+                  const storeName = isAr ? (product.market_name_ar || product.market_name) : (product.market_name_en || product.market_name);
+
+                  return (
+                    <TouchableOpacity
+                      key={product.id || product.market_item_id}
+                      style={styles.productCard}
+                      activeOpacity={0.8}
+                      onPress={() => router.push(`/(customer)/product/${product.market_item_id}`)}
+                    >
+                      <View style={styles.productImageWrapper}>
+                        {product.image_url ? (
+                          <Image source={{ uri: product.image_url }} style={styles.productImage} />
+                        ) : (
+                          <Ionicons name="cube-outline" size={28} color={Colors.primary} />
+                        )}
+                      </View>
+                      <Text style={styles.productName} numberOfLines={1}>
+                        {prodName}
+                      </Text>
+                      <Text style={styles.productPrice}>
+                        {formatPrice(product.price)}
+                      </Text>
+                      <Text style={styles.productStoreName} numberOfLines={1}>
+                        {storeName}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          </>
+        )}
+
+        {/* 5. Hot Deals (if available) */}
+        {exploreDeals && exploreDeals.length > 0 && (
+          <>
+            <View style={styles.sectionDivider} />
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>{t('explore.hot_deals')}</Text>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
+                {exploreDeals.map((deal) => {
+                  const discount = deal.discount_percentage ?? 0;
+                  const dealDisplayName = isAr ? (deal.product_name_ar || deal.product_name) : (deal.product_name_en || deal.product_name);
+                  return (
+                    <TouchableOpacity
+                      key={deal.id}
+                      style={styles.dealCard}
+                      activeOpacity={0.8}
+                      onPress={() => router.push(`/(customer)/product/${deal.market_item_id}`)}
+                    >
+                      <View style={styles.dealImagePlaceholder}>
+                        <View style={styles.dealBadge}>
+                          <Text style={styles.dealBadgeText}>-{discount}%</Text>
+                        </View>
+                        <Ionicons name="pricetag-outline" size={32} color={Colors.secondary} />
+                      </View>
+                      <Text style={styles.dealName} numberOfLines={1}>{dealDisplayName}</Text>
+                      <Text style={styles.dealPrice}>{formatPrice(deal.price)}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          </>
+        )}
+
+        {/* 6. Recent Searches */}
+        {historyList && historyList.length > 0 && (
+          <>
+            <View style={styles.sectionDivider} />
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>{t('search.recent', 'بحث سابق')}</Text>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
+                {historyList.slice(0, 10).map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.recentSearchChip}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      setQuery(item.query_text);
+                      executeSearch(item.query_text);
+                    }}
+                  >
+                    <Ionicons name="time-outline" size={14} color={Colors.textSecondary} style={{ marginRight: 6 }} />
+                    <Text style={styles.recentSearchText}>{item.query_text}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </>
+        )}
+      </ScrollView>
+    );
+  };
 
   // ── Main Render ──────────────────────────────────────────
   if (locationStatus === 'denied') {
@@ -1132,14 +1495,47 @@ export default function SearchScreen() {
           <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowFilters(false)} />
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('search.filters', 'Filters')}</Text>
+              <Text style={styles.modalTitle}>{t('filter.title', 'فلاتر البحث')}</Text>
               <TouchableOpacity onPress={() => setShowFilters(false)} style={styles.modalCloseBtn}>
                 <Ionicons name="close" size={24} color={Colors.textPrimary} />
               </TouchableOpacity>
             </View>
-            <ScrollView style={styles.modalBody}>
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
               
-              <Text style={styles.filterLabel}>{t('search.max_distance', 'Max Distance (km)')}: {filterDistance}</Text>
+              {/* Fix 3: Listing Type Toggle (Product / Service / All) */}
+              <Text style={styles.filterLabel}>{t('filter.listing_type', 'النوع')}</Text>
+              <View style={styles.toggleRow}>
+                {[
+                  { value: null, label: t('filter.all', 'الكل') },
+                  { value: 'product', label: t('filter.products', 'منتجات') },
+                  { value: 'service', label: t('filter.services', 'خدمات') },
+                ].map(opt => (
+                  <TouchableOpacity
+                    key={opt.label}
+                    onPress={() => {
+                      setFilterListingType(opt.value as any);
+                      if (filterCategory) {
+                        const stillValid = categoriesList.some(c => c.id === filterCategory && (!opt.value || !c.listing_type || c.listing_type === opt.value));
+                        if (!stillValid) setFilterCategory(null);
+                      }
+                    }}
+                    style={[
+                      styles.toggleBtn,
+                      filterListingType === opt.value && styles.toggleBtnActive,
+                    ]}
+                  >
+                    <Text style={[
+                      styles.toggleBtnText,
+                      filterListingType === opt.value && styles.toggleBtnTextActive,
+                    ]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Distance */}
+              <Text style={styles.filterLabel}>{t('filter.distance', 'أقصى مسافة (كم)')}: {filterDistance} {t('common.km', 'كم')}</Text>
               <View style={styles.filterRow}>
                 {[5, 10, 20, 50].map(dist => (
                   <TouchableOpacity 
@@ -1147,25 +1543,56 @@ export default function SearchScreen() {
                     style={[styles.filterChip, filterDistance === dist && styles.filterChipActive]}
                     onPress={() => setFilterDistance(dist)}
                   >
-                    <Text style={[styles.filterChipText, filterDistance === dist && styles.filterChipTextActive]}>{dist} km</Text>
+                    <Text style={[styles.filterChipText, filterDistance === dist && styles.filterChipTextActive]}>{dist} {t('common.km', 'كم')}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
-              <Text style={styles.filterLabel}>{t('search.availability', 'Availability')}</Text>
+              {/* Fix 4: Category Chips */}
+              <Text style={styles.filterLabel}>{t('filter.category', 'القسم')}</Text>
+              <View style={styles.filterRow}>
+                <TouchableOpacity
+                  onPress={() => setFilterCategory(null)}
+                  style={[styles.filterChip, filterCategory === null && styles.filterChipActive]}
+                >
+                  <Text style={[styles.filterChipText, filterCategory === null && styles.filterChipTextActive]}>
+                    {t('filter.all', 'الكل')}
+                  </Text>
+                </TouchableOpacity>
+                {filteredCategories.map(cat => {
+                  const isAr = !i18n.locale || i18n.locale.includes('ar');
+                  const displayName = isAr ? (cat.name_ar || CATEGORY_AR_FALLBACK[cat.name]) : (cat.name_en || cat.name);
+                  if (isAr && !displayName) return null;
+                  return (
+                    <TouchableOpacity
+                      key={cat.id}
+                      onPress={() => setFilterCategory(cat.id === filterCategory ? null : cat.id)}
+                      style={[styles.filterChip, filterCategory === cat.id && styles.filterChipActive]}
+                    >
+                      <Text style={[styles.filterChipText, filterCategory === cat.id && styles.filterChipTextActive]}>
+                        {displayName}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Availability */}
+              <Text style={styles.filterLabel}>{t('filter.availability', 'التوفر')}</Text>
               <TouchableOpacity 
                 style={styles.checkboxRow} 
                 onPress={() => setFilterInStock(!filterInStock)}
               >
                 <Ionicons name={filterInStock ? "checkbox" : "square-outline"} size={24} color={filterInStock ? Colors.primary : Colors.textMuted} />
-                <Text style={styles.checkboxText}>{t('search.in_stock_only', 'In Stock Only')}</Text>
+                <Text style={styles.checkboxText}>{t('filter.available_only', 'المتوفر فقط')}</Text>
               </TouchableOpacity>
 
-              <Text style={styles.filterLabel}>{t('search.price_range', 'Price Range')}</Text>
+              {/* Fix 2: Price Range */}
+              <Text style={styles.filterLabel}>{t('filter.price_range', 'نطاق السعر')}</Text>
               <View style={styles.priceInputsContainer}>
                 <TextInput
                   style={styles.priceInput}
-                  placeholder="Min"
+                  placeholder={t('filter.price_min', 'الأقل')}
                   placeholderTextColor={Colors.textMuted}
                   keyboardType="numeric"
                   value={filterPriceMin}
@@ -1174,47 +1601,28 @@ export default function SearchScreen() {
                 <Text style={styles.priceSeparator}>-</Text>
                 <TextInput
                   style={styles.priceInput}
-                  placeholder="Max"
+                  placeholder={t('filter.price_max', 'الأعلى')}
                   placeholderTextColor={Colors.textMuted}
                   keyboardType="numeric"
                   value={filterPriceMax}
                   onChangeText={setFilterPriceMax}
                 />
               </View>
-
-              <Text style={styles.filterLabel}>{t('search.city', 'City')}</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder={t('search.city_placeholder', 'e.g. Dubai')}
-                placeholderTextColor={Colors.textMuted}
-                value={filterCity}
-                onChangeText={setFilterCity}
-              />
-
-              <Text style={styles.filterLabel}>{t('search.business_nature', 'Business Nature')}</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder={t('search.business_nature_placeholder', 'e.g. Grocery')}
-                placeholderTextColor={Colors.textMuted}
-                value={filterNature}
-                onChangeText={setFilterNature}
-              />
               
             </ScrollView>
             <View style={styles.modalFooter}>
               <TouchableOpacity 
                 style={styles.resetButton} 
                 onPress={() => {
+                  setFilterListingType(null);
                   setFilterDistance(5);
                   setFilterInStock(true);
                   setFilterPriceMin('');
                   setFilterPriceMax('');
-                  setFilterCity('');
-                  setFilterNature('');
-                  setFilterCategory('');
+                  setFilterCategory(null);
                 }}
               >
-                <Text style={styles.resetButtonText}>{t('search.reset', 'Reset')}</Text>
+                <Text style={styles.resetButtonText}>{t('filter.reset', 'إعادة ضبط')}</Text>
               </TouchableOpacity>
               <TouchableOpacity 
                 style={styles.applyButton} 
@@ -1229,7 +1637,7 @@ export default function SearchScreen() {
                   }
                 }}
               >
-                <Text style={styles.applyButtonText}>{t('search.apply', 'Apply Filters')}</Text>
+                <Text style={styles.applyButtonText}>{t('filter.apply', 'تطبيق الفلاتر')}</Text>
               </TouchableOpacity>
             </View>
           </View>

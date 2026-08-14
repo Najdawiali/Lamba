@@ -449,6 +449,7 @@ export interface SearchFilters {
   price_min?: number;
   price_max?: number;
   city?: string;
+  listing_type?: string | null;
 }
 
 export interface CategoryNode {
@@ -481,6 +482,9 @@ export async function textSearch(
   };
   if (userId) {
     body.user_id = userId;
+  }
+  if (filters?.listing_type) {
+    body.listing_type = filters.listing_type;
   }
   if (filters) {
     const f: Record<string, any> = {};
@@ -617,6 +621,8 @@ export interface NearMarketResponse {
   id: string;
   merchant_id: string;
   name: string;
+  name_ar?: string | null;
+  name_en?: string | null;
   address: string;
   latitude: number;
   longitude: number;
@@ -648,6 +654,24 @@ export interface CustomerItemResponse {
 
 export type MarketCatalogResponse = Record<string, CustomerItemResponse[]>;
 
+export interface NearbyItemResponse {
+  id: string;
+  market_item_id: string;
+  name: string;
+  name_ar?: string | null;
+  name_en?: string | null;
+  price: number;
+  market_id: string;
+  market_name: string;
+  market_name_ar?: string | null;
+  market_name_en?: string | null;
+  category_name?: string | null;
+  category_name_ar?: string | null;
+  category_name_en?: string | null;
+  image_url?: string | null;
+  is_in_stock: boolean;
+}
+
 export async function getNearMarkets(
   latitude: number,
   longitude: number,
@@ -655,6 +679,18 @@ export async function getNearMarkets(
 ): Promise<NearMarketResponse[]> {
   const { data } = await api.get<NearMarketResponse[]>('/api/v1/customer/near-markets', {
     params: { latitude, longitude, radius_km: radiusKm },
+  });
+  return data;
+}
+
+export async function getNearbyItems(
+  latitude: number,
+  longitude: number,
+  radiusKm: number = 15.0,
+  limit: number = 12,
+): Promise<NearbyItemResponse[]> {
+  const { data } = await api.get<NearbyItemResponse[]>('/api/v1/customer/nearby-items', {
+    params: { latitude, longitude, radius_km: radiusKm, limit },
   });
   return data;
 }

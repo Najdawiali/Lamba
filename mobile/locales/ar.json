@@ -167,6 +167,22 @@
     "error_title": "حدث خطأ في البحث",
     "error_subtitle": "تحقق من اتصالك بالإنترنت"
   },
+  "filter": {
+    "title": "فلاتر البحث",
+    "distance": "أقصى مسافة (كم)",
+    "availability": "التوفر",
+    "available_only": "المتوفر فقط",
+    "price_range": "نطاق السعر",
+    "price_min": "الأقل",
+    "price_max": "الأعلى",
+    "listing_type": "النوع",
+    "all": "الكل",
+    "products": "منتجات",
+    "services": "خدمات",
+    "category": "القسم",
+    "apply": "تطبيق الفلاتر",
+    "reset": "إعادة ضبط"
+  },
   "map": {
     "search_area": "ابحث في هذه المنطقة",
     "nearby_shops": "المتاجر القريبة",
@@ -626,10 +642,12 @@
     "search": "بحث",
     "filter": "تصفية",
     "jod": "دينار",
-    "usd": "دولار"
+    "usd": "دولار",
+    "very_close": "قريب جداً"
   },
   "explore": {
     "nearby_markets": "متاجر قريبة",
+    "nearby_products": "منتجات قريبة",
     "hot_deals": "عروض مميزة",
     "recently_viewed": "شوهد مؤخراً",
     "enable_location": "فعّل الموقع للاستكشاف",
@@ -637,7 +655,16 @@
     "enable_location_btn": "تفعيل الموقع",
     "title": "لمبة",
     "search_placeholder": "ابحث عن منتجات قريبة...",
-    "no_items": "لا توجد عناصر"
+    "no_items": "لا توجد عناصر",
+    "good_morning": "صباح الخير",
+    "good_afternoon": "مساء الخير",
+    "good_evening": "مساء النور",
+    "what_looking_for": "شو عم تدور عليه اليوم؟",
+    "quick_veg": "خضار",
+    "quick_meat": "لحوم",
+    "quick_cleaning": "تنظيف",
+    "quick_services": "خدمات",
+    "quick_drinks": "مشروبات"
   },
   "welcome": {
     "title": "لمبة",

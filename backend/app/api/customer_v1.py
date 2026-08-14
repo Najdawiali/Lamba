@@ -30,6 +30,7 @@ from app.schemas.customer_v1 import (
     NearMarketResponse,
     CustomerItemResponse,
     MarketCatalogResponse,
+    NearbyItemResponse,
     RatingCreate,
     RatingResponse,
     RatingDetailResponse,
@@ -119,6 +120,8 @@ async def get_near_markets(
                     id=market.id,
                     merchant_id=market.merchant_id,
                     name=market.name,
+                    name_ar=getattr(market, "name_ar", None),
+                    name_en=getattr(market, "name_en", None),
                     address=market.address,
                     latitude=float(lat),
                     longitude=float(lng),
@@ -141,6 +144,85 @@ async def get_near_markets(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while executing the proximity search.",
         )
+
+
+# ── GET /nearby-items ──────────────────────────────────────────
+@router.get("/nearby-items", response_model=List[NearbyItemResponse])
+async def get_nearby_items(
+    latitude: float = Query(..., ge=-90.0, le=90.0),
+    longitude: float = Query(..., ge=-180.0, le=180.0),
+    radius_km: float = Query(15.0, ge=0.1, le=100.0),
+    limit: int = Query(12, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Retrieve featured in-stock items from nearby stores for the explore feed.
+    """
+    try:
+        user_point = func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326)
+        geog_point = user_point.cast(Geography)
+        geog_location = Market.location.cast(Geography)
+        radius_meters = radius_km * 1000.0
+
+        stmt = (
+            select(
+                MarketItem,
+                GlobalItem,
+                Market,
+            )
+            .join(GlobalItem, MarketItem.item_id == GlobalItem.id)
+            .join(Market, MarketItem.market_id == Market.id)
+            .options(
+                selectinload(GlobalItem.images),
+                selectinload(GlobalItem.category_rel),
+            )
+            .where(
+                MarketItem.status == True,
+                MarketItem.stock_count > 0,
+                func.ST_DWithin(geog_location, geog_point, radius_meters),
+            )
+            .order_by(MarketItem.updated_at.desc())
+            .limit(limit)
+        )
+
+        result = await db.execute(stmt)
+        rows = result.all()
+
+        items = []
+        for market_item, global_item, market in rows:
+            img_url = None
+            if global_item.images:
+                img_url = global_item.images[0].image_url
+
+            cat_rel = getattr(global_item, "category_rel", None)
+            cat_name = cat_rel.name if cat_rel else global_item.category
+            cat_name_ar = getattr(cat_rel, "name_ar", None) if cat_rel else None
+            cat_name_en = getattr(cat_rel, "name_en", None) if cat_rel else None
+
+            items.append(
+                NearbyItemResponse(
+                    id=global_item.id,
+                    market_item_id=market_item.id,
+                    name=global_item.name,
+                    name_ar=global_item.name_ar,
+                    name_en=global_item.name_en,
+                    price=float(market_item.price or 0.0),
+                    market_id=market.id,
+                    market_name=market.name,
+                    market_name_ar=getattr(market, "name_ar", None),
+                    market_name_en=getattr(market, "name_en", None),
+                    category_name=cat_name,
+                    category_name_ar=cat_name_ar,
+                    category_name_en=cat_name_en,
+                    image_url=img_url,
+                    is_in_stock=bool(market_item.stock_count > 0),
+                )
+            )
+
+        return items
+    except Exception as e:
+        logger.error(f"Failed to fetch nearby items: {e}", exc_info=True)
+        return []
 
 
 # ── GET /market/{market_id}/items ───────────────────────────────
@@ -251,13 +333,39 @@ async def get_categories_tree(
         else:
             by_parent[cat.parent_category_id].append(cat)
             
+    category_ar_map = {
+        "Food & Beverages": "الأغذية والمشروبات",
+        "Home & Personal Care": "العناية المنزلية والشخصية",
+        "Electronics & Tech": "الإلكترونيات والتقنية",
+        "Home & Kitchen": "المنزل والمطبخ",
+        "Services": "الخدمات",
+        "Fruits & Vegetables": "الخضار والفواكه",
+        "Cooking Essentials": "مستلزمات الطبخ",
+        "Dairy & Eggs": "الألبان والبيض",
+        "Meat & Poultry": "اللحوم والدواجن",
+        "Beverages": "المشروبات",
+        "Snacks": "المأكولات الخفيفة",
+        "Bakery": "المخبوزات",
+        "Frozen Food": "الأطعمة المجمدة",
+        "Cleaning & Detergents": "التنظيف المنزلي",
+        "Beauty & Personal Care": "العناية الشخصية",
+        "Electronics": "الإلكترونيات",
+        "Mobiles & Tech": "الهواتف والتقنية",
+        "Cookware & Kitchenware": "أدوات المطبخ",
+        "Beauty & Personal Care Services": "خدمات التجميل والعناية الشخصية",
+        "Vehicle Maintenance & Care": "صيانة وتغسيل السيارات",
+        "Home & Maintenance Services": "خدمات وصيانة المنازل",
+        "Education & Tutoring": "التعليم والدروس الخصوصية",
+    }
+
     def format_cat(cat: Category):
         subs = by_parent[cat.id]
+        name_ar = getattr(cat, "name_ar", None) or category_ar_map.get(cat.name, cat.name)
         return {
             "id": cat.id,
             "name": cat.name,
-            "name_ar": getattr(cat, "name_ar", None),
-            "name_en": getattr(cat, "name_en", None),
+            "name_ar": name_ar,
+            "name_en": getattr(cat, "name_en", None) or cat.name,
             "listing_type": getattr(cat, "listing_type", None),
             "subcategories": [format_cat(s) for s in subs]
         }

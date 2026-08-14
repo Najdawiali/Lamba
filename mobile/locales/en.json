@@ -167,8 +167,25 @@
     "error_title": "Search Error",
     "error_subtitle": "Check your internet connection"
   },
+  "filter": {
+    "title": "Search Filters",
+    "distance": "Max Distance (km)",
+    "availability": "Availability",
+    "available_only": "In Stock Only",
+    "price_range": "Price Range",
+    "price_min": "Min",
+    "price_max": "Max",
+    "listing_type": "Type",
+    "all": "All",
+    "products": "Products",
+    "services": "Services",
+    "category": "Category",
+    "apply": "Apply Filters",
+    "reset": "Reset"
+  },
   "explore": {
     "nearby_markets": "Nearby Markets",
+    "nearby_products": "Products Near You",
     "hot_deals": "Hot Deals",
     "recently_viewed": "Recently Viewed",
     "enable_location": "Enable location to explore",
@@ -176,7 +193,16 @@
     "enable_location_btn": "Enable Location",
     "title": "Lamba",
     "search_placeholder": "Search products nearby...",
-    "no_items": "No items available"
+    "no_items": "No items available",
+    "good_morning": "Good morning",
+    "good_afternoon": "Good afternoon",
+    "good_evening": "Good evening",
+    "what_looking_for": "What are you looking for today?",
+    "quick_veg": "Vegetables",
+    "quick_meat": "Meat",
+    "quick_cleaning": "Cleaning",
+    "quick_services": "Services",
+    "quick_drinks": "Beverages"
   },
   "map": {
     "search_area": "Search this area",
@@ -637,7 +663,8 @@
     "search": "Search",
     "filter": "Filter",
     "jod": "JOD",
-    "usd": "USD"
+    "usd": "USD",
+    "very_close": "Very close"
   },
   "welcome": {
     "title": "Lamba",

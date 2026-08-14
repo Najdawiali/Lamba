@@ -52,6 +52,7 @@ from app.api.auth import get_optional_current_user
 from app.models.market import Market
 from app.models.global_item import GlobalItem
 from app.models.market_item import MarketItem
+from app.models.category import Category
 from app.models.user import User
 from app.models.search_alert import SearchAlert
 from app.schemas.search_v1 import (
@@ -167,7 +168,13 @@ async def _retrieve_fused_candidates(
                     Market.business_nature.ilike(f"%{filters.business_nature}%")
                 )
             if filters.category_id:
-                stmt = stmt.where(GlobalItem.category_id == filters.category_id)
+                cat_ids_subquery = select(Category.id).where(
+                    or_(
+                        Category.id == filters.category_id,
+                        Category.parent_category_id == filters.category_id,
+                    )
+                )
+                stmt = stmt.where(GlobalItem.category_id.in_(cat_ids_subquery))
             if filters.price_min is not None:
                 stmt = stmt.where(MarketItem.price >= filters.price_min)
             if filters.price_max is not None:

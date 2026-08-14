@@ -10,6 +10,8 @@ class NearMarketResponse(BaseModel):
     id: uuid.UUID
     merchant_id: uuid.UUID
     name: str
+    name_ar: Optional[str] = None
+    name_en: Optional[str] = None
     address: str
     latitude: float
     longitude: float
@@ -45,6 +47,26 @@ class CustomerItemResponse(BaseModel):
 
 # Schema for categorized list response, mapping category names to lists of items
 MarketCatalogResponse = Dict[str, List[CustomerItemResponse]]
+
+
+class NearbyItemResponse(BaseModel):
+    id: uuid.UUID  # Catalog item ID (GlobalItem.id)
+    market_item_id: uuid.UUID  # MarketItem.id
+    name: str
+    name_ar: Optional[str] = None
+    name_en: Optional[str] = None
+    price: float
+    market_id: uuid.UUID
+    market_name: str
+    market_name_ar: Optional[str] = None
+    market_name_en: Optional[str] = None
+    category_name: Optional[str] = None
+    category_name_ar: Optional[str] = None
+    category_name_en: Optional[str] = None
+    image_url: Optional[str] = None
+    is_in_stock: bool = True
+
+    model_config = {"from_attributes": True}
 
 
 # ── Rating Schemas ──────────────────────────────────────────────
