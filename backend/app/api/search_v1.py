@@ -42,7 +42,7 @@ from app.rate_limit import limiter
 from geoalchemy2.elements import WKTElement
 from geoalchemy2 import Geometry, Geography
 import sqlalchemy as sa
-from sqlalchemy import select, func, literal
+from sqlalchemy import select, func, literal, or_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -185,7 +185,7 @@ async def _retrieve_fused_candidates(
         else:
             stmt = stmt.where(func.ST_DWithin(geog_location, geog_point, radius_meters))
 
-        # ── Attribute filters — whitelisted JSONB containment ──────
+        # ── Attribute filters — whitelisted JSONB containment + name fallback ──────
         _ALLOWED_ATTR_KEYS = {
             "type", "color", "flavor", "origin", "organic", "size",
             "brand", "temperature", "dietary", "material", "gender",
@@ -201,12 +201,39 @@ async def _retrieve_fused_candidates(
                             sa.Boolean,
                         ) == attr_value
                     )
-                else:
-                    stmt = stmt.where(
-                        GlobalItem.attributes[attr_key].as_string().ilike(
-                            f"%{attr_value}%"
-                        )
-                    )
+                elif attr_key == "brand" and isinstance(attr_value, str):
+                    brand_str = attr_value.strip()
+                    brand_variants = [brand_str]
+                    if brand_str.startswith("ال") and len(brand_str) > 2:
+                        brand_variants.append(brand_str[2:])
+                    elif not brand_str.startswith("ال"):
+                        brand_variants.append("ال" + brand_str)
+
+                    brand_clauses = []
+                    for bv in brand_variants:
+                        brand_clauses.extend([
+                            GlobalItem.attributes["brand"].as_string().ilike(f"%{bv}%"),
+                            GlobalItem.name.ilike(f"%{bv}%"),
+                            GlobalItem.name_ar.ilike(f"%{bv}%"),
+                            GlobalItem.search_terms.ilike(f"%{bv}%"),
+                        ])
+                    stmt = stmt.where(or_(*brand_clauses))
+                elif isinstance(attr_value, str):
+                    val_str = attr_value.strip()
+                    val_variants = [val_str]
+                    if val_str.startswith("ال") and len(val_str) > 2:
+                        val_variants.append(val_str[2:])
+                    elif not val_str.startswith("ال"):
+                        val_variants.append("ال" + val_str)
+
+                    attr_clauses = []
+                    for vv in val_variants:
+                        attr_clauses.extend([
+                            GlobalItem.attributes[attr_key].as_string().ilike(f"%{vv}%"),
+                            GlobalItem.name.ilike(f"%{vv}%"),
+                            GlobalItem.name_ar.ilike(f"%{vv}%"),
+                        ])
+                    stmt = stmt.where(or_(*attr_clauses))
 
         return stmt
 
