@@ -49,6 +49,10 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
         await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(text("ALTER TABLE markets ADD COLUMN IF NOT EXISTS name_ar TEXT;"))
+        await conn.execute(text("ALTER TABLE markets ADD COLUMN IF NOT EXISTS name_en TEXT;"))
+        await conn.execute(text("ALTER TABLE markets ADD COLUMN IF NOT EXISTS address_ar TEXT;"))
+        await conn.execute(text("ALTER TABLE markets ADD COLUMN IF NOT EXISTS address_en TEXT;"))
     logger.info("Database tables ensured")
 
     # 2. Load Qwen3 text encoder

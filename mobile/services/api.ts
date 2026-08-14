@@ -624,6 +624,8 @@ export interface NearMarketResponse {
   name_ar?: string | null;
   name_en?: string | null;
   address: string;
+  address_ar?: string | null;
+  address_en?: string | null;
   latitude: number;
   longitude: number;
   distance_km: number;
@@ -643,6 +645,8 @@ export interface CustomerItemResponse {
   name_ar?: string | null;
   name_en?: string | null;
   description: string | null;
+  description_ar?: string | null;
+  description_en?: string | null;
   category: string;
   category_name_ar?: string | null;
   category_name_en?: string | null;
@@ -700,6 +704,11 @@ export async function getMarketCatalog(marketId: string): Promise<MarketCatalogR
   return data;
 }
 
+export async function getMarketDetails(marketId: string): Promise<ShopDetails> {
+  const { data } = await api.get<ShopDetails>(`/api/v1/customer/market/${marketId}`);
+  return data;
+}
+
 // ── V1 Ratings API ──────────────────────────────────────────────
 export interface RatingCreateRequest {
   market_id: string;
@@ -743,7 +752,11 @@ export async function getMarketRatings(marketId: string): Promise<MarketRatingSu
 export interface ShopDetails {
   id: string;
   name: string;
+  name_ar?: string | null;
+  name_en?: string | null;
   address: string;
+  address_ar?: string | null;
+  address_en?: string | null;
   latitude: number;
   longitude: number;
   phone: string | null;
@@ -764,6 +777,8 @@ export interface MarketItemDetailsResponse {
   name_ar?: string | null;
   name_en?: string | null;
   description: string | null;
+  description_ar?: string | null;
+  description_en?: string | null;
   category: string;
   category_name_ar?: string | null;
   category_name_en?: string | null;

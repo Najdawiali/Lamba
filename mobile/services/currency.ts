@@ -12,6 +12,7 @@
 
 import * as Localization from 'expo-localization';
 import * as SecureStore from 'expo-secure-store';
+import { t } from './i18n';
 
 const CURRENCY_KEY = 'lamba_currency';
 
@@ -104,15 +105,26 @@ const EXCHANGE_RATES_FROM_JOD: Record<string, number> = {
 };
 
 /**
+ * Get the localized currency symbol/code for display.
+ */
+export const getCurrencySymbol = (code?: string): string => {
+  const c = (code || _currentCurrency).toUpperCase();
+  if (c === 'JOD') return t('common.jod', 'د.أ');
+  if (c === 'SAR') return t('common.sar', 'ر.س');
+  if (c === 'USD') return t('common.usd', 'USD');
+  return c;
+};
+
+/**
  * Format a price with currency code and perform exchange rate conversion.
  * Base prices are assumed to be in JOD.
- * Returns: "14.00 JOD" or converted equivalent e.g., "19.74 USD"
+ * Returns: "14.00 د.أ" or converted equivalent e.g., "19.74 USD"
  */
 export const formatPrice = (amount: number | string | null | undefined): string => {
-  if (amount === null || amount === undefined || amount === '') return `0.00 ${_currentCurrency}`;
+  if (amount === null || amount === undefined || amount === '') return `0.00 ${getCurrencySymbol()}`;
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-  if (isNaN(num)) return `0.00 ${_currentCurrency}`;
-  if (!isFinite(num)) return `0.00 ${_currentCurrency}`; // guards Infinity from divide-by-0 callers
+  if (isNaN(num)) return `0.00 ${getCurrencySymbol()}`;
+  if (!isFinite(num)) return `0.00 ${getCurrencySymbol()}`; // guards Infinity from divide-by-0 callers
 
   const rate = EXCHANGE_RATES_FROM_JOD[_currentCurrency];
   if (rate === undefined) {
@@ -121,7 +133,7 @@ export const formatPrice = (amount: number | string | null | undefined): string 
   }
   const convertedAmount = num * (rate ?? 1);
 
-  return `${convertedAmount.toFixed(2)} ${_currentCurrency}`;
+  return `${convertedAmount.toFixed(2)} ${getCurrencySymbol()}`;
 };
 
 /**

@@ -13,6 +13,8 @@ class NearMarketResponse(BaseModel):
     name_ar: Optional[str] = None
     name_en: Optional[str] = None
     address: str
+    address_ar: Optional[str] = None
+    address_en: Optional[str] = None
     latitude: float
     longitude: float
     distance_km: float
@@ -34,6 +36,8 @@ class CustomerItemResponse(BaseModel):
     name_ar: Optional[str] = None
     name_en: Optional[str] = None
     description: Optional[str] = None
+    description_ar: Optional[str] = None
+    description_en: Optional[str] = None
     category: Optional[str] = None
     category_name_ar: Optional[str] = None
     category_name_en: Optional[str] = None
@@ -127,7 +131,11 @@ class SearchAlertResponse(BaseModel):
 class ShopDetails(BaseModel):
     id: uuid.UUID
     name: str
+    name_ar: Optional[str] = None
+    name_en: Optional[str] = None
     address: str
+    address_ar: Optional[str] = None
+    address_en: Optional[str] = None
     latitude: float
     longitude: float
     phone: Optional[str] = None
@@ -150,6 +158,8 @@ class MarketItemDetailsResponse(BaseModel):
     name_ar: Optional[str] = None
     name_en: Optional[str] = None
     description: Optional[str] = None
+    description_ar: Optional[str] = None
+    description_en: Optional[str] = None
     category: str
     category_name_ar: Optional[str] = None
     category_name_en: Optional[str] = None

@@ -6,7 +6,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Image, TouchableOpacity,
-  ActivityIndicator, useWindowDimensions, Alert, Share, Modal, TextInput
+  ActivityIndicator, useWindowDimensions, Alert, Share, Linking, Platform
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,16 +17,31 @@ import {
   getMarketItemDetails,
   MarketItemDetailsResponse, isFavorite, addFavorite, removeFavorite
 } from '../../../services/api';
-import { t, i18n } from '../../../services/i18n';
-import { getCurrencyCode, formatPrice } from '../../../services/currency';
-import { resolveImageUrl, calculateDistanceMeters, roundDistance } from '../../../services/utils';
+import { t, isRTL } from '../../../services/i18n';
+import { formatPrice } from '../../../services/currency';
+import { resolveImageUrl } from '../../../services/utils';
+
+const openDirections = (latitude: number, longitude: number, storeName: string) => {
+  const encodedName = encodeURIComponent(storeName);
+  const url = Platform.select({
+    android: `google.navigation:q=${latitude},${longitude}&label=${encodedName}`,
+    ios: `maps://app?daddr=${latitude},${longitude}&q=${encodedName}`,
+    default: `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}&destination_place_id=${encodedName}`,
+  });
+  if (url) {
+    Linking.openURL(url).catch((err) => {
+      console.warn('Could not open maps application, falling back to web URL:', err);
+      Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`);
+    });
+  }
+};
 
 export default function ProductDetailScreen() {
   const Colors = useThemeColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { width: SCREEN_WIDTH } = useWindowDimensions();
-  const isAr = i18n.locale.includes('ar');
+  const isAr = isRTL();
   
   const [product, setProduct] = useState<MarketItemDetailsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -78,11 +93,11 @@ export default function ProductDetailScreen() {
       if (isFav) {
         await removeFavorite(id);
         setIsFav(false);
-        if (product) Alert.alert(t('favorites.removed'), `"${product.name}" ` + t('favorites.removed_desc'));
+        if (product) Alert.alert(t('favorites.removed', 'Removed from favorites'), `"${product.name}" ` + t('favorites.removed_desc', 'has been removed.'));
       } else {
         await addFavorite(id);
         setIsFav(true);
-        if (product) Alert.alert(t('favorites.added'), `"${product.name}" ` + t('favorites.added_desc'));
+        if (product) Alert.alert(t('favorites.added', 'Added to favorites'), `"${product.name}" ` + t('favorites.added_desc', 'has been added.'));
       }
     } catch (err) {
       console.error('Failed to update favorites:', err);
@@ -93,8 +108,10 @@ export default function ProductDetailScreen() {
     if (!product) return;
     try {
       const priceLabel = product.price != null && product.price > 0 ? formatPrice(product.price) : '';
+      const productNameShared = isAr ? (product.name_ar || product.name) : (product.name_en || product.name);
+      const shopNameShared = isAr ? (product.shop.name_ar || product.shop.name) : (product.shop.name_en || product.shop.name);
       await Share.share({
-        message: t('product.share_text', { name: product.name, shop: product.shop.name, price: priceLabel }),
+        message: t('product.share_text', { name: productNameShared, shop: shopNameShared, price: priceLabel }),
       });
     } catch (err) {
       console.error(err);
@@ -146,11 +163,28 @@ export default function ProductDetailScreen() {
     readMoreText: { ...Typography.bodySmall, color: Colors.secondary, fontWeight: '700', marginTop: Spacing.xs },
 
     shopCard: { backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.xl, padding: Spacing.lg, borderWidth: 1, borderColor: Colors.border, ...Shadows.small },
-    shopMetaRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: Spacing.sm },
+    shopMetaRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: Spacing.md },
     shopName: { ...Typography.h3, color: Colors.textPrimary },
     shopAddress: { ...Typography.bodySmall, color: Colors.textMuted, marginTop: 2 },
 
-    viewShopLink: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: Spacing.lg, marginLeft: 32 },
+    directionsBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: Colors.primary,
+      borderRadius: BorderRadius.md,
+      paddingVertical: 12,
+      paddingHorizontal: Spacing.xl,
+      marginBottom: Spacing.md,
+      gap: 8,
+      ...Shadows.small,
+    },
+    directionsBtnText: {
+      ...Typography.button,
+      color: Colors.textOnPrimary,
+    },
+
+    viewShopLink: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: Spacing.lg, marginLeft: 4 },
     viewShopText: { ...Typography.bodySmall, color: Colors.secondary, fontWeight: '700' },
 
     collapsibleTrigger: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: Spacing.md, borderTopWidth: 1, borderTopColor: Colors.border },
@@ -181,6 +215,12 @@ export default function ProductDetailScreen() {
       </View>
     );
   }
+
+  const productName = isAr ? (product.name_ar || product.name) : (product.name_en || product.name);
+  const productDescription = isAr ? (product.description_ar || product.description) : (product.description_en || product.description);
+  const shopDisplayName = isAr ? (product.shop.name_ar || product.shop.name) : (product.shop.name_en || product.shop.name);
+  const shopDisplayAddress = isAr ? (product.shop.address_ar || product.shop.address) : (product.shop.address_en || product.shop.address);
+  const categoryDisplayName = isAr ? (product.category_name_ar || product.category) : (product.category_name_en || product.category);
 
   return (
     <View style={styles.container}>
@@ -224,7 +264,7 @@ export default function ProductDetailScreen() {
           {/* Top Actions Overlay */}
           <SafeAreaView style={styles.heroActionsOverlay} edges={['top']}>
             <TouchableOpacity onPress={() => router.back()} style={styles.overlayIconBtn}>
-              <Ionicons name="arrow-back" size={20} color={Colors.textPrimary} />
+              <Ionicons name={isAr ? "arrow-forward" : "arrow-back"} size={20} color={Colors.textPrimary} />
             </TouchableOpacity>
             <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
               <TouchableOpacity onPress={handleToggleFavorite} style={styles.overlayIconBtn}>
@@ -236,8 +276,7 @@ export default function ProductDetailScreen() {
             </View>
           </SafeAreaView>
 
-          {/* Stock availability badge — coarse levels only, no exact counts, so
-              competitors can't read merchant inventory levels from the customer app. */}
+          {/* Stock availability badge */}
           <View style={[styles.stockBadge, { backgroundColor: product.in_stock ? Colors.success : Colors.error }]}>
             <Text style={styles.stockText}>
               {product.in_stock
@@ -249,37 +288,33 @@ export default function ProductDetailScreen() {
 
         {/* Info Area */}
         <View style={styles.infoSection}>
-          <Text style={styles.productName}>
-            {i18n.locale?.startsWith('ar') ? (product.name_ar || product.name) : (product.name_en || product.name)}
-          </Text>
+          <Text style={styles.productName}>{productName}</Text>
           {product.price != null && product.price > 0 ? (
             <Text style={styles.price}>
               {formatPrice(product.price)}
             </Text>
           ) : (
-            <Text style={styles.priceFree}>{t('product.price_request')}</Text>
+            <Text style={styles.priceFree}>{t('product.price_request', 'Price on request')}</Text>
           )}
-          {Boolean(product.category) ? (
+          {Boolean(categoryDisplayName) ? (
             <View style={styles.categoryBadge}>
               <Text style={styles.categoryText}>
-                {i18n.locale?.startsWith('ar')
-                  ? (product.category_name_ar || product.category)
-                  : (product.category_name_en || product.category)}
+                {categoryDisplayName}
               </Text>
             </View>
           ) : null}
         </View>
 
         {/* Description */}
-        {Boolean(product.description) ? (
+        {Boolean(productDescription) ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>{t('product.description', 'Description')}</Text>
             <Text style={styles.description} numberOfLines={descExpanded ? undefined : 3}>
-              {product.description}
+              {productDescription}
             </Text>
-            {Boolean(product.description && product.description.length > 100) ? (
+            {Boolean(productDescription && productDescription.length > 100) ? (
               <TouchableOpacity onPress={() => setDescExpanded(!descExpanded)}>
-                <Text style={styles.readMoreText}>{descExpanded ? 'Show less' : t('product.read_more', 'Read more')}</Text>
+                <Text style={styles.readMoreText}>{descExpanded ? t('common.show_less', 'Show less') : t('product.read_more', 'Read more')}</Text>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -292,14 +327,25 @@ export default function ProductDetailScreen() {
             <View style={styles.shopMetaRow}>
               <Ionicons name="storefront-outline" size={24} color={product.shop.is_currently_open ? Colors.success : Colors.error} />
               <View style={{ flex: 1, marginLeft: Spacing.sm }}>
-                <Text style={styles.shopName}>{product.shop.name}</Text>
-                <Text style={styles.shopAddress}>{product.shop.address}</Text>
+                <Text style={styles.shopName}>{shopDisplayName}</Text>
+                <Text style={styles.shopAddress}>{shopDisplayAddress}</Text>
               </View>
             </View>
 
+            <TouchableOpacity
+              onPress={() => openDirections(product.shop.latitude, product.shop.longitude, shopDisplayName)}
+              style={styles.directionsBtn}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="navigate-outline" size={18} color={Colors.textOnPrimary} />
+              <Text style={styles.directionsBtnText}>
+                {t('market.directions', 'Directions')}
+              </Text>
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.viewShopLink} onPress={() => router.push(`/(customer)/shop/${product.shop.id}`)}>
               <Text style={styles.viewShopText}>{t('product.view_full_shop', 'View Full Shop')}</Text>
-              <Ionicons name="arrow-forward" size={16} color={Colors.secondary} />
+              <Ionicons name={isAr ? "arrow-back" : "arrow-forward"} size={16} color={Colors.secondary} />
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.collapsibleTrigger} onPress={() => setShowHours(!showHours)}>

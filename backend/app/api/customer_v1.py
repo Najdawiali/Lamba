@@ -38,6 +38,7 @@ from app.schemas.customer_v1 import (
     CategoryNodeResponse,
     SearchAlertResponse,
     MarketItemDetailsResponse,
+    ShopDetails,
     SearchHistoryEntry,
     SearchHistoryCreate,
 )
@@ -123,6 +124,8 @@ async def get_near_markets(
                     name_ar=getattr(market, "name_ar", None),
                     name_en=getattr(market, "name_en", None),
                     address=market.address,
+                    address_ar=getattr(market, "address_ar", None),
+                    address_en=getattr(market, "address_en", None),
                     latitude=float(lat),
                     longitude=float(lng),
                     distance_km=round(float(dist_km), 2),
@@ -225,6 +228,89 @@ async def get_nearby_items(
         return []
 
 
+# ── GET /market/{market_id} ──────────────────────────────────────
+@router.get("/market/{market_id}", response_model=ShopDetails)
+async def get_market_details(
+    market_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Retrieve single shop location information, operating hours, coordinates, and ratings.
+    """
+    market_exists = await db.execute(select(Market).where(Market.id == market_id))
+    market = market_exists.scalar_one_or_none()
+    if not market:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Shop location not found.",
+        )
+
+    # Run dynamic schedule update to ensure freshness
+    from app.utils.schedule import check_and_update_markets_schedule
+    await check_and_update_markets_schedule(db, [market])
+
+    coords_res = await db.execute(
+        select(
+            func.ST_Y(Market.location.cast(Geometry)).label("lat"),
+            func.ST_X(Market.location.cast(Geometry)).label("lng")
+        )
+        .where(Market.id == market.id)
+    )
+    coords_row = coords_res.first()
+    lat = float(coords_row[0]) if coords_row else 0.0
+    lng = float(coords_row[1]) if coords_row else 0.0
+
+    ratings_agg_res = await db.execute(
+        select(
+            func.coalesce(func.avg(Rating.score), 0.0),
+            func.count(Rating.id)
+        ).where(Rating.market_id == market.id)
+    )
+    avg_score, total_count = ratings_agg_res.first() or (0.0, 0)
+
+    formatted_employees = []
+    if market.employee_directory:
+        for emp in market.employee_directory:
+            if isinstance(emp, dict):
+                name = emp.get("name") or emp.get("Name") or ""
+                role = emp.get("role") or emp.get("Role") or ""
+                contact = emp.get("contact") or emp.get("Contact") or ""
+                parts = []
+                if name:
+                    parts.append(name)
+                if role:
+                    parts.append(f"({role})")
+                if contact:
+                    parts.append(f"- {contact}")
+                if parts:
+                    formatted_employees.append(" ".join(parts).strip())
+            elif isinstance(emp, str):
+                formatted_employees.append(emp)
+            else:
+                formatted_employees.append(str(emp))
+
+    return ShopDetails(
+        id=market.id,
+        name=market.name,
+        name_ar=getattr(market, "name_ar", None),
+        name_en=getattr(market, "name_en", None),
+        address=market.address,
+        address_ar=getattr(market, "address_ar", None),
+        address_en=getattr(market, "address_en", None),
+        latitude=lat,
+        longitude=lng,
+        phone=market.phone,
+        business_nature=market.business_nature or "Grocery",
+        operating_hours=market.operating_hours,
+        employee_directory=formatted_employees if formatted_employees else None,
+        is_currently_open=market.is_currently_open,
+        is_manual_override=market.is_manual_override,
+        override_set_at=market.override_set_at,
+        average_rating=round(float(avg_score), 1),
+        total_reviews=int(total_count),
+    )
+
+
 # ── GET /market/{market_id}/items ───────────────────────────────
 @router.get("/market/{market_id}/items", response_model=MarketCatalogResponse)
 async def get_market_catalog(
@@ -287,6 +373,8 @@ async def get_market_catalog(
             name_ar=getattr(gi, "name_ar", None),
             name_en=getattr(gi, "name_en", None),
             description=gi.description,
+            description_ar=getattr(gi, "description_ar", None),
+            description_en=getattr(gi, "description_en", None),
             category=category_name,
             category_name_ar=cat_ar,
             category_name_en=cat_en,
@@ -496,6 +584,8 @@ async def get_market_item_details(
         "name_ar": getattr(gi, "name_ar", None),
         "name_en": getattr(gi, "name_en", None),
         "description": gi.description,
+        "description_ar": getattr(gi, "description_ar", None),
+        "description_en": getattr(gi, "description_en", None),
         "category": cat_name or "Grocery",
         "category_name_ar": cat_ar,
         "category_name_en": cat_en,
@@ -507,7 +597,11 @@ async def get_market_item_details(
         "shop": {
             "id": str(market.id),
             "name": market.name,
+            "name_ar": getattr(market, "name_ar", None),
+            "name_en": getattr(market, "name_en", None),
             "address": market.address,
+            "address_ar": getattr(market, "address_ar", None),
+            "address_en": getattr(market, "address_en", None),
             "latitude": lat,
             "longitude": lng,
             "phone": market.phone,

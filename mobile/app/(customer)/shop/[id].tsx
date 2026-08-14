@@ -1,18 +1,33 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, Dimensions, Linking, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
 import { useThemeColors } from '../../../context/ThemeContext';
-import { getMarketCatalog, MarketCatalogResponse, CustomerItemResponse } from '../../../services/api';
-import { t, i18n } from '../../../services/i18n';
-import { getCurrencyCode } from '../../../services/currency';
+import { getMarketCatalog, getMarketDetails, MarketCatalogResponse, CustomerItemResponse, ShopDetails } from '../../../services/api';
+import { t, isRTL } from '../../../services/i18n';
+import { formatPrice } from '../../../services/currency';
 import { resolveImageUrl } from '../../../services/utils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COLUMN_SPACING = Spacing.md;
 const CARD_WIDTH = (SCREEN_WIDTH - Spacing.xl * 2 - COLUMN_SPACING) / 2;
+
+const openDirections = (latitude: number, longitude: number, storeName: string) => {
+  const encodedName = encodeURIComponent(storeName);
+  const url = Platform.select({
+    android: `google.navigation:q=${latitude},${longitude}&label=${encodedName}`,
+    ios: `maps://app?daddr=${latitude},${longitude}&q=${encodedName}`,
+    default: `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}&destination_place_id=${encodedName}`,
+  });
+  if (url) {
+    Linking.openURL(url).catch((err) => {
+      console.warn('Could not open maps application, falling back to web URL:', err);
+      Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`);
+    });
+  }
+};
 
 export default function ShopCatalogScreen() {
   const Colors = useThemeColors();
@@ -20,6 +35,7 @@ export default function ShopCatalogScreen() {
   const router = useRouter();
   
   const [catalog, setCatalog] = useState<MarketCatalogResponse | null>(null);
+  const [market, setMarket] = useState<ShopDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,9 +50,13 @@ export default function ShopCatalogScreen() {
       }
       try {
         setLoading(true);
-        const data = await getMarketCatalog(id);
-        setCatalog(data);
-        const categories = Object.keys(data || {});
+        const [catalogData, marketData] = await Promise.all([
+          getMarketCatalog(id),
+          getMarketDetails(id).catch(() => null),
+        ]);
+        setCatalog(catalogData);
+        setMarket(marketData);
+        const categories = Object.keys(catalogData || {});
         if (categories.length > 0) {
           setActiveCategory(categories[0]);
         }
@@ -58,7 +78,60 @@ export default function ShopCatalogScreen() {
 
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border },
     headerBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.surfaceElevated, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
-    headerTitle: { ...Typography.h3, color: Colors.textPrimary },
+    headerTitle: { ...Typography.h3, color: Colors.textPrimary, flex: 1, textAlign: 'center', marginHorizontal: Spacing.sm },
+
+    storeBanner: {
+      padding: Spacing.lg,
+      backgroundColor: Colors.surfaceElevated,
+      borderBottomWidth: 1,
+      borderBottomColor: Colors.border,
+    },
+    storeHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.md,
+      marginBottom: Spacing.md,
+    },
+    storeIconWrapper: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: 'rgba(108, 99, 255, 0.1)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    storeNameText: {
+      ...Typography.h2,
+      color: Colors.textPrimary,
+      marginBottom: 2,
+    },
+    storeAddressText: {
+      ...Typography.caption,
+      color: Colors.textSecondary,
+      marginBottom: 4,
+    },
+    storeStatusRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    statusDot: { width: 6, height: 6, borderRadius: 3 },
+    statusText: { fontSize: 11, fontWeight: '700' },
+    directionsBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: Colors.primary,
+      borderRadius: BorderRadius.md,
+      paddingVertical: 10,
+      paddingHorizontal: Spacing.lg,
+      gap: 8,
+      ...Shadows.small,
+    },
+    directionsBtnText: {
+      ...Typography.button,
+      color: Colors.textOnPrimary,
+    },
 
     tabsContainer: { borderBottomWidth: 1, borderBottomColor: Colors.border },
     tabsScroll: { paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, gap: Spacing.sm },
@@ -81,7 +154,6 @@ export default function ShopCatalogScreen() {
 
     priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
     priceText: { ...Typography.h3, color: Colors.secondary },
-    currencyText: { fontSize: 10, fontWeight: '400', color: Colors.textMuted },
     priceFree: { ...Typography.caption, color: Colors.textSecondary },
 
     quickAddBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center' },
@@ -113,18 +185,51 @@ export default function ShopCatalogScreen() {
 
   const categories = Object.keys(catalog);
   const activeItems = activeCategory ? catalog[activeCategory] : [];
-  const isAr = i18n.locale?.startsWith('ar');
+  const isAr = isRTL();
+  const marketDisplayName = market ? (isAr ? (market.name_ar || market.name) : (market.name_en || market.name)) : '';
+  const marketDisplayAddress = market ? (isAr ? (market.address_ar || market.address) : (market.address_en || market.address)) : '';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
-          <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
+          <Ionicons name={isAr ? "arrow-forward" : "arrow-back"} size={22} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('product.view_full_shop', 'Shop Catalog')}</Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>{marketDisplayName || t('product.view_full_shop', 'Shop Catalog')}</Text>
         <View style={{ width: 40 }} />
       </View>
+
+      {/* Store Info Banner with Directions */}
+      {market ? (
+        <View style={styles.storeBanner}>
+          <View style={styles.storeHeaderRow}>
+            <View style={styles.storeIconWrapper}>
+              <Ionicons name="storefront" size={24} color={Colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.storeNameText} numberOfLines={1}>{marketDisplayName}</Text>
+              <Text style={styles.storeAddressText} numberOfLines={2}>{marketDisplayAddress}</Text>
+              <View style={styles.storeStatusRow}>
+                <View style={[styles.statusDot, { backgroundColor: market.is_currently_open ? Colors.success : Colors.error }]} />
+                <Text style={[styles.statusText, { color: market.is_currently_open ? Colors.success : Colors.error }]}>
+                  {market.is_currently_open ? t('common.open', 'Open') : t('common.closed', 'Closed')}
+                </Text>
+              </View>
+            </View>
+          </View>
+          <TouchableOpacity
+            onPress={() => openDirections(market.latitude, market.longitude, marketDisplayName)}
+            style={styles.directionsBtn}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="navigate-outline" size={18} color={Colors.textOnPrimary} />
+            <Text style={styles.directionsBtnText}>
+              {t('market.directions', 'Directions')}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {categories.length > 0 ? (
         <>
@@ -184,7 +289,7 @@ export default function ShopCatalogScreen() {
                     <View style={styles.priceRow}>
                       {item.price != null && item.price > 0 ? (
                         <Text style={styles.priceText}>
-                          {`${item.price.toFixed(2)} ${getCurrencyCode()}`}
+                          {formatPrice(item.price)}
                         </Text>
                       ) : (
                         <Text style={styles.priceFree}>{t('product.price_request', 'Price on request')}</Text>

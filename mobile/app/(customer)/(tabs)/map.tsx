@@ -16,10 +16,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { getNearMarkets, NearMarketResponse } from '../../../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
 import { useTheme } from '../../../context/ThemeContext';
-import { t } from '../../../services/i18n';
+import { t, isRTL } from '../../../services/i18n';
 import { getMapStyle, calculateDistanceMeters } from '../../../services/utils';
 
-const CARD_WIDTH = 280;
+const CARD_WIDTH = 290;
 const CARD_MARGIN = 10;
 const SNAP_INTERVAL = CARD_WIDTH + CARD_MARGIN * 2;
 
@@ -60,7 +60,7 @@ export default function MapScreen() {
   countBadge: { backgroundColor: Colors.primary, borderRadius: 10, width: 20, height: 20, justifyContent: 'center', alignItems: 'center' },
   countText: { fontSize: 10, fontWeight: '700', color: Colors.textOnPrimary },
 
-  recenterBtn: { position: 'absolute', bottom: 150, right: Spacing.xl, width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.surfaceElevated, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border, ...Shadows.medium, zIndex: 10 },
+  recenterBtn: { position: 'absolute', bottom: 165, right: Spacing.xl, width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.surfaceElevated, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border, ...Shadows.medium, zIndex: 10 },
   
   markerPin: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.surface, borderWidth: 2, borderColor: Colors.primary, justifyContent: 'center', alignItems: 'center', ...Shadows.small },
   markerPinSelected: { backgroundColor: Colors.primary, borderColor: Colors.textOnPrimary, ...Shadows.glow },
@@ -74,12 +74,12 @@ export default function MapScreen() {
   emptyTitle: { ...Typography.h3, color: Colors.textPrimary, marginTop: Spacing.md },
   emptyDesc: { ...Typography.bodySmall, color: Colors.textMuted, textAlign: 'center', marginTop: Spacing.sm },
 
-  carouselContainer: { position: 'absolute', bottom: 30, left: 0, right: 0, height: 110 },
-  cardContainer: { width: CARD_WIDTH, marginHorizontal: CARD_MARGIN, height: 100, backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.lg, padding: Spacing.md, flexDirection: 'row', alignItems: 'center', gap: Spacing.md, borderWidth: 1, borderColor: Colors.border, ...Shadows.medium },
-  cardIcon: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(108, 99, 255, 0.1)', justifyContent: 'center', alignItems: 'center' },
+  carouselContainer: { position: 'absolute', bottom: 24, left: 0, right: 0, minHeight: 125 },
+  cardContainer: { width: CARD_WIDTH, marginHorizontal: CARD_MARGIN, minHeight: 110, backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.lg, padding: Spacing.md, flexDirection: 'row', alignItems: 'center', gap: Spacing.md, borderWidth: 1, borderColor: Colors.border, ...Shadows.medium },
+  cardIcon: { width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(108, 99, 255, 0.1)', justifyContent: 'center', alignItems: 'center' },
   cardContent: { flex: 1, justifyContent: 'center' },
   cardTitle: { ...Typography.h3, color: Colors.textPrimary, marginBottom: 2 },
-  cardSubtitle: { ...Typography.caption, color: Colors.textSecondary, marginBottom: 8 },
+  cardSubtitle: { ...Typography.caption, color: Colors.textSecondary, marginBottom: 6, lineHeight: 15 },
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
@@ -300,32 +300,40 @@ export default function MapScreen() {
             scrollEventThrottle={16}
             contentContainerStyle={{ paddingHorizontal: (SCREEN_WIDTH - SNAP_INTERVAL) / 2 + CARD_MARGIN }}
             keyExtractor={item => item.id}
-            renderItem={({ item, index }) => (
-              <TouchableOpacity
-                activeOpacity={0.9}
-                onPress={() => router.push(`/(customer)/shop/${item.id}`)}
-                style={styles.cardContainer}
-              >
-                <View style={styles.cardIcon}>
-                  <Ionicons name="storefront" size={28} color={Colors.primary} />
-                </View>
-                <View style={styles.cardContent}>
-                  <Text style={styles.cardTitle} numberOfLines={1}>{item.name}</Text>
-                  <Text style={styles.cardSubtitle} numberOfLines={1}>{item.address}</Text>
-                  <View style={styles.cardFooter}>
-                    <View style={styles.statusBadge}>
-                      <View style={[styles.statusDot, { backgroundColor: item.is_currently_open ? Colors.success : Colors.error }]} />
-                      <Text style={[styles.statusText, { color: item.is_currently_open ? Colors.success : Colors.error }]}>
-                        {item.is_currently_open ? t('common.open', 'Open') : t('common.closed', 'Closed')}
-                      </Text>
-                    </View>
-                    <Text style={styles.distanceText}>
-                      {typeof item.distance_km === 'number' ? `${item.distance_km.toFixed(1)} ${t('common.km', 'km')}` : `${item.distance_km || 0} ${t('common.km', 'km')}`}
-                    </Text>
+            renderItem={({ item, index }) => {
+              const isAr = isRTL();
+              const marketDisplayName = isAr ? (item.name_ar || item.name) : (item.name_en || item.name);
+              const marketDisplayAddress = isAr ? (item.address_ar || item.address) : (item.address_en || item.address);
+              const dist = typeof item.distance_km === 'number' ? item.distance_km : parseFloat(String(item.distance_km || 0));
+              const distanceText = dist < 0.05
+                ? t('common.very_close', 'قريب جداً')
+                : `${dist.toFixed(1)} ${t('common.km', 'كم')}`;
+
+              return (
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={() => router.push(`/(customer)/shop/${item.id}`)}
+                  style={styles.cardContainer}
+                >
+                  <View style={styles.cardIcon}>
+                    <Ionicons name="storefront" size={26} color={Colors.primary} />
                   </View>
-                </View>
-              </TouchableOpacity>
-            )}
+                  <View style={styles.cardContent}>
+                    <Text style={styles.cardTitle} numberOfLines={1}>{marketDisplayName}</Text>
+                    <Text style={styles.cardSubtitle} numberOfLines={2}>{marketDisplayAddress}</Text>
+                    <View style={styles.cardFooter}>
+                      <View style={styles.statusBadge}>
+                        <View style={[styles.statusDot, { backgroundColor: item.is_currently_open ? Colors.success : Colors.error }]} />
+                        <Text style={[styles.statusText, { color: item.is_currently_open ? Colors.success : Colors.error }]}>
+                          {item.is_currently_open ? t('common.open', 'Open') : t('common.closed', 'Closed')}
+                        </Text>
+                      </View>
+                      <Text style={styles.distanceText}>{distanceText}</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            }}
           />
         </View>
       ) : null}

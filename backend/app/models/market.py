@@ -26,8 +26,12 @@ class Market(Base):
         nullable=False,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    name_ar: Mapped[str | None] = mapped_column(Text, nullable=True)
+    name_en: Mapped[str | None] = mapped_column(Text, nullable=True)
     business_nature: Mapped[str | None] = mapped_column(String(100), nullable=True)
     address: Mapped[str] = mapped_column(Text, nullable=False)
+    address_ar: Mapped[str | None] = mapped_column(Text, nullable=True)
+    address_en: Mapped[str | None] = mapped_column(Text, nullable=True)
     
     # PostGIS geometry POINT (longitude, latitude) with standard SRID 4326
     location = mapped_column(
