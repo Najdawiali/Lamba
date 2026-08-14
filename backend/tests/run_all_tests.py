@@ -31,6 +31,8 @@ from tests.test_llm_adapter import (
     test_clean_llm_response_thinking_tags,
     test_clean_llm_response_markdown_fences,
     test_clean_llm_response_empty,
+    test_llm_adapter_generate_qwen_thinking_disabled,
+    test_llm_adapter_generate_gemma_offline_model,
 )
 from tests.test_services_mocked import (
     test_embedding_service_zero_vector_fallback,
@@ -92,6 +94,12 @@ class TestLLMAdapter(unittest.TestCase):
 
     def test_empty(self):
         test_clean_llm_response_empty()
+
+    def test_qwen_thinking_disabled(self):
+        asyncio.run(test_llm_adapter_generate_qwen_thinking_disabled())
+
+    def test_gemma_offline_model(self):
+        asyncio.run(test_llm_adapter_generate_gemma_offline_model())
 
 
 class TestServicesMocked(unittest.TestCase):
