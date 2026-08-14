@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, Dimensions, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
 import { useThemeColors } from '../../../context/ThemeContext';
-import { getMarketCatalog, MarketCatalogResponse, CustomerItemResponse } from '../../../services/api';
+import { getMarketCatalog, MarketCatalogResponse, CustomerItemResponse, startConversation } from '../../../services/api';
 import { t, i18n } from '../../../services/i18n';
 import { getCurrencyCode } from '../../../services/currency';
 import { resolveImageUrl } from '../../../services/utils';
@@ -115,6 +115,26 @@ export default function ShopCatalogScreen() {
   const activeItems = activeCategory ? catalog[activeCategory] : [];
   const isAr = i18n.locale?.startsWith('ar');
 
+  const handleMessageShop = async () => {
+    if (!id) return;
+    try {
+      // Create or find conversation WITHOUT sending a message
+      const res = await startConversation(id as string);
+
+      router.push({
+        pathname: '/(customer)/chat/[id]',
+        params: {
+          id: res.data.conversation_id,
+          marketName: t('product.view_full_shop', 'Shop Catalog'),
+          suggestion: 'مرحباً، أستفسر عن متجركم',
+        },
+      });
+    } catch (e) {
+      console.error('Failed to start conversation:', e);
+      Alert.alert('خطأ', 'فشل في بدء المحادثة');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
@@ -123,7 +143,9 @@ export default function ShopCatalogScreen() {
           <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('product.view_full_shop', 'Shop Catalog')}</Text>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity onPress={handleMessageShop} style={styles.headerBtn}>
+          <Ionicons name="chatbubble-outline" size={20} color={Colors.primary} />
+        </TouchableOpacity>
       </View>
 
       {categories.length > 0 ? (

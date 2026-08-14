@@ -6,7 +6,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Image, TouchableOpacity,
-  ActivityIndicator, useWindowDimensions, Alert, Share, Modal, TextInput
+  ActivityIndicator, useWindowDimensions, Alert, Share, Modal, TextInput, Linking
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,7 +15,8 @@ import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/t
 import { useThemeColors } from '../../../context/ThemeContext';
 import {
   getMarketItemDetails,
-  MarketItemDetailsResponse, isFavorite, addFavorite, removeFavorite
+  MarketItemDetailsResponse, isFavorite, addFavorite, removeFavorite,
+  startConversation
 } from '../../../services/api';
 import { t, i18n } from '../../../services/i18n';
 import { getCurrencyCode, formatPrice } from '../../../services/currency';
@@ -98,6 +99,34 @@ export default function ProductDetailScreen() {
       });
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleMessageSeller = async () => {
+    if (!product) return;
+    try {
+      // Create or find conversation WITHOUT sending a message
+      const res = await startConversation(
+        product.shop.id,
+        undefined,
+        product.id,
+      );
+
+      // Navigate to chat with a pre-filled suggestion
+      const productName = isAr ? (product.name_ar || product.name) : (product.name_en || product.name);
+      const suggestion = `مرحباً، أستفسر عن: ${productName}`;
+
+      router.push({
+        pathname: '/(customer)/chat/[id]',
+        params: {
+          id: res.data.conversation_id,
+          marketName: product.shop.name,
+          suggestion: suggestion,
+        },
+      });
+    } catch (e) {
+      console.error('Failed to start conversation:', e);
+      Alert.alert('خطأ', 'فشل في بدء المحادثة');
     }
   };
 
@@ -295,6 +324,47 @@ export default function ProductDetailScreen() {
                 <Text style={styles.shopName}>{product.shop.name}</Text>
                 <Text style={styles.shopAddress}>{product.shop.address}</Text>
               </View>
+            </View>
+
+            {/* Action buttons: Message Seller + Call Store */}
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: Spacing.md, marginBottom: Spacing.md }}>
+              <TouchableOpacity
+                onPress={handleMessageSeller}
+                style={{
+                  flex: 1,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: Colors.primary,
+                  borderRadius: BorderRadius.md,
+                  paddingVertical: 12,
+                  gap: 6,
+                }}
+              >
+                <Ionicons name="chatbubble-outline" size={18} color="#FFF" />
+                <Text style={{ color: '#FFF', fontSize: 13, fontWeight: '600' }}>راسل البائع</Text>
+              </TouchableOpacity>
+
+              {product.shop.phone ? (
+                <TouchableOpacity
+                  onPress={() => Linking.openURL(`tel:${product.shop.phone}`)}
+                  style={{
+                    flex: 1,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: Colors.surfaceElevated,
+                    borderRadius: BorderRadius.md,
+                    paddingVertical: 12,
+                    gap: 6,
+                    borderWidth: 1,
+                    borderColor: Colors.primary + '40',
+                  }}
+                >
+                  <Ionicons name="call-outline" size={18} color={Colors.primary} />
+                  <Text style={{ color: Colors.primary, fontSize: 13, fontWeight: '600' }}>اتصال</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
 
             <TouchableOpacity style={styles.viewShopLink} onPress={() => router.push(`/(customer)/shop/${product.shop.id}`)}>
