@@ -655,7 +655,7 @@
     "no": "No",
     "yes_clear": "Yes, Clear",
     "close": "Close",
-    "currency": "SAR",
+    "currency": "JOD",
     "edit": "Edit",
     "done": "Done",
     "next": "Next",
@@ -663,7 +663,7 @@
     "search": "Search",
     "filter": "Filter",
     "jod": "JOD",
-    "usd": "USD",
+    "usd": "JOD",
     "very_close": "Very close"
   },
   "welcome": {
@@ -711,7 +711,13 @@
     "contact": "Contact",
     "directions": "Directions",
     "working_hours": "Working Hours",
-    "no_items": "No items registered in this store yet"
+    "no_items": "No items registered in this store yet",
+    "reviews": "Reviews",
+    "add_review": "Add Review",
+    "review_count": "reviews",
+    "no_reviews": "No reviews yet. Be the first to review!",
+    "review_placeholder": "Share your experience about this store...",
+    "submit_review": "Submit Review"
   },
   "merchant": {
     "dashboard": "Dashboard",

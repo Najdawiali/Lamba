@@ -906,6 +906,43 @@ async def get_market_ratings(
         )
 
 
+# ── GET /ratings/{market_id} ──────────────────────────────────
+@router.get("/ratings/{market_id}", response_model=List[RatingDetailResponse])
+async def get_ratings_by_market(
+    market_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Alias for retrieving market ratings list."""
+    summary = await get_market_ratings(market_id=market_id, db=db)
+    return summary.ratings
+
+
+# ── GET /ratings/{market_id}/average ───────────────────────────
+@router.get("/ratings/{market_id}/average")
+async def get_market_average_rating(
+    market_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Alias for retrieving market average rating & total count."""
+    summary = await get_market_ratings(market_id=market_id, db=db)
+    return {
+        "market_id": str(market_id),
+        "average_rating": summary.average_score,
+        "total_ratings": summary.total_reviews_count,
+    }
+
+
+# ── POST /ratings ──────────────────────────────────────────────
+@router.post("/ratings", response_model=RatingResponse)
+async def create_rating_alias(
+    payload: RatingCreate,
+    user: User = Depends(require_customer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Alias for submitting store rating."""
+    return await create_location_verified_rating(payload=payload, user=user, db=db)
+
+
 # ── GET /search-history ───────────────────────────────────────
 @router.get("/search-history", response_model=List[SearchHistoryEntry])
 async def get_search_history(

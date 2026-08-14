@@ -41,27 +41,16 @@ let _currentCurrency: string = 'JOD'; // Default to JOD
  */
 export const setupCurrency = async (): Promise<void> => {
   try {
-    // Check for stored preference first
     const saved = await SecureStore.getItemAsync(CURRENCY_KEY);
-    if (saved) {
+    if (saved && saved !== 'USD' && saved !== 'SAR') {
       _currentCurrency = saved;
       return;
     }
 
-    // Detect from device locale
-    const locales = Localization.getLocales();
-    const regionCode = locales?.[0]?.regionCode?.toUpperCase();
-
-    if (regionCode && LOCALE_CURRENCY_MAP[regionCode]) {
-      _currentCurrency = LOCALE_CURRENCY_MAP[regionCode];
-    } else {
-      _currentCurrency = 'JOD'; // Default fallback
-    }
-
-    // Persist the detected currency
+    _currentCurrency = 'JOD';
     await SecureStore.setItemAsync(CURRENCY_KEY, _currentCurrency);
   } catch (err) {
-    console.warn('Currency detection failed, defaulting to JOD:', err);
+    console.warn('Currency setup defaulting to JOD:', err);
     _currentCurrency = 'JOD';
   }
 };
@@ -108,11 +97,11 @@ const EXCHANGE_RATES_FROM_JOD: Record<string, number> = {
  * Get the localized currency symbol/code for display.
  */
 export const getCurrencySymbol = (code?: string): string => {
-  const c = (code || _currentCurrency).toUpperCase();
-  if (c === 'JOD') return t('common.jod', 'د.أ');
+  const c = (code || _currentCurrency || 'JOD').toUpperCase();
+  if (c === 'JOD') return t('common.currency', 'د.أ');
   if (c === 'SAR') return t('common.sar', 'ر.س');
-  if (c === 'USD') return t('common.usd', 'USD');
-  return c;
+  if (c === 'USD') return t('common.currency', 'د.أ');
+  return t('common.currency', 'د.أ');
 };
 
 /**
