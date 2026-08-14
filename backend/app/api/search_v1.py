@@ -431,9 +431,9 @@ async def _rerank_and_finalize(
     else:
         out = [f["result"] for f in fused][: settings.reranker_final_k]
 
-    # Sort results by blended relevance score (language match boost removed to support cross-lingual search)
+    # Sort results by blended relevance score
     out.sort(key=lambda r: r.semantic_score, reverse=True)
-    return out
+    return _deduplicate_by_product(out)
 
 
 def _filter_top_five_unless_accuracy_above_80(
@@ -837,9 +837,16 @@ async def _run_search(
     )
 
     # Choose the most canonical search term for cross-encoder reranking:
-    # if the query was Arabizi (e.g. "7aleeb"), pass the transliterated Arabic ("حليب")
-    # so the cross-encoder compares semantic concepts rather than raw Franco-Arabic chars.
-    rerank_query = norm_arabicized if (arabicized and arabicized.strip() and arabicized.lower() != query_text.lower() and norm_arabicized) else (normalized_query or query_text)
+    # 1. If the query had dialect synonyms (e.g. "جاج" -> "دجاج", "عيش" -> "خبز"),
+    #    pass the formal synonym so the cross-encoder scores product relevance accurately.
+    # 2. If the query was Arabizi (e.g. "7aleeb"), pass the transliterated Arabic ("حليب").
+    # 3. Otherwise use normalized_query or query_text.
+    if synonym_variants and synonym_variants[0]:
+        rerank_query = synonym_variants[0]
+    elif arabicized and arabicized.strip() and arabicized.lower() != query_text.lower() and norm_arabicized:
+        rerank_query = norm_arabicized
+    else:
+        rerank_query = normalized_query or query_text
 
     # 4. Cross-encode + language-aware ordering.
     scored = await _rerank_and_finalize(rerank_query, fused, query_script)
