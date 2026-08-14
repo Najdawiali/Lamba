@@ -1,8 +1,8 @@
 """
 DeepInfra Model Health Check
 
-Tests all three DeepInfra endpoints (embedding, reranker, LLM) to verify
-API connectivity, correct response formats, and expected behavior.
+Tests all DeepInfra endpoints (embedding, reranker, real-time LLM, and offline LLM)
+to verify API connectivity, correct response formats, and expected behavior.
 
 Usage:
     cd backend
@@ -13,6 +13,7 @@ import asyncio
 import sys
 import os
 import math
+import json
 
 # Fix Windows console encoding for Unicode symbols (✓/✗)
 if sys.platform == "win32":
@@ -142,9 +143,9 @@ async def check_reranker(settings) -> bool:
 
 
 async def check_llm(settings) -> bool:
-    """Test LLM endpoint: returns parseable response."""
+    """Test real-time LLM endpoint (Qwen3.6): returns parseable response."""
     print("\n" + "=" * 60)
-    print("CHECK 3: LLM Chat Completions Endpoint")
+    print("CHECK 3: Real-time LLM Chat Completions Endpoint")
     print("=" * 60)
 
     url = f"{settings.deepinfra_api_base}/openai/chat/completions"
@@ -171,6 +172,7 @@ async def check_llm(settings) -> bool:
         ],
         "temperature": 0.1,
         "max_tokens": 300,
+        "chat_template_kwargs": {"enable_thinking": False},
     }
 
     try:
@@ -184,7 +186,6 @@ async def check_llm(settings) -> bool:
         print(f"  Content preview: {content[:200]}")
 
         # Try to parse as JSON
-        import json
         try:
             # Strip markdown code fences if present
             clean = content.strip()
@@ -207,6 +208,57 @@ async def check_llm(settings) -> bool:
         return False
 
 
+async def check_offline_llm(settings) -> bool:
+    """Verify Gemma 4 31B is reachable and returns parseable output."""
+    print("\n" + "=" * 60)
+    print("CHECK 4: Offline LLM (Gemma 4 31B) Chat Completions Endpoint")
+    print("=" * 60)
+
+    url = f"{settings.deepinfra_api_base}/openai/chat/completions"
+    model = getattr(settings, "offline_llm_model", "google/gemma-4-31B-it")
+    print(f"  URL:   {url}")
+    print(f"  Model: {model}")
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": "Return only valid JSON."},
+            {"role": "user", "content": 'Extract attributes: "شاي أخضر صيني"\nReturn: {"type": "...", "origin": "..."}'},
+        ],
+        "temperature": 0.1,
+        "max_tokens": 100,
+    }
+    headers = {
+        "Authorization": f"Bearer {settings.deepinfra_api_key}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+
+        content = data["choices"][0]["message"]["content"]
+        print(f"  ✓ Response received")
+        print(f"  Content preview: {content[:200]}")
+
+        # Try to parse as JSON
+        clean = content.strip()
+        if clean.startswith("```"):
+            clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
+            if clean.endswith("```"):
+                clean = clean[:-3]
+            clean = clean.strip()
+        parsed = json.loads(clean)
+        print(f"  ✓ Offline LLM ({model}): {parsed}")
+        print("  ✓ PASS")
+        return True
+    except Exception as e:
+        print(f"  ✗ FAIL: {e}")
+        return False
+
+
 async def main():
     print("DeepInfra Model Health Check")
     print("============================\n")
@@ -221,12 +273,14 @@ async def main():
     print(f"API Base: {settings.deepinfra_api_base}")
     print(f"Embedding Model: {settings.qwen_embed_model}")
     print(f"Reranker Model: {settings.reranker_model}")
-    print(f"LLM Model: {getattr(settings, 'query_llm_model', 'N/A')}")
+    print(f"Real-time LLM Model: {getattr(settings, 'query_llm_model', 'N/A')}")
+    print(f"Offline LLM Model: {getattr(settings, 'offline_llm_model', 'N/A')}")
 
     results = {
         "embedding": await check_embedding(settings),
         "reranker": await check_reranker(settings),
-        "llm": await check_llm(settings),
+        "realtime_llm": await check_llm(settings),
+        "offline_llm": await check_offline_llm(settings),
     }
 
     print("\n" + "=" * 60)
@@ -235,7 +289,7 @@ async def main():
     all_pass = True
     for name, passed in results.items():
         status = "✓ PASS" if passed else "✗ FAIL"
-        print(f"  {name:12s} {status}")
+        print(f"  {name:16s} {status}")
         if not passed:
             all_pass = False
 

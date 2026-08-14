@@ -1,8 +1,9 @@
 """
 LLMAdapter — Client for DeepInfra OpenAI chat completions API.
-Used for category classification, query expansion, and query understanding.
+Used for real-time search understanding/expansion (Qwen3.6) and offline catalog enrichment (Gemma 4 31B).
 """
 
+import asyncio
 import logging
 import json
 import re
@@ -40,8 +41,94 @@ class LLMAdapter:
         self.api_key = settings.deepinfra_api_key
         self.model = getattr(settings, "query_llm_model", "Qwen/Qwen3.6-35B-A3B")
 
-    async def _get_client(self, timeout: float = 15.0) -> httpx.AsyncClient:
-        return get_client()
+    async def _post_with_retry(
+        self,
+        url: str,
+        payload: Dict[str, Any],
+        timeout: float = 15.0,
+        max_retries: int = 3,
+    ) -> Optional[Dict[str, Any]]:
+        """Post request to LLM endpoint with retries and exponential backoff."""
+        if not self.api_key or "REPLACE" in self.api_key:
+            logger.warning("DeepInfra API key missing for LLMAdapter.")
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        client = get_client()
+        for attempt in range(max_retries):
+            try:
+                resp = await client.post(url, json=payload, headers=headers, timeout=timeout)
+                resp.raise_for_status()
+                return resp.json()
+            except httpx.HTTPStatusError as e:
+                logger.warning(
+                    f"LLMAdapter HTTP error (attempt {attempt + 1}/{max_retries}): "
+                    f"{e.response.status_code} - {e.response.text}"
+                )
+                if e.response.status_code in (429, 500, 502, 503, 504) and attempt < max_retries - 1:
+                    await asyncio.sleep(0.5 * (2 ** attempt))
+                    continue
+                return None
+            except Exception as e:
+                logger.warning(f"LLMAdapter API call failed (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(0.5 * (2 ** attempt))
+                    continue
+                return None
+        return None
+
+    async def generate(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = 0.1,
+        model: str | None = None,
+        enable_thinking: bool = False,
+        max_tokens: int = 300,
+        timeout: float | None = None,
+    ) -> str:
+        """
+        Generate completion for a given system and user prompt.
+        Supports model selection (e.g. settings.offline_llm_model) and thinking control.
+        """
+        selected_model = model or getattr(settings, "query_llm_model", "Qwen/Qwen3.6-35B-A3B")
+
+        payload: Dict[str, Any] = {
+            "model": selected_model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+
+        # Qwen models need enable_thinking control
+        if "Qwen" in selected_model and not enable_thinking:
+            payload["chat_template_kwargs"] = {"enable_thinking": False}
+
+        # Gemma models don't use chat_template_kwargs
+        # They use a different thinking control if needed
+
+        url = f"{self.api_base}/openai/chat/completions"
+        eff_timeout = (
+            timeout
+            if timeout is not None
+            else (30.0 if ("31B" in selected_model or "gemma" in selected_model.lower()) else 15.0)
+        )
+
+        data = await self._post_with_retry(url, payload, timeout=eff_timeout)
+        if not data or not data.get("choices"):
+            return ""
+
+        choice = data["choices"][0]
+        message = choice.get("message", {})
+        content = message.get("content") or message.get("reasoning_content") or ""
+        return _clean_llm_response(content)
 
     async def complete_chat_full(
         self,
@@ -49,34 +136,20 @@ class LLMAdapter:
         temperature: float = 0.1,
         max_tokens: int = 300,
         timeout: float = 15.0,
+        model: Optional[str] = None,
         **kwargs: Any,
     ) -> Optional[Dict[str, Any]]:
         """Send chat completion request and return the entire parsed JSON response payload."""
-        if not self.api_key or "REPLACE" in self.api_key:
-            logger.warning("DeepInfra API key missing for LLMAdapter.")
-            return None
-
+        selected_model = model or self.model
         url = f"{self.api_base}/openai/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
         payload: Dict[str, Any] = {
-            "model": self.model,
+            "model": selected_model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
         payload.update(kwargs)
-
-        try:
-            client = await self._get_client(timeout=timeout)
-            resp = await client.post(url, json=payload, headers=headers)
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as e:
-            logger.error(f"LLMAdapter API call failed: {e}")
-            return None
+        return await self._post_with_retry(url, payload, timeout=timeout)
 
     async def complete_chat_raw(
         self,
@@ -84,6 +157,7 @@ class LLMAdapter:
         temperature: float = 0.1,
         max_tokens: int = 300,
         timeout: float = 15.0,
+        model: Optional[str] = None,
         **kwargs: Any,
     ) -> Optional[str]:
         """Send chat completion request and return the raw message.content string without cleaning."""
@@ -92,13 +166,13 @@ class LLMAdapter:
             temperature=temperature,
             max_tokens=max_tokens,
             timeout=timeout,
+            model=model,
             **kwargs,
         )
         if not data or not data.get("choices"):
             return None
         choice = data["choices"][0]
         message = choice.get("message", {})
-        # Support content or reasoning_content
         return message.get("content") or message.get("reasoning_content") or ""
 
     async def complete_chat(
@@ -107,6 +181,7 @@ class LLMAdapter:
         temperature: float = 0.1,
         max_tokens: int = 300,
         timeout: float = 15.0,
+        model: Optional[str] = None,
         **kwargs: Any,
     ) -> Optional[str]:
         """Send a chat completion request to DeepInfra API and return cleaned response text."""
@@ -115,6 +190,7 @@ class LLMAdapter:
             temperature=temperature,
             max_tokens=max_tokens,
             timeout=timeout,
+            model=model,
             **kwargs,
         )
         if raw_content is None:

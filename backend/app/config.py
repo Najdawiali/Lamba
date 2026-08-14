@@ -162,13 +162,17 @@ class Settings(BaseSettings):
     expansion_cache_max_size: int = 4096
     expansion_cache_ttl_sec: int = 86400
 
-    # ── LLM Query Understanding ──────────────────────────────
+    # ── LLM Models (Real-time & Offline) ──────────────────────
+    # Real-time LLM (fast, used during search)
     query_llm_model: str = "Qwen/Qwen3.6-35B-A3B"
     query_llm_fallback_model: str = "Qwen/Qwen2.5-7B-Instruct"
 
+    # Offline LLM (smarter, used for enrichment and batch processing)
+    offline_llm_model: str = "google/gemma-4-31B-it"
+
     # ── Hybrid fusion (RRF) & tiering ───────────────────────────
     rrf_k: int = 60
-    retrieval_per_branch: int = 50
+    retrieval_per_branch: int = 200
     exact_tier_threshold: float = 0.60
     recommendation_tier_threshold: float = 0.35
     language_match_boost: float = 0.05
