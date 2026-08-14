@@ -47,7 +47,8 @@
       "expo-location",
       "expo-secure-store",
       "expo-asset",
-      "expo-localization"
+      "expo-localization",
+      "expo-notifications"
     ],
     "locales": {
       "en": "./locales/en.json",
