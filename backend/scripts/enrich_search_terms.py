@@ -68,30 +68,26 @@ Generate at LEAST 20 terms. More is better. Return ONLY a comma-separated list, 
 
 
 async def enrich_product(name: str, description: Optional[str], category: Optional[str]) -> str:
-    """Call the LLM with the Jordanian search terms builder prompt."""
+    """Call the LLM with the Jordanian search terms builder prompt using Gemma 4 31B."""
     prompt = ENRICHMENT_PROMPT.format(
         name=name or "",
         description=description or "",
         category=category or "",
     )
-    messages = [
-        {"role": "system", "content": "Return only comma-separated search terms. No explanations."},
-        {"role": "user", "content": prompt},
-    ]
 
     try:
-        raw = await llm_adapter.complete_chat_raw(
-            messages=messages,
-            temperature=0.1,
-            max_tokens=300,
-            timeout=15.0,
-            chat_template_kwargs={"enable_thinking": False},
+        response = await llm_adapter.generate(
+            system_prompt="Return only comma-separated search terms. No explanations.",
+            user_prompt=prompt,
+            model=settings.offline_llm_model,  # Uses Gemma 4 31B
+            enable_thinking=False,
+            max_tokens=500,  # Enrichment needs more tokens than query understanding
         )
-        if not raw:
+        if not response:
             return ""
 
         # Clean any accidental fences or extra lines
-        cleaned = raw.replace("\n", ", ").strip()
+        cleaned = response.replace("\n", ", ").strip()
         if cleaned.startswith("```"):
             cleaned = cleaned.split("```")[1].strip()
         return cleaned

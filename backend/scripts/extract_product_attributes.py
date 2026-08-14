@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.database import async_session
+from app.config import settings
 from app.models.global_item import GlobalItem
 from app.models.category import Category
 from app.services.llm import llm_adapter
@@ -97,29 +98,25 @@ async def extract_attributes_for_product(
     description: str,
     category: str,
 ) -> dict:
-    """Call the LLM to extract structured attributes for a single product."""
+    """Call the LLM to extract structured attributes for a single product using Gemma 4 31B."""
     prompt = ATTRIBUTE_EXTRACTION_PROMPT.format(
         name=name,
         description=description,
         category=category,
     )
-    messages = [
-        {"role": "system", "content": "Return only valid JSON. No explanations."},
-        {"role": "user", "content": prompt},
-    ]
 
     try:
-        raw = await llm_adapter.complete_chat(
-            messages=messages,
-            temperature=0.0,
-            max_tokens=200,
-            timeout=15.0,
-            chat_template_kwargs={"enable_thinking": False},
+        response = await llm_adapter.generate(
+            system_prompt="Return only valid JSON. No explanations.",
+            user_prompt=prompt,
+            model=settings.offline_llm_model,  # Uses Gemma 4 31B
+            enable_thinking=False,
+            max_tokens=300,
         )
-        if not raw:
+        if not response:
             return {}
 
-        cleaned = _clean_json_response(raw)
+        cleaned = _clean_json_response(response)
         parsed = json.loads(cleaned)
 
         if not isinstance(parsed, dict):
@@ -133,7 +130,7 @@ async def extract_attributes_for_product(
         return filtered
 
     except json.JSONDecodeError as e:
-        logger.warning(f"JSON parse failed for '{name[:40]}': {e} — raw: {raw[:100] if raw else '(empty)'}")
+        logger.warning(f"JSON parse failed for '{name[:40]}': {e} — raw: {response[:100] if response else '(empty)'}")
         return {}
     except Exception as e:
         logger.warning(f"Attribute extraction failed for '{name[:40]}': {e}")
