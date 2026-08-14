@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { getUser, saveUser, logout, getCustomerAlerts, AlertResponse, getMyStore, updateProfile } from '../../../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
 import { useTheme, useThemeColors, ThemeMode } from '../../../context/ThemeContext';
-import { t, i18n, changeLanguage } from '../../../services/i18n';
+import { t, i18n, toggleLanguage, changeLanguage } from '../../../services/i18n';
 import Constants from 'expo-constants';
 
 // ── Privacy Policy & Terms Content ────────────────────────────

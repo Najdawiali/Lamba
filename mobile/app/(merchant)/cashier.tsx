@@ -95,10 +95,10 @@ export default function CashierScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>
-          {t('merchant.cashier_ops', 'Cashier Operations')}
+          {t('merchant.cashier_ops', 'عمليات الكاشير')}
         </Text>
         <Text style={styles.headerSubtitle}>
-          {t('merchant.cashier_ops_desc', 'POS sales tools, cashier scanner, and historical transactions')}
+          {t('merchant.cashier_ops_desc', 'أدوات نقطة البيع، ماسح الكاشير، وسجل المعاملات')}
         </Text>
       </View>
 
@@ -110,19 +110,19 @@ export default function CashierScreen() {
           onPress={() => router.push('/(merchant)/scanner')}
           activeOpacity={0.8}
           accessibilityRole="button"
-          accessibilityLabel={t('scanner.scan_barcode')}
+          accessibilityLabel={t('scanner.scan_barcode', 'مسح الباركود')}
         >
           <View style={[styles.cardInner, { flexDirection: 'row' }]}>
             <View style={[styles.iconWrapper, styles.primaryIconBg]}>
               <Ionicons name="barcode-outline" size={26} color={Colors.primary} />
             </View>
             <View style={styles.textWrapper}>
-              <Text style={styles.cardTitle}>{t('scanner.scan_barcode')}</Text>
+              <Text style={styles.cardTitle}>{t('scanner.scan_barcode', 'مسح الباركود')}</Text>
               <Text style={styles.cardDescription}>
-                {t('merchant.scan_barcode_desc', 'Scan a product barcode to process checkouts, update quantities, or link items to inventory.')}
+                {t('merchant.scan_barcode_desc', 'مسح باركود المنتج لإتمام المبيعات أو تحديث الكميات أو ربطه بالمخزون.')}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={Colors.textMuted} />
+            <Ionicons name={isAr ? "chevron-back" : "chevron-forward"} size={20} color={Colors.textMuted} />
           </View>
         </TouchableOpacity>
 
@@ -132,19 +132,19 @@ export default function CashierScreen() {
           onPress={() => router.push('/(merchant)/history')}
           activeOpacity={0.8}
           accessibilityRole="button"
-          accessibilityLabel={t('history.title')}
+          accessibilityLabel={t('history.title', 'سجل المبيعات')}
         >
           <View style={[styles.cardInner, { flexDirection: 'row' }]}>
             <View style={[styles.iconWrapper, styles.secondaryIconBg]}>
               <Ionicons name="receipt-outline" size={26} color={Colors.secondary} />
             </View>
             <View style={styles.textWrapper}>
-              <Text style={styles.cardTitle}>{t('history.title')}</Text>
+              <Text style={styles.cardTitle}>{t('history.title', 'سجل المبيعات')}</Text>
               <Text style={styles.cardDescription}>
-                {t('merchant.history_desc', 'View historical sales receipts, checkout details, aggregate revenue, and cashier records.')}
+                {t('merchant.history_desc', 'عرض فواتير المبيعات السابقة وتفاصيل الدفع وإجمالي الإيرادات وسجلات الكاشير.')}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={Colors.textMuted} />
+            <Ionicons name={isAr ? "chevron-back" : "chevron-forward"} size={20} color={Colors.textMuted} />
           </View>
         </TouchableOpacity>
 
@@ -154,19 +154,19 @@ export default function CashierScreen() {
           onPress={() => router.push('/(merchant)/quick-sale')}
           activeOpacity={0.8}
           accessibilityRole="button"
-          accessibilityLabel={t('merchant.quick_sale', 'Quick Sale')}
+          accessibilityLabel={t('merchant.quick_sale', 'بيع سريع')}
         >
           <View style={[styles.cardInner, { flexDirection: 'row' }]}>
             <View style={[styles.iconWrapper, styles.secondaryIconBg]}>
               <Ionicons name="cash-outline" size={26} color="#00D68F" />
             </View>
             <View style={styles.textWrapper}>
-              <Text style={styles.cardTitle}>{t('merchant.quick_sale', 'Quick Sale')}</Text>
+              <Text style={styles.cardTitle}>{t('merchant.quick_sale', 'بيع سريع')}</Text>
               <Text style={styles.cardDescription}>
-                {t('merchant.quick_sale_desc', 'Manually enter a price to create an instant sale ticket without scanning.')}
+                {t('merchant.quick_sale_desc', 'إدخال السعر يدوياً لإنشاء فاتورة بيع فورية دون الحاجة للمسح.')}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={Colors.textMuted} />
+            <Ionicons name={isAr ? "chevron-back" : "chevron-forward"} size={20} color={Colors.textMuted} />
           </View>
         </TouchableOpacity>
       </View>

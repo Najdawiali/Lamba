@@ -20,7 +20,7 @@ import {
 } from '../../../services/api';
 import { t, i18n } from '../../../services/i18n';
 import { getCurrencyCode, formatPrice } from '../../../services/currency';
-import { resolveImageUrl, calculateDistanceMeters, roundDistance } from '../../../services/utils';
+import { resolveImageUrl, openMapDirections, calculateDistanceMeters, roundDistance } from '../../../services/utils';
 
 export default function ProductDetailScreen() {
   const Colors = useThemeColors();
@@ -323,10 +323,21 @@ export default function ProductDetailScreen() {
               <View style={{ flex: 1, marginLeft: Spacing.sm }}>
                 <Text style={styles.shopName}>{product.shop.name}</Text>
                 <Text style={styles.shopAddress}>{product.shop.address}</Text>
+                {product.shop.average_rating !== undefined && product.shop.average_rating > 0 ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                    <Ionicons name="star" size={14} color="#FFB800" />
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: Colors.textPrimary }}>
+                      {product.shop.average_rating.toFixed(1)}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: Colors.textMuted }}>
+                      ({product.shop.total_reviews || 0} {t('product.reviews', 'تقييمات')})
+                    </Text>
+                  </View>
+                ) : null}
               </View>
             </View>
 
-            {/* Action buttons: Message Seller + Call Store */}
+            {/* Action buttons: Message Seller + Directions + Call Store */}
             <View style={{ flexDirection: 'row', gap: 8, marginTop: Spacing.md, marginBottom: Spacing.md }}>
               <TouchableOpacity
                 onPress={handleMessageSeller}
@@ -343,6 +354,25 @@ export default function ProductDetailScreen() {
               >
                 <Ionicons name="chatbubble-outline" size={18} color="#FFF" />
                 <Text style={{ color: '#FFF', fontSize: 13, fontWeight: '600' }}>راسل البائع</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => openMapDirections(product.shop.latitude, product.shop.longitude, product.shop.name)}
+                style={{
+                  flex: 1,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: Colors.surfaceElevated,
+                  borderRadius: BorderRadius.md,
+                  paddingVertical: 12,
+                  gap: 6,
+                  borderWidth: 1,
+                  borderColor: Colors.primary + '40',
+                }}
+              >
+                <Ionicons name="navigate-outline" size={18} color={Colors.primary} />
+                <Text style={{ color: Colors.primary, fontSize: 13, fontWeight: '600' }}>الاتجاهات</Text>
               </TouchableOpacity>
 
               {product.shop.phone ? (

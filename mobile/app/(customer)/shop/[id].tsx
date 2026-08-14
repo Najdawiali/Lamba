@@ -1,14 +1,21 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image, Dimensions, Alert } from 'react-native';
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
+  Image, Dimensions, Alert, Modal, TextInput, FlatList
+} from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
 import { useThemeColors } from '../../../context/ThemeContext';
-import { getMarketCatalog, MarketCatalogResponse, CustomerItemResponse, startConversation } from '../../../services/api';
+import {
+  getMarketCatalog, MarketCatalogResponse, startConversation,
+  getMarketRatings, submitMarketRating, MarketRatingSummaryResponse, getUser
+} from '../../../services/api';
 import { t, i18n } from '../../../services/i18n';
-import { getCurrencyCode } from '../../../services/currency';
-import { resolveImageUrl } from '../../../services/utils';
+import { formatPrice } from '../../../services/currency';
+import { resolveImageUrl, openMapDirections } from '../../../services/utils';
+import * as Location from 'expo-location';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COLUMN_SPACING = Spacing.md;
@@ -18,36 +25,111 @@ export default function ShopCatalogScreen() {
   const Colors = useThemeColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  
+
   const [catalog, setCatalog] = useState<MarketCatalogResponse | null>(null);
+  const [ratings, setRatings] = useState<MarketRatingSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [activeCategory, setActiveCategory] = useState<string>('');
+  const [reviewsModalVisible, setReviewsModalVisible] = useState(false);
+  const [writeReviewModalVisible, setWriteReviewModalVisible] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      if (!id) {
-        setError(t('common.error', 'Failed to load catalog'));
-        setLoading(false);
-        return;
-      }
-      try {
-        setLoading(true);
-        const data = await getMarketCatalog(id);
-        setCatalog(data);
-        const categories = Object.keys(data || {});
+  const [ratingScore, setRatingScore] = useState(5);
+  const [reviewText, setReviewText] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
+
+  const loadData = async () => {
+    if (!id) {
+      setError(t('common.error', 'Failed to load catalog'));
+      setLoading(false);
+      return;
+    }
+    try {
+      setLoading(true);
+      const [catalogData, ratingsData] = await Promise.all([
+        getMarketCatalog(id).catch(() => null),
+        getMarketRatings(id).catch(() => null),
+      ]);
+
+      if (catalogData) {
+        setCatalog(catalogData);
+        const categories = Object.keys(catalogData || {});
         if (categories.length > 0) {
           setActiveCategory(categories[0]);
         }
-      } catch (err) {
-        console.error('Failed to load shop catalog', err);
-        setError(t('common.error', 'Failed to load catalog'));
-      } finally {
-        setLoading(false);
       }
-    })();
+      if (ratingsData) {
+        setRatings(ratingsData);
+      }
+    } catch (err) {
+      console.error('Failed to load shop catalog', err);
+      setError(t('common.error', 'Failed to load catalog'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
   }, [id]);
+
+  const handleSubmitReview = async () => {
+    if (!id) return;
+    try {
+      setSubmittingReview(true);
+      const currentUser = await getUser();
+      if (!currentUser || !currentUser.id) {
+        Alert.alert(t('common.info', 'تنبيه'), t('profile.login_required', 'يرجى تسجيل الدخول أولاً'));
+        return;
+      }
+
+      // Fetch user GPS location for 50m geofence verification
+      let loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).catch(() => null);
+      const lat = loc?.coords?.latitude || 0.0;
+      const lng = loc?.coords?.longitude || 0.0;
+
+      await submitMarketRating({
+        market_id: id,
+        customer_id: currentUser.id,
+        score: ratingScore,
+        review: reviewText.trim(),
+        latitude: lat,
+        longitude: lng,
+      });
+
+      Alert.alert(t('common.success', 'تم التقييم'), t('shop.review_submitted', 'شكراً لك، تم إضافة تقييمك بنجاح'));
+      setWriteReviewModalVisible(false);
+      setReviewText('');
+
+      // Refresh ratings
+      const updatedRatings = await getMarketRatings(id).catch(() => null);
+      if (updatedRatings) setRatings(updatedRatings);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || 'تعذر إضافة التقييم. تأكد من تواجدك بالقرب من المتجر';
+      Alert.alert(t('common.error', 'خطأ'), detail);
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  const handleMessageShop = async () => {
+    if (!id) return;
+    try {
+      const res = await startConversation(id as string);
+      router.push({
+        pathname: '/(customer)/chat/[id]',
+        params: {
+          id: res.data.conversation_id,
+          marketName: firstItem?.category_name_ar || 'المتجر',
+          suggestion: 'مرحباً، أستفسر عن متجركم',
+        },
+      });
+    } catch (e) {
+      console.error('Failed to start conversation:', e);
+      Alert.alert('خطأ', 'فشل في بدء المحادثة');
+    }
+  };
 
   const styles = useMemo(() => StyleSheet.create({
     container: { flex: 1, backgroundColor: Colors.background },
@@ -59,6 +141,28 @@ export default function ShopCatalogScreen() {
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border },
     headerBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.surfaceElevated, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
     headerTitle: { ...Typography.h3, color: Colors.textPrimary },
+
+    // Shop Info Card
+    shopCard: {
+      backgroundColor: Colors.surfaceElevated,
+      margin: Spacing.lg,
+      borderRadius: BorderRadius.xl,
+      padding: Spacing.lg,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      ...Shadows.small,
+    },
+    shopTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    shopName: { ...Typography.h2, color: Colors.textPrimary, flex: 1 },
+    ratingBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255, 184, 0, 0.15)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: BorderRadius.full },
+    ratingScoreText: { fontSize: 13, fontWeight: '700', color: Colors.warning },
+
+    actionButtonsRow: { flexDirection: 'row', gap: 8, marginTop: Spacing.lg },
+    actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: BorderRadius.md, gap: 6, borderWidth: 1 },
+    actionBtnPrimary: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+    actionBtnSecondary: { backgroundColor: Colors.surface, borderColor: Colors.border },
+    actionBtnTextPrimary: { color: '#FFF', fontSize: 13, fontWeight: '600' },
+    actionBtnTextSecondary: { color: Colors.textPrimary, fontSize: 13, fontWeight: '600' },
 
     tabsContainer: { borderBottomWidth: 1, borderBottomColor: Colors.border },
     tabsScroll: { paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, gap: Spacing.sm },
@@ -81,14 +185,19 @@ export default function ShopCatalogScreen() {
 
     priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
     priceText: { ...Typography.h3, color: Colors.secondary },
-    currencyText: { fontSize: 10, fontWeight: '400', color: Colors.textMuted },
-    priceFree: { ...Typography.caption, color: Colors.textSecondary },
 
-    quickAddBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center' },
+    // Modal styling
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(10, 10, 26, 0.65)', justifyContent: 'flex-end' },
+    modalContainer: { height: '75%', backgroundColor: Colors.background, borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl, borderWidth: 1, borderColor: Colors.border },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: Spacing.xl, borderBottomWidth: 1, borderColor: Colors.border },
+    modalTitle: { ...Typography.h2, color: Colors.textPrimary },
+    closeBtn: { padding: Spacing.xs },
 
-    emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.xxl },
-    emptyTitle: { ...Typography.h3, color: Colors.textPrimary, marginTop: Spacing.lg },
-    emptySubtitle: { ...Typography.bodySmall, color: Colors.textMuted, textAlign: 'center', marginTop: Spacing.sm },
+    reviewCard: { backgroundColor: Colors.surfaceElevated, padding: Spacing.md, borderRadius: BorderRadius.lg, marginBottom: Spacing.md, borderWidth: 1, borderColor: Colors.border },
+    reviewHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+    reviewerName: { ...Typography.body, color: Colors.textPrimary, fontWeight: '700' },
+    reviewDate: { ...Typography.caption, color: Colors.textMuted },
+    reviewText: { ...Typography.bodySmall, color: Colors.textSecondary, lineHeight: 20 },
   }), [Colors]);
 
   if (loading) {
@@ -113,27 +222,8 @@ export default function ShopCatalogScreen() {
 
   const categories = Object.keys(catalog);
   const activeItems = activeCategory ? catalog[activeCategory] : [];
+  const firstItem = activeItems[0] || (categories[0] ? catalog[categories[0]][0] : null);
   const isAr = i18n.locale?.startsWith('ar');
-
-  const handleMessageShop = async () => {
-    if (!id) return;
-    try {
-      // Create or find conversation WITHOUT sending a message
-      const res = await startConversation(id as string);
-
-      router.push({
-        pathname: '/(customer)/chat/[id]',
-        params: {
-          id: res.data.conversation_id,
-          marketName: t('product.view_full_shop', 'Shop Catalog'),
-          suggestion: 'مرحباً، أستفسر عن متجركم',
-        },
-      });
-    } catch (e) {
-      console.error('Failed to start conversation:', e);
-      Alert.alert('خطأ', 'فشل في بدء المحادثة');
-    }
-  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -142,97 +232,256 @@ export default function ShopCatalogScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
           <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('product.view_full_shop', 'Shop Catalog')}</Text>
+        <Text style={styles.headerTitle}>{t('product.view_full_shop', 'دليل المتجر')}</Text>
         <TouchableOpacity onPress={handleMessageShop} style={styles.headerBtn}>
           <Ionicons name="chatbubble-outline" size={20} color={Colors.primary} />
         </TouchableOpacity>
       </View>
 
-      {categories.length > 0 ? (
-        <>
-          {/* Category Tabs */}
-          <View style={styles.tabsContainer}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScroll}>
-              {categories.map((cat) => {
-                const firstItem = catalog[cat]?.[0];
-                const catDisplayName = isAr
-                  ? (firstItem?.category_name_ar || cat)
-                  : (firstItem?.category_name_en || cat);
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Shop Info Card with Ratings & Directions */}
+        <View style={styles.shopCard}>
+          <View style={styles.shopTitleRow}>
+            <Text style={styles.shopName}>
+              {t('product.view_full_shop', 'كتالوج المتجر')}
+            </Text>
+            {ratings && ratings.average_score > 0 ? (
+              <TouchableOpacity
+                style={styles.ratingBadge}
+                onPress={() => setReviewsModalVisible(true)}
+              >
+                <Ionicons name="star" size={14} color="#FFB800" />
+                <Text style={styles.ratingScoreText}>
+                  {ratings.average_score.toFixed(1)} ({ratings.total_reviews_count})
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          {/* Action Buttons: Directions, Message, Reviews */}
+          <View style={styles.actionButtonsRow}>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnPrimary]}
+              onPress={() => openMapDirections(31.95, 35.91, 'المتجر')}
+            >
+              <Ionicons name="navigate-outline" size={18} color="#FFF" />
+              <Text style={styles.actionBtnTextPrimary}>{t('common.directions', 'الاتجاهات')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnSecondary]}
+              onPress={handleMessageShop}
+            >
+              <Ionicons name="chatbubble-outline" size={18} color={Colors.primary} />
+              <Text style={styles.actionBtnTextSecondary}>مراسلة</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnSecondary]}
+              onPress={() => setReviewsModalVisible(true)}
+            >
+              <Ionicons name="star-outline" size={18} color={Colors.warning} />
+              <Text style={styles.actionBtnTextSecondary}>التقييمات</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {categories.length > 0 ? (
+          <>
+            {/* Category Tabs */}
+            <View style={styles.tabsContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScroll}>
+                {categories.map((cat) => {
+                  const catFirstItem = catalog[cat]?.[0];
+                  const catDisplayName = isAr
+                    ? (catFirstItem?.category_name_ar || cat)
+                    : (catFirstItem?.category_name_en || cat);
+
+                  return (
+                    <TouchableOpacity
+                      key={cat}
+                      style={[styles.tabBtn, activeCategory === cat && styles.tabBtnActive]}
+                      onPress={() => setActiveCategory(cat)}
+                    >
+                      <Text style={[styles.tabText, activeCategory === cat && styles.tabTextActive]}>
+                        {catDisplayName}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            {/* Product Grid */}
+            <View style={styles.gridContainer}>
+              {(activeItems || []).map((item) => {
+                const itemName = isAr ? (item.name_ar || item.name) : (item.name_en || item.name);
 
                 return (
                   <TouchableOpacity
-                    key={cat}
-                    style={[styles.tabBtn, activeCategory === cat && styles.tabBtnActive]}
-                    onPress={() => setActiveCategory(cat)}
+                    key={item.market_item_id}
+                    style={styles.cardContainer}
+                    activeOpacity={0.8}
+                    onPress={() => router.push(`/(customer)/product/${item.market_item_id}`)}
                   >
-                    <Text style={[styles.tabText, activeCategory === cat && styles.tabTextActive]}>
-                      {catDisplayName}
-                    </Text>
+                    <View style={styles.imageContainer}>
+                      {item.image_url ? (
+                        <Image source={{ uri: resolveImageUrl(item.image_url) }} style={styles.image} />
+                      ) : (
+                        <View style={styles.imagePlaceholder}>
+                          <Ionicons name="cube-outline" size={32} color={Colors.textMuted} />
+                        </View>
+                      )}
+                      {!item.in_stock ? (
+                        <View style={styles.outOfStockOverlay}>
+                          <Text style={styles.outOfStockText}>{t('product.out_of_stock', 'Out of Stock')}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+
+                    <View style={styles.cardInfo}>
+                      <Text style={styles.itemName} numberOfLines={2}>{itemName}</Text>
+                      <View style={styles.priceRow}>
+                        <Text style={styles.priceText}>
+                          {item.price ? formatPrice(item.price) : 'السعر عند الطلب'}
+                        </Text>
+                      </View>
+                    </View>
                   </TouchableOpacity>
                 );
               })}
-            </ScrollView>
-          </View>
+            </View>
+          </>
+        ) : null}
+      </ScrollView>
 
-          {/* Product Grid */}
-          <ScrollView contentContainerStyle={styles.gridContainer} showsVerticalScrollIndicator={false}>
-            {(activeItems || []).map((item) => {
-              const itemName = isAr ? (item.name_ar || item.name) : (item.name_en || item.name);
+      {/* ════════ MODAL: Reviews List ════════ */}
+      <Modal visible={reviewsModalVisible} animationType="slide" transparent onRequestClose={() => setReviewsModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <SafeAreaView style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>تقييمات وآراء العملاء ({ratings?.total_reviews_count || 0})</Text>
+              <TouchableOpacity onPress={() => setReviewsModalVisible(false)} style={styles.closeBtn}>
+                <Ionicons name="close" size={24} color={Colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
 
-              return (
-                <TouchableOpacity
-                  key={item.market_item_id}
-                  style={styles.cardContainer}
-                  activeOpacity={0.8}
-                  onPress={() => router.push(`/(customer)/product/${item.market_item_id}`)}
-                >
-                  <View style={styles.imageContainer}>
-                    {item.image_url ? (
-                      <Image source={{ uri: resolveImageUrl(item.image_url) }} style={styles.image} />
-                    ) : (
-                      <View style={styles.imagePlaceholder}>
-                        <Ionicons name="cube-outline" size={32} color={Colors.textMuted} />
+            <View style={{ padding: Spacing.lg, flex: 1 }}>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: Colors.primary,
+                  paddingVertical: 12,
+                  borderRadius: BorderRadius.md,
+                  alignItems: 'center',
+                  marginBottom: Spacing.md,
+                }}
+                onPress={() => {
+                  setReviewsModalVisible(false);
+                  setWriteReviewModalVisible(true);
+                }}
+              >
+                <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 14 }}>+ أضف تقييمك للمتجر</Text>
+              </TouchableOpacity>
+
+              <FlatList
+                data={ratings?.ratings || []}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  <View style={styles.reviewCard}>
+                    <View style={styles.reviewHeader}>
+                      <Text style={styles.reviewerName}>{item.customer_name}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                        <Ionicons name="star" size={14} color="#FFB800" />
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.warning }}>{item.score}</Text>
                       </View>
-                    )}
-                    {!item.in_stock ? (
-                      <View style={styles.outOfStockOverlay}>
-                        <Text style={styles.outOfStockText}>{t('product.out_of_stock', 'Out of Stock')}</Text>
-                      </View>
-                    ) : null}
-                  </View>
-
-                  <View style={styles.cardInfo}>
-                    <Text style={styles.itemName} numberOfLines={2}>{itemName}</Text>
-                    <View style={styles.priceRow}>
-                      {item.price != null && item.price > 0 ? (
-                        <Text style={styles.priceText}>
-                          {`${item.price.toFixed(2)} ${getCurrencyCode()}`}
-                        </Text>
-                      ) : (
-                        <Text style={styles.priceFree}>{t('product.price_request', 'Price on request')}</Text>
-                      )}
-                      {Boolean(item.in_stock) ? (
-                        <TouchableOpacity
-                          style={styles.quickAddBtn}
-                          onPress={() => router.push(`/(customer)/product/${item.market_item_id}`)}
-                        >
-                          <Ionicons name="add" size={16} color={Colors.textOnPrimary} />
-                        </TouchableOpacity>
-                      ) : null}
                     </View>
+                    {item.review ? <Text style={styles.reviewText}>{item.review}</Text> : null}
+                    <Text style={styles.reviewDate}>
+                      {new Date(item.created_at).toLocaleDateString(isAr ? 'ar-EG' : 'en-US')}
+                    </Text>
                   </View>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </>
-      ) : (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="basket-outline" size={64} color={Colors.textMuted} />
-          <Text style={styles.emptyTitle}>{t('common.no_items', 'No items available')}</Text>
-          <Text style={styles.emptySubtitle}>{t('common.no_items_desc', 'This shop has not listed any items yet.')}</Text>
+                )}
+                ListEmptyComponent={
+                  <Text style={{ textAlign: 'center', color: Colors.textMuted, marginTop: 40 }}>
+                    لا توجد تقييمات سابقة لهذا المتجر
+                  </Text>
+                }
+              />
+            </View>
+          </SafeAreaView>
         </View>
-      )}
+      </Modal>
+
+      {/* ════════ MODAL: Write Review ════════ */}
+      <Modal visible={writeReviewModalVisible} animationType="slide" transparent onRequestClose={() => setWriteReviewModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <SafeAreaView style={[styles.modalContainer, { height: '55%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>إضافة تقييم جديد</Text>
+              <TouchableOpacity onPress={() => setWriteReviewModalVisible(false)} style={styles.closeBtn}>
+                <Ionicons name="close" size={24} color={Colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ padding: Spacing.xl }}>
+              <Text style={{ ...Typography.body, color: Colors.textSecondary, marginBottom: Spacing.md, textAlign: 'center' }}>
+                اختر عدد النجوم (يجب التواجد بالقرب من المتجر)
+              </Text>
+
+              {/* Star selector */}
+              <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: Spacing.xl }}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <TouchableOpacity key={star} onPress={() => setRatingScore(star)}>
+                    <Ionicons
+                      name={star <= ratingScore ? 'star' : 'star-outline'}
+                      size={36}
+                      color="#FFB800"
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <TextInput
+                style={{
+                  backgroundColor: Colors.surfaceElevated,
+                  borderRadius: BorderRadius.lg,
+                  padding: Spacing.md,
+                  color: Colors.textPrimary,
+                  borderWidth: 1,
+                  borderColor: Colors.border,
+                  height: 90,
+                  textAlignVertical: 'top',
+                  marginBottom: Spacing.xl,
+                }}
+                placeholder="اكتب تجربتك أو انطباعك عن المتجر (اختياري)..."
+                placeholderTextColor={Colors.textMuted}
+                multiline
+                value={reviewText}
+                onChangeText={setReviewText}
+              />
+
+              <TouchableOpacity
+                style={{
+                  backgroundColor: Colors.primary,
+                  paddingVertical: 14,
+                  borderRadius: BorderRadius.lg,
+                  alignItems: 'center',
+                  opacity: submittingReview ? 0.7 : 1,
+                }}
+                onPress={handleSubmitReview}
+                disabled={submittingReview}
+              >
+                {submittingReview ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 15 }}>إرسال التقييم</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }

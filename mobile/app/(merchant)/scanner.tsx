@@ -1024,7 +1024,7 @@ const styles = useMemo(() => StyleSheet.create({
         return;
       }
       console.warn('POS Checkout failed:', err);
-      Alert.alert(t('common.error', 'Checkout Failed'), t('common.error', 'An error occurred during transaction checkout.'));
+      Alert.alert(t('common.error', 'فشل إتمام البيع'), isAr ? 'حدث خطأ أثناء إتمام معاملة البيع.' : 'An error occurred during transaction checkout.');
     } finally {
       setCheckingOut(false);
     }

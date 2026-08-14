@@ -64,8 +64,8 @@ export default function ReceiptHistoryScreen() {
 
       console.warn('Failed to load transaction history:', err);
       Alert.alert(
-        t('common.error'),
-        t('history.fetch_failed', 'Failed to retrieve transaction records.')
+        t('common.error', 'خطأ'),
+        t('history.fetch_failed', 'فشل استرداد سجلات المعاملات.')
       );
     } finally {
       setLoading(false);
@@ -528,17 +528,17 @@ export default function ReceiptHistoryScreen() {
               <Ionicons name="receipt-outline" size={36} color={Colors.textMuted} />
             </View>
             <Text style={styles.emptyTitle}>
-              {t('history.no_history')}
+              {t('history.no_history', 'لا توجد مبيعات بعد')}
             </Text>
             <Text style={styles.emptyDesc}>
-              {t('history.no_history_desc', 'Your first POS checkout will appear here.')}
+              {t('history.no_history_desc', 'أول عملية بيع ستظهر هنا.')}
             </Text>
             <TouchableOpacity
               style={styles.emptyCta}
               onPress={() => router.push('/(merchant)/scanner')}
               activeOpacity={0.8}
             >
-              <Text style={styles.emptyCtaText}>{t('history.go_to_cashier', 'Go to Cashier')} →</Text>
+              <Text style={styles.emptyCtaText}>{t('history.go_to_cashier', 'الذهاب إلى الكاشير')} {isAr ? '←' : '→'}</Text>
             </TouchableOpacity>
           </View>
         }

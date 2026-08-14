@@ -1,7 +1,24 @@
+import { Platform } from 'react-native';
+import * as Linking from 'expo-linking';
+
 /**
- * Shared Utilities — Common helpers used across multiple screens.
- * Avoids duplication of resolveImageUrl, distance calculations, etc.
+ * Open external Maps app (Google Maps / Apple Maps / Browser) for turn-by-turn directions.
  */
+export const openMapDirections = (latitude: number, longitude: number, label?: string) => {
+  const dest = `${latitude},${longitude}`;
+  const encodedLabel = encodeURIComponent(label || '');
+  const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${dest}`;
+
+  const url = Platform.select({
+    ios: `maps:0,0?q=${encodedLabel}@${dest}`,
+    android: `geo:0,0?q=${dest}(${encodedLabel})`,
+    default: googleMapsUrl,
+  });
+
+  Linking.openURL(url || googleMapsUrl).catch(() => {
+    Linking.openURL(googleMapsUrl);
+  });
+};
 
 // ── Image URL Resolution ──────────────────────────────────────
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
@@ -47,10 +64,28 @@ export const calculateDistanceMeters = (
  * Format a distance in meters to a human-readable string.
  */
 export const roundDistance = (meters: number, isAr: boolean): string => {
+  if (meters < 100) {
+    return isAr ? 'قريب جداً' : 'Very close';
+  }
   if (meters >= 1000) {
     return `${(meters / 1000).toFixed(1)} ${isAr ? 'كم' : 'km'}`;
   }
   return `${Math.round(meters)} ${isAr ? 'متر' : 'm'}`;
+};
+
+/**
+ * Format a distance in kilometers to a human-readable string.
+ * If distance is < 0.1 km (less than 100 meters) or <= 0, returns "قريب جداً" / "Very close".
+ */
+export const formatDistanceKm = (
+  distanceKm: number | string | null | undefined,
+  isAr: boolean = true,
+): string => {
+  const dist = typeof distanceKm === 'number' ? distanceKm : parseFloat(String(distanceKm || 0));
+  if (isNaN(dist) || dist < 0.1) {
+    return isAr ? 'قريب جداً' : 'Very close';
+  }
+  return `${dist.toFixed(1)} ${isAr ? 'كم' : 'km'}`;
 };
 
 // ── Relative Time Formatting ──────────────────────────────────

@@ -189,14 +189,10 @@ export default function DashboardScreen() {
         console.warn('Failed to load transaction history for stats:', histErr);
       }
     } catch (err: any) {
-      if (err?.response?.status === 401) {
-        console.warn('Failed to load merchant data due to 401 Unauthorized. Logging out.');
-        try {
-          await logout();
-        } catch (logoutErr) {
-          // ignore
-        }
-        router.replace('/(auth)/gateway');
+      // If user is not authenticated or not a merchant, redirect to login
+      if (err?.response?.status === 401 || err?.response?.status === 403) {
+        await logout();
+        router.replace('/(auth)/login');
         return;
       }
       
@@ -205,13 +201,16 @@ export default function DashboardScreen() {
       if (err?.response?.status === 404) {
         router.replace('/(merchant)/onboarding');
       } else {
-        Alert.alert('Connection Error', 'Could not sync with local server. Swipe down to refresh.');
+        Alert.alert(
+          t('common.error', 'خطأ في الاتصال'),
+          isAr ? 'تعذر المزامنة مع الخادم المحلي. اسحب للأسفل للتحديث.' : 'Could not sync with local server. Swipe down to refresh.'
+        );
       }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [isAr, router]);
 
   useEffect(() => {
     loadData();
@@ -234,7 +233,7 @@ export default function DashboardScreen() {
         console.warn('Failed to refresh inventory value:', valErr);
       }
     } catch (err) {
-      Alert.alert(t('common.error'), 'Failed to toggle product stock status.');
+      Alert.alert(t('common.error'), isAr ? 'فشل تغيير حالة توفر المنتج بالمخزون.' : 'Failed to toggle product stock status.');
     }
   };
 
@@ -249,17 +248,17 @@ export default function DashboardScreen() {
   const handleSaveEdit = async () => {
     if (!selectedProduct) return;
     if (!editName.trim()) {
-      Alert.alert('Validation Error', 'Product name cannot be empty');
+      Alert.alert(t('common.error'), isAr ? 'لا يمكن ترك اسم المنتج فارغاً' : 'Product name cannot be empty');
       return;
     }
     const stockVal = parseInt(editStock, 10);
     const priceVal = parseFloat(editPrice);
     if (isNaN(stockVal) || stockVal < 0) {
-      Alert.alert('Validation Error', 'Please enter a valid stock count');
+      Alert.alert(t('common.error'), isAr ? 'يرجى إدخال كمية مخزون صحيحة' : 'Please enter a valid stock count');
       return;
     }
     if (isNaN(priceVal) || priceVal < 0) {
-      Alert.alert('Validation Error', 'Please enter a valid price');
+      Alert.alert(t('common.error'), isAr ? 'يرجى إدخال سعر صحيح' : 'Please enter a valid price');
       return;
     }
     setSavingEdit(true);
@@ -272,7 +271,7 @@ export default function DashboardScreen() {
       setProducts(prev => prev.map(p => p.id === selectedProduct.id ? updated : p));
       setEditModalVisible(false);
       setSelectedProduct(null);
-      Alert.alert('Success', 'Product updated successfully');
+      Alert.alert(t('common.success'), isAr ? 'تم تحديث بيانات المنتج بنجاح' : 'Product updated successfully');
 
       // Refresh inventory valuation
       try {
@@ -282,7 +281,10 @@ export default function DashboardScreen() {
         console.warn('Failed to refresh inventory value:', valErr);
       }
     } catch (err) {
-      Alert.alert('Save Failed', 'Could not update item details. Please check connection and try again.');
+      Alert.alert(
+        t('common.error'),
+        isAr ? 'تعذر حفظ تعديلات المنتج. يرجى التحقق من الاتصال والمحاولة مجدداً.' : 'Could not update item details. Please check connection and try again.'
+      );
     } finally {
       setSavingEdit(false);
     }
@@ -416,6 +418,31 @@ export default function DashboardScreen() {
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background },
   header: {
     paddingHorizontal: Spacing.xl, paddingTop: Spacing.lg, paddingBottom: Spacing.sm,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerTextCol: {
+    flex: 1,
+    paddingRight: Spacing.sm,
+  },
+  backToShoppingLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.primary + '15',
+    borderWidth: 1,
+    borderColor: Colors.primary + '30',
+  },
+  backToShoppingLinkText: {
+    color: Colors.primary,
+    fontSize: 13,
+    fontWeight: '600',
   },
   greeting: { fontSize: 32, fontWeight: '700', color: Colors.textPrimary },
   subtitle: { fontSize: 14, color: Colors.textMuted, marginTop: 2 },
@@ -964,12 +991,28 @@ export default function DashboardScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.greeting} numberOfLines={1}>
-          {market?.name || t('tabs.dashboard', 'Dashboard')}
-        </Text>
-        <Text style={styles.subtitle} numberOfLines={1}>
-          {market?.address || t('merchant.dashboard', 'Manage your inventory and sales')}
-        </Text>
+        <View style={styles.headerTopRow}>
+          <View style={styles.headerTextCol}>
+            <Text style={styles.greeting} numberOfLines={1}>
+              {market?.name || t('tabs.dashboard', 'المخزون')}
+            </Text>
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {market?.address || t('merchant.dashboard_subtitle', 'إدارة المخزون والمبيعات')}
+            </Text>
+          </View>
+
+          {/* Option B: Back to Shopping header button */}
+          <TouchableOpacity
+            onPress={() => router.replace('/(customer)/search')}
+            style={styles.backToShoppingLink}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.backToShoppingLinkText}>
+              {t('merchant.back_to_shopping', 'العودة للتسوق')}
+            </Text>
+            <Ionicons name={isAr ? "arrow-back" : "arrow-forward"} size={16} color={Colors.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Stat Chips Row */}
@@ -977,17 +1020,17 @@ export default function DashboardScreen() {
         <View style={styles.statChip}>
           <Ionicons name="cube-outline" size={16} color={Colors.secondary} />
           <Text style={styles.statChipNumber}>{totalProducts}</Text>
-          <Text style={styles.statChipLabel}>{t('dashboard.total_items', 'Total Items')}</Text>
+          <Text style={styles.statChipLabel}>{t('dashboard.total_items', 'إجمالي العناصر')}</Text>
         </View>
         <View style={styles.statChip}>
           <Ionicons name="checkmark-circle-outline" size={16} color={Colors.secondary} />
           <Text style={styles.statChipNumber}>{inStockCount}</Text>
-          <Text style={styles.statChipLabel}>{t('dashboard.in_stock', 'In Stock')}</Text>
+          <Text style={styles.statChipLabel}>{t('dashboard.in_stock', 'متوفر')}</Text>
         </View>
         <View style={styles.statChip}>
           <Ionicons name="warning-outline" size={16} color={Colors.warning} />
           <Text style={styles.statChipNumber}>{lowStockCount}</Text>
-          <Text style={styles.statChipLabel}>{t('dashboard.low_stock', 'Low Stock')}</Text>
+          <Text style={styles.statChipLabel}>{t('dashboard.low_stock', 'مخزون منخفض')}</Text>
         </View>
       </View>
 
@@ -997,7 +1040,7 @@ export default function DashboardScreen() {
           <Ionicons name="search-outline" size={18} color={Colors.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder={t('dashboard.search_placeholder', 'Search inventory…')}
+            placeholder={t('dashboard.search_placeholder', 'بحث في المخزون...')}
             placeholderTextColor={Colors.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -1079,15 +1122,15 @@ export default function DashboardScreen() {
                 {i18n.locale?.startsWith('ar') ? (item.name_ar || truncatedName) : (item.name_en || truncatedName)}
               </Text>
               <Text style={styles.categoryLabel}>
-                {(i18n.locale?.startsWith('ar') ? (item.category_name_ar || item.category) : (item.category_name_en || item.category)) || t('common.general', 'General')}
+                {(i18n.locale?.startsWith('ar') ? (item.category_name_ar || item.category) : (item.category_name_en || item.category)) || t('common.general', 'عام')}
               </Text>
               <Text style={styles.priceText}>{formatPrice(item.price)}</Text>
-              <Text style={styles.stockCountText}>{t('dashboard.stock_label', 'Stock')}: {item.stock_count}</Text>
+              <Text style={styles.stockCountText}>{t('dashboard.stock_label', 'المخزون')}: {item.stock_count}</Text>
             </View>
 
             {/* In-Stock Status Control */}
             <View style={styles.stockControl}>
-              <Text style={styles.stockToggleLabel}>{t('dashboard.in_stock')}</Text>
+              <Text style={styles.stockToggleLabel}>{t('dashboard.in_stock', 'متوفر')}</Text>
               <Switch
                 value={item.in_stock}
                 onValueChange={() => handleToggleStock(item.id, item.in_stock)}
@@ -1103,8 +1146,8 @@ export default function DashboardScreen() {
             <View style={styles.emptyIconCircle}>
               <Ionicons name="cube-outline" size={28} color={Colors.textMuted} />
             </View>
-            <Text style={styles.emptyTitle}>{t('dashboard.no_products', "No stocked products in this market.")}</Text>
-            <Text style={styles.emptyText}>{"Add or scan your first item to get started."}</Text>
+            <Text style={styles.emptyTitle}>{t('dashboard.no_products', "لا توجد منتجات بالمخزون في هذا المتجر.")}</Text>
+            <Text style={styles.emptyText}>{t('dashboard.empty_subtitle', "أضف أو امسح منتجك الأول للبدء.")}</Text>
           </View>
         }
       />
@@ -1125,7 +1168,7 @@ export default function DashboardScreen() {
               <View style={styles.modalContent}>
                 {/* Modal Header */}
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>{t('dashboard.edit_product', 'Edit Product Details')}</Text>
+                  <Text style={styles.modalTitle}>{t('dashboard.edit_product', 'تعديل تفاصيل المنتج')}</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}>
                     {keyboardVisible && (
                       <TouchableOpacity 
@@ -1134,7 +1177,7 @@ export default function DashboardScreen() {
                         activeOpacity={0.7}
                       >
                         <Ionicons name="keypad-outline" size={18} color={Colors.primary} />
-                        <Text style={styles.keyboardDismissText}>{t('rating.done', 'Done')}</Text>
+                        <Text style={styles.keyboardDismissText}>{t('rating.done', 'تم')}</Text>
                       </TouchableOpacity>
                     )}
                     <TouchableOpacity onPress={() => setEditModalVisible(false)}>
@@ -1144,11 +1187,11 @@ export default function DashboardScreen() {
                 </View>
 
             {/* Inputs */}
-            <Text style={styles.inputLabel}>{t('dashboard.product_name', 'Product Name')}</Text>
+            <Text style={styles.inputLabel}>{t('dashboard.product_name', 'اسم المنتج')}</Text>
             <View style={styles.modalInputWrapper}>
               <TextInput
                 style={styles.modalInput}
-                placeholder={t('dashboard.product_name', 'Product Name')}
+                placeholder={t('dashboard.product_name', 'اسم المنتج')}
                 placeholderTextColor={Colors.textMuted}
                 value={editName}
                 onChangeText={setEditName}
@@ -1157,11 +1200,11 @@ export default function DashboardScreen() {
 
             <View style={styles.inputRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.inputLabel}>{t('dashboard.stock_count', 'Stock Count')}</Text>
+                <Text style={styles.inputLabel}>{t('dashboard.stock_count', 'كمية المخزون')}</Text>
                 <View style={styles.modalInputWrapper}>
                   <TextInput
                     style={styles.modalInput}
-                    placeholder={t('dashboard.stock_count', 'Stock Count')}
+                    placeholder={t('dashboard.stock_count', 'كمية المخزون')}
                     placeholderTextColor={Colors.textMuted}
                     value={editStock}
                     onChangeText={setEditStock}
@@ -1171,11 +1214,11 @@ export default function DashboardScreen() {
               </View>
 
               <View style={{ flex: 1 }}>
-                <Text style={styles.inputLabel}>{t('dashboard.price_cost', 'Price/Cost')}</Text>
+                <Text style={styles.inputLabel}>{t('dashboard.price_cost', 'السعر')}</Text>
                 <View style={styles.modalInputWrapper}>
                   <TextInput
                     style={styles.modalInput}
-                    placeholder={t('dashboard.price_cost', 'Price')}
+                    placeholder={t('dashboard.price_cost', 'السعر')}
                     placeholderTextColor={Colors.textMuted}
                     value={editPrice}
                     onChangeText={setEditPrice}
@@ -1192,7 +1235,7 @@ export default function DashboardScreen() {
                 onPress={() => setEditModalVisible(false)}
                 disabled={savingEdit}
               >
-                <Text style={styles.modalBtnTextCancel}>{t('common.cancel', 'Cancel')}</Text>
+                <Text style={styles.modalBtnTextCancel}>{t('common.cancel', 'إلغاء')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1203,7 +1246,7 @@ export default function DashboardScreen() {
                 {savingEdit ? (
                   <ActivityIndicator color={Colors.textOnPrimary} />
                 ) : (
-                  <Text style={styles.modalBtnTextSave}>{t('dashboard.save_changes', 'Save Changes')}</Text>
+                  <Text style={styles.modalBtnTextSave}>{t('dashboard.save_changes', 'حفظ التغييرات')}</Text>
                 )}
               </TouchableOpacity>
             </View>

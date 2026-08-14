@@ -337,7 +337,7 @@ export default function QuickSaleScreen() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>
-            {t('common.loading', 'Loading inventory...')}
+            {t('common.loading', 'جاري تحميل المخزون...')}
           </Text>
         </View>
       </SafeAreaView>
@@ -349,10 +349,10 @@ export default function QuickSaleScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>
-          {t('merchant.quick_sale', 'Quick Sale')}
+          {t('merchant.quick_sale', 'بيع سريع')}
         </Text>
         <Text style={styles.headerSubtitle}>
-          {t('merchant.quick_sale_desc', 'Search your inventory and complete a sale without scanning a barcode.')}
+          {t('merchant.quick_sale_desc', 'ابحث في المخزون وأتمم عملية البيع دون الحاجة لمسح باركود.')}
         </Text>
       </View>
 
@@ -373,7 +373,7 @@ export default function QuickSaleScreen() {
               <Ionicons name="search-outline" size={18} color={Colors.textMuted} />
               <TextInput
                 style={styles.searchInput}
-                placeholder={t('merchant.catalog_search_placeholder', 'Search by name or category...')}
+                placeholder={t('merchant.catalog_search_placeholder', 'ابحث بالاسم أو القسم...')}
                 placeholderTextColor={Colors.textMuted}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -388,30 +388,30 @@ export default function QuickSaleScreen() {
 
             <View style={styles.counterRow}>
               <Text style={styles.counterText}>
-                {t('inventory.results', `${filteredItems.length} result(s)`, { count: filteredItems.length })}
+                {t('inventory.results', `${filteredItems.length} منتج`, { count: filteredItems.length })}
               </Text>
               {selected && (
                 <TouchableOpacity style={styles.clearBtn} onPress={handleClearSelection} activeOpacity={0.7}>
                   <Ionicons name="close" size={14} color={Colors.textSecondary} />
-                  <Text style={styles.clearBtnText}>{t('common.clear', 'Clear')}</Text>
+                  <Text style={styles.clearBtnText}>{t('common.clear', 'مسح')}</Text>
                 </TouchableOpacity>
               )}
             </View>
 
             {/* Item list */}
-            <Text style={styles.listLabel}>{t('inventory.in_stock', 'Available Items')}</Text>
+            <Text style={styles.listLabel}>{t('inventory.in_stock', 'المنتجات المتوفرة')}</Text>
             {filteredItems.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <View style={styles.emptyIconCircle}>
                   <Ionicons name="cube-outline" size={26} color={Colors.textMuted} />
                 </View>
                 <Text style={styles.emptyTitle}>
-                  {t('common.no_items', 'No Items Found')}
+                  {t('common.no_items', 'لم يتم العثور على منتجات')}
                 </Text>
                 <Text style={styles.emptyText}>
                   {items.length === 0
-                    ? t('inventory.empty_desc', 'Your inventory is empty. Add products from the Add tab.')
-                    : t('explore.no_results', 'No results match your search.')}
+                    ? t('inventory.empty_desc', 'المخزون فارغ. أضف منتجات من تبويب الإضافة.')
+                    : t('explore.no_results', 'لا توجد نتائج مطابقة لبحثك.')}
                 </Text>
               </View>
             ) : (
@@ -437,11 +437,11 @@ export default function QuickSaleScreen() {
                     <View style={styles.rowInfo}>
                       <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
                       <Text style={styles.stockText}>
-                        {t('inventory.in_stock', 'In stock:')} {item.stock_count}
+                        {t('inventory.in_stock', 'المتوفر:')} {item.stock_count}
                       </Text>
                       {hasPrice
                         ? <Text style={styles.priceText}>{formatPrice(item.price)}</Text>
-                        : <Text style={styles.noPriceBadge}>{t('product.price_request', 'No price')}</Text>}
+                        : <Text style={styles.noPriceBadge}>{t('product.price_request', 'بدون سعر')}</Text>}
                     </View>
                     {isSelected && (
                       <Ionicons name="checkmark-circle" size={22} color={Colors.primary} />
@@ -455,10 +455,10 @@ export default function QuickSaleScreen() {
             {selected && (
               <View style={styles.summaryCard}>
                 <View style={styles.summaryHeader}>
-                  <Text style={styles.summaryLabel}>{t('common.item', 'Selected Item')}</Text>
+                  <Text style={styles.summaryLabel}>{t('common.item', 'المنتج المحدد')}</Text>
                   <TouchableOpacity style={styles.clearBtn} onPress={handleClearSelection} activeOpacity={0.7}>
                     <Ionicons name="close" size={14} color={Colors.textSecondary} />
-                    <Text style={styles.clearBtnText}>{t('common.cancel', 'Deselect')}</Text>
+                    <Text style={styles.clearBtnText}>{t('common.cancel', 'إلغاء التحديد')}</Text>
                   </TouchableOpacity>
                 </View>
                 <Text style={styles.selectedItemName}>
@@ -468,16 +468,16 @@ export default function QuickSaleScreen() {
                   <View style={styles.stockPill}>
                     <Ionicons name="cube-outline" size={12} color={Colors.success} />
                     <Text style={styles.stockPillText}>
-                      {t('inventory.in_stock', 'Available:')} {selected.stock_count}
+                      {t('inventory.in_stock', 'المتوفر:')} {selected.stock_count}
                     </Text>
                   </View>
                   <Text style={styles.unitPriceText}>
-                    {selected.price != null ? formatPrice(selected.price) : t('product.price_request', 'No price')}
+                    {selected.price != null ? formatPrice(selected.price) : t('product.price_request', 'بدون سعر')}
                   </Text>
                 </View>
 
                 {/* Quantity Stepper */}
-                <Text style={styles.inputLabel}>{t('common.quantity', 'Quantity')}</Text>
+                <Text style={styles.inputLabel}>{t('common.quantity', 'الكمية')}</Text>
                 <View style={styles.qtyStepper}>
                   <TouchableOpacity
                     style={[styles.stepperBtn, (qtyNum <= 1) && styles.stepperDisabled]}

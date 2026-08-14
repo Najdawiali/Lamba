@@ -173,9 +173,9 @@ export default function LowStockScreen() {
   };
 
   const getPriorityText = (stock: number) => {
-    if (stock === 0) return t('product.out_of_stock', 'Out of Stock');
-    if (stock <= 5) return t('merchant.stock_out', 'Critical');
-    return t('product.limited_stock', 'Low Stock');
+    if (stock === 0) return t('lowStock.out_of_stock', 'نفد المخزون');
+    if (stock <= 5) return t('lowStock.critical', 'حرج');
+    return t('lowStock.low', 'مخزون منخفض');
   };
 
   const styles = useMemo(() => StyleSheet.create({
@@ -553,7 +553,7 @@ export default function LowStockScreen() {
           <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
-          {t('merchant.inventory', 'Replenishment Board')}
+          {t('lowStock.title', 'تنبيهات نقص المخزون')}
         </Text>
         <View style={{ width: 40 }} />
       </View>
@@ -570,7 +570,7 @@ export default function LowStockScreen() {
             onPress={() => setFilterMode('all')}
           >
             <Text style={[styles.filterTabText, filterMode === 'all' && styles.filterTabTextActive]}>
-              {t('common.all', 'All')} ({lowStockItems.length})
+              {t('common.all', 'الكل')} ({lowStockItems.length})
             </Text>
           </TouchableOpacity>
 
@@ -580,7 +580,7 @@ export default function LowStockScreen() {
           >
             <View style={[styles.tabBadge, { backgroundColor: Colors.error }]} />
             <Text style={[styles.filterTabText, filterMode === 'out_of_stock' && styles.filterTabTextActive]}>
-              {t('product.out_of_stock', 'Out of Stock')} ({lowStockItems.filter(p => p.stock_count === 0).length})
+              {t('lowStock.out_of_stock', 'نفد المخزون')} ({lowStockItems.filter(p => p.stock_count === 0).length})
             </Text>
           </TouchableOpacity>
 
@@ -590,7 +590,7 @@ export default function LowStockScreen() {
           >
             <View style={[styles.tabBadge, { backgroundColor: '#FF9500' }]} />
             <Text style={[styles.filterTabText, filterMode === 'critical' && styles.filterTabTextActive]}>
-              {t('merchant.stock_out', 'Critical')} ({lowStockItems.filter(p => p.stock_count >= 1 && p.stock_count <= 5).length})
+              {t('lowStock.critical', 'حرج')} ({lowStockItems.filter(p => p.stock_count >= 1 && p.stock_count <= 5).length})
             </Text>
           </TouchableOpacity>
 
@@ -600,7 +600,7 @@ export default function LowStockScreen() {
           >
             <View style={[styles.tabBadge, { backgroundColor: '#FFCC00' }]} />
             <Text style={[styles.filterTabText, filterMode === 'low' && styles.filterTabTextActive]}>
-              {t('product.limited_stock', 'Low')} ({lowStockItems.filter(p => p.stock_count >= 6 && p.stock_count <= 10).length})
+              {t('lowStock.low', 'منخفض')} ({lowStockItems.filter(p => p.stock_count >= 6 && p.stock_count <= 10).length})
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -669,7 +669,7 @@ export default function LowStockScreen() {
                   activeOpacity={0.8}
                 >
                   <Ionicons name="add" size={16} color="#FFF" />
-                  <Text style={styles.replenishBtnText}>{t('common.edit', 'Replenish')}</Text>
+                  <Text style={styles.replenishBtnText}>{t('lowStock.replenish', 'إعادة تعبئة')}</Text>
                 </TouchableOpacity>
               </View>
             ))}
@@ -681,7 +681,7 @@ export default function LowStockScreen() {
               <Ionicons name="checkmark-circle-outline" size={44} color={Colors.success} />
             </View>
             <Text style={styles.emptyText}>
-              {t('merchant.dashboard', 'Excellent! No items are currently running low or out of stock.')}
+              {t('merchant.dashboard', 'ممتاز! لا توجد منتجات منخفضة أو نافدة بالمخزون حالياً.')}
             </Text>
           </View>
         }
@@ -710,7 +710,7 @@ export default function LowStockScreen() {
                   <View style={{ width: '100%' }}>
                     {/* Header */}
                     <View style={styles.modalHeader}>
-                      <Text style={styles.modalTitle}>{t('merchant.add_product_title', 'Quick Stock Replenish')}</Text>
+                      <Text style={styles.modalTitle}>{t('merchant.add_product_title', 'إعادة تعبئة المخزون السريعة')}</Text>
                       {keyboardVisible && (
                         <TouchableOpacity
                           onPress={() => Keyboard.dismiss()}
@@ -718,7 +718,7 @@ export default function LowStockScreen() {
                           activeOpacity={0.7}
                         >
                           <Ionicons name="keypad-outline" size={16} color={Colors.primary} />
-                          <Text style={styles.keyboardDismissText}>{t('common.done', 'Done')}</Text>
+                          <Text style={styles.keyboardDismissText}>{t('common.done', 'تم')}</Text>
                         </TouchableOpacity>
                       )}
                     </View>
@@ -740,14 +740,14 @@ export default function LowStockScreen() {
                       <View style={styles.modalTextWrapper}>
                         <Text style={styles.modalItemName} numberOfLines={1}>{selectedProduct.name}</Text>
                         <Text style={styles.modalItemSub}>
-                          {selectedProduct.stock_count}
+                          {t('dashboard.stock_label', 'المخزون')}: {selectedProduct.stock_count}
                         </Text>
                       </View>
                     </View>
 
                     {/* Incrementor Fields */}
                     <Text style={styles.inputLabel}>
-                      {t('merchant.stock_status', 'Add Stock Quantity')}
+                      {t('merchant.stock_status', 'الكمية المراد إضافتها')}
                     </Text>
 
                     <View style={styles.adjusterRow}>
@@ -779,7 +779,7 @@ export default function LowStockScreen() {
                         onPress={() => { setReplenishModalVisible(false); setSelectedProduct(null); }}
                         disabled={savingReplenish}
                       >
-                        <Text style={styles.modalBtnTextCancel}>{t('common.cancel', 'Cancel')}</Text>
+                        <Text style={styles.modalBtnTextCancel}>{t('common.cancel', 'إلغاء')}</Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity
@@ -792,7 +792,7 @@ export default function LowStockScreen() {
                         ) : (
                           <>
                             <Ionicons name="cube-outline" size={16} color="#FFF" style={{ marginRight: 6 }} />
-                            <Text style={styles.modalBtnTextSave}>{t('common.save', 'Replenish')}</Text>
+                            <Text style={styles.modalBtnTextSave}>{t('common.save', 'إعادة تعبئة')}</Text>
                           </>
                         )}
                       </TouchableOpacity>

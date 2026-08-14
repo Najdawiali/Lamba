@@ -329,6 +329,9 @@
     "logout_confirm": "Are you sure? You'll need to sign in again.",
     "logout_title": "Confirm Logout",
     "notifications": "Notifications",
+    "enabled": "Enabled",
+    "tagline": "Secure & Hyper-local",
+    "language_name": "English",
     "business_docs": "Business Documents",
     "upload_license": "Upload License",
     "version": "Version",
@@ -618,7 +621,8 @@
     "catalog_items": "Catalog Items",
     "edit_product": "Edit Product Details",
     "validation_error_stock": "Please enter a valid stock quantity (integer greater than or equal to 0).",
-    "validation_error_price": "Please enter a valid price (number greater than or equal to 0)."
+    "validation_error_price": "Please enter a valid price (number greater than or equal to 0).",
+    "empty_subtitle": "Add or scan your first item to get started."
   },
   "common": {
     "error": "An error occurred",
@@ -758,6 +762,28 @@
     "store_phone": "Phone Number",
     "catalog_search_placeholder": "Search product in catalog...",
     "bulk_upload_title": "Bulk Upload",
-    "bulk_upload_desc": "Upload CSV or Excel file to add products in bulk"
+    "bulk_upload_desc": "Upload CSV or Excel file to add products in bulk",
+    "dashboard_subtitle": "Manage your inventory and sales",
+    "seller_account": "Seller Account",
+    "my_store": "My Store",
+    "coordinates": "Coordinates",
+    "analytics_status": "Store Analytics & Status",
+    "analytics_desc": "Track revenue metrics, asset valuation, and toggle status",
+    "back_to_shopping": "Back to Shopping",
+    "cashier_ops": "Cashier Operations",
+    "cashier_ops_desc": "POS sales tools, cashier scanner, and historical transactions",
+    "scan_barcode_desc": "Scan a product barcode to process checkouts, update quantities, or link items to inventory.",
+    "history_desc": "View historical sales receipts, checkout details, aggregate revenue, and cashier records.",
+    "quick_sale": "Quick Sale",
+    "quick_sale_desc": "Manually enter a price to create an instant sale ticket without scanning.",
+    "low_stock_manage": "Tap to manage depleting inventory items",
+    "desc_product_hint": "Describe ingredients, brand, or flavor profile...",
+    "desc_service_hint": "Describe service details, duration, requirements...",
+    "selling_price_jod": "Selling Price *",
+    "primary_photo": "Primary Thumbnail Photo *",
+    "limited": "Limited",
+    "men": "Men",
+    "women": "Women",
+    "all_audience": "All"
   }
 }

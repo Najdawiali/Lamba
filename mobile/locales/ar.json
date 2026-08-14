@@ -308,6 +308,9 @@
     "logout_confirm": "هل أنت متأكد من تسجيل الخروج؟",
     "logout_title": "تأكيد الخروج",
     "notifications": "الإشعارات",
+    "enabled": "مفعّل",
+    "tagline": "آمن ومحلي للغاية",
+    "language_name": "العربية",
     "business_docs": "المستندات التجارية",
     "upload_license": "رفع الرخصة",
     "version": "الإصدار",
@@ -597,7 +600,8 @@
     "catalog_items": "عناصر الكتالوج",
     "edit_product": "تعديل تفاصيل المنتج",
     "validation_error_stock": "يرجى إدخال كمية مخزون صحيحة (عدد صحيح أكبر من أو يساوي ٠).",
-    "validation_error_price": "يرجى إدخال سعر صحيح (رقم أكبر من أو يساوي ٠)."
+    "validation_error_price": "يرجى إدخال سعر صحيح (رقم أكبر من أو يساوي ٠).",
+    "empty_subtitle": "أضف أو امسح منتجك الأول للبدء."
   },
   "common": {
     "error": "حدث خطأ",
@@ -758,6 +762,28 @@
     "store_phone": "رقم الهاتف",
     "catalog_search_placeholder": "ابحث عن منتج في الكتالوج...",
     "bulk_upload_title": "رفع جماعي",
-    "bulk_upload_desc": "ارفع ملف CSV أو Excel لإضافة منتجات دفعة واحدة"
+    "bulk_upload_desc": "ارفع ملف CSV أو Excel لإضافة منتجات دفعة واحدة",
+    "dashboard_subtitle": "إدارة المخزون والمبيعات",
+    "seller_account": "حساب البائع",
+    "my_store": "متجري",
+    "coordinates": "الإحداثيات",
+    "analytics_status": "إحصائيات وحالة المتجر",
+    "analytics_desc": "تتبع المبيعات وقيمة المخزون وحالة المتجر",
+    "back_to_shopping": "العودة للتسوق",
+    "cashier_ops": "عمليات الكاشير",
+    "cashier_ops_desc": "أدوات نقطة البيع، ماسح الكاشير، وسجل المعاملات",
+    "scan_barcode_desc": "مسح باركود المنتج لإتمام المبيعات أو تحديث الكميات أو ربطه بالمخزون.",
+    "history_desc": "عرض فواتير المبيعات السابقة وتفاصيل الدفع وإجمالي الإيرادات وسجلات الكاشير.",
+    "quick_sale": "بيع سريع",
+    "quick_sale_desc": "إدخال السعر يدوياً لإنشاء فاتورة بيع فورية دون الحاجة للمسح.",
+    "low_stock_manage": "اضغط لإدارة المنتجات التي أوشكت على النفاد",
+    "desc_product_hint": "صف المكونات أو العلامة التجارية...",
+    "desc_service_hint": "صف تفاصيل الخدمة ومدتها ومتطلباتها...",
+    "selling_price_jod": "سعر البيع *",
+    "primary_photo": "صورة العرض الرئيسية *",
+    "limited": "محدود",
+    "men": "رجال",
+    "women": "نساء",
+    "all_audience": "الجميع"
   }
 }

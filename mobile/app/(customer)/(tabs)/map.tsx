@@ -16,8 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { getNearMarkets, NearMarketResponse } from '../../../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
 import { useTheme } from '../../../context/ThemeContext';
-import { t } from '../../../services/i18n';
-import { getMapStyle, calculateDistanceMeters } from '../../../services/utils';
+import { t, i18n } from '../../../services/i18n';
+import { getMapStyle, calculateDistanceMeters, openMapDirections, formatDistanceKm } from '../../../services/utils';
 
 const CARD_WIDTH = 280;
 const CARD_MARGIN = 10;
@@ -319,9 +319,31 @@ export default function MapScreen() {
                         {item.is_currently_open ? t('common.open', 'Open') : t('common.closed', 'Closed')}
                       </Text>
                     </View>
-                    <Text style={styles.distanceText}>
-                      {typeof item.distance_km === 'number' ? `${item.distance_km.toFixed(1)} ${t('common.km', 'km')}` : `${item.distance_km || 0} ${t('common.km', 'km')}`}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={styles.distanceText}>
+                        {formatDistanceKm(item.distance_km, i18n.locale?.startsWith('ar'))}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          openMapDirections(item.latitude, item.longitude, item.name);
+                        }}
+                        style={{
+                          backgroundColor: Colors.primary + '20',
+                          borderRadius: 8,
+                          paddingHorizontal: 8,
+                          paddingVertical: 4,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                      >
+                        <Ionicons name="navigate-outline" size={12} color={Colors.primary} />
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.primary }}>
+                          {t('common.directions', 'الاتجاهات')}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
               </TouchableOpacity>

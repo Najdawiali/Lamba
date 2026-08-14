@@ -21,7 +21,7 @@ import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/t
 import { useThemeColors } from '../../../context/ThemeContext';
 import { t, i18n } from '../../../services/i18n';
 import { getCurrencyCode, formatPrice } from '../../../services/currency';
-import { resolveImageUrl } from '../../../services/utils';
+import { resolveImageUrl, formatDistanceKm } from '../../../services/utils';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
 const DEFAULT_COORDS = { latitude: 32.0385, longitude: 35.7275 }; // As-Salt Fallback
@@ -603,7 +603,7 @@ export default function CustomerOffersScreen() {
             <View style={styles.metricPill}>
               <Ionicons name="location-outline" size={12} color={Colors.secondary} />
               <Text style={styles.metricText}>
-                {item.distance_km.toFixed(1)} {t('common.km')}
+                {formatDistanceKm(item.distance_km, isAr)}
               </Text>
             </View>
 

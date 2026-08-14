@@ -134,12 +134,12 @@ export default function MerchantInboxScreen() {
         </View>
         <View style={styles.chatInfo}>
           <View style={styles.chatRow}>
-            <Text style={styles.partnerName} numberOfLines={1}>{item.partner_name || 'Customer'}</Text>
+            <Text style={styles.partnerName} numberOfLines={1}>{item.partner_name || t('inbox.customer', 'العميل')}</Text>
             <Text style={styles.timestamp}>{timestamp}</Text>
           </View>
           <View style={styles.chatRow}>
             <Text style={styles.lastMessage} numberOfLines={2}>
-              {item.last_message || t('inbox.tap_to_view', 'Tap to view conversation')}
+              {item.last_message || t('inbox.tap_to_view', 'اضغط لعرض المحادثة')}
             </Text>
             {(item.unread_count ?? 0) > 0 && (
               <View style={styles.unreadBadge}>
@@ -315,7 +315,7 @@ export default function MerchantInboxScreen() {
           <TouchableOpacity onPress={handleBackToInbox} style={styles.backBtn} activeOpacity={0.7}>
             <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.title} numberOfLines={1}>{selectedSession.partner_name || t('inbox.chat_with_customer', 'Chat with Customer')}</Text>
+          <Text style={styles.title} numberOfLines={1}>{selectedSession.partner_name || t('inbox.chat_with_customer', 'محادثة مع العميل')}</Text>
           <View style={{ width: 40 }} />
         </View>
 

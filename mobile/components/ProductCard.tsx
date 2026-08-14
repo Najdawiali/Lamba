@@ -14,7 +14,7 @@ import { SearchResultItem, isFavorite, addFavorite, removeFavorite, startChatSes
 import { Spacing, BorderRadius, Typography, Shadows } from '../constants/theme';
 import { useThemeColors } from '../context/ThemeContext';
 import { t, i18n } from '../services/i18n';
-import { resolveImageUrl } from '../services/utils';
+import { resolveImageUrl, formatDistanceKm } from '../services/utils';
 import { formatPrice } from '../services/currency';
 
 interface Props {
@@ -369,7 +369,7 @@ export default function ProductCard({ item }: Props) {
             <View style={styles.distancePill}>
               <Ionicons name="navigate-outline" size={11} color={Colors.secondary} />
               <Text style={styles.distanceText}>
-                {typeof item.distance_km === 'number' ? `${item.distance_km.toFixed(1)} ` : '0 '}{t('common.km')}
+                {formatDistanceKm(item.distance_km, i18n.locale?.startsWith('ar'))}
               </Text>
             </View>
 
