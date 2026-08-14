@@ -658,51 +658,54 @@ async def _run_search(
         logger.debug("[SEARCH VALIDATION] Query %r is invalid (pure punctuation/empty/symbols only)", query_text)
         return [], []
 
-    from app.services.query_understanding import query_understanding_service
-
-    effective_listing_type = listing_type
-    extracted_attrs: Dict[str, Any] = {}
-    query_clean: Optional[str] = None
-    try:
-        intent_analysis = await query_understanding_service.analyze_query_async(query_text)
-        if not effective_listing_type and intent_analysis.intent in ("product", "service"):
-            effective_listing_type = intent_analysis.intent
-        extracted_attrs = intent_analysis.attributes or {}
-        query_clean = intent_analysis.query_clean
-        if extracted_attrs:
-            logger.info(f"[ATTR FILTER] query={query_text!r} attrs={extracted_attrs} query_clean={query_clean!r}")
-    except Exception as e:
-        logger.warning(f"Query understanding skipped: {e}")
-
-    # Use query_clean (core product term without attribute modifiers) for embedding
-    # so semantic search finds ALL products of that type, then attributes filter
-    effective_query = query_clean or query_text
-    normalized_query = normalize_query(effective_query)
-    query_script = _script_of(effective_query)
-
+    # 1. Normalization & Arabizi transliteration
     from app.services.arabic_norm import arabizi_to_arabic
+    normalized_input = normalize_query(query_text)
+    arabicized = arabizi_to_arabic(query_text)
+    norm_arabicized = normalize_query(arabicized) if arabicized else None
 
-    primary_text = normalized_query or query_text
+    # Base text to resolve synonyms against (use Arabizi translation if Latin/Arabizi)
+    base_text = norm_arabicized if (norm_arabicized and norm_arabicized != normalized_input) else (normalized_input or query_text)
 
-    # Synonym expansion from pre-built table (<1ms)
-    words = primary_text.split()
+    # 2. Synonym expansion from pre-built table (<1ms O(1) Redis lookup)
+    # Resolve dialect words to formal Arabic BEFORE query understanding
+    words = base_text.split()
+    resolved_query = base_text
     synonym_variants: List[str] = []
 
     for word in words:
         synonym = await lookup_synonym(word)
         if synonym and synonym != word:
-            # Build a variant query with the formal term
-            variant = primary_text.replace(word, synonym)
-            if variant not in synonym_variants and variant != primary_text:
-                synonym_variants.append(variant)
-            # Also add the formal term alone for single-word queries
-            if len(words) == 1 and synonym not in synonym_variants and synonym != primary_text:
+            resolved_query = resolved_query.replace(word, synonym)
+            if resolved_query not in synonym_variants and resolved_query != base_text:
+                synonym_variants.append(resolved_query)
+            if len(words) == 1 and synonym not in synonym_variants and synonym != base_text:
                 synonym_variants.append(synonym)
+
+    # 3. Query Understanding on resolved query
+    from app.services.query_understanding import query_understanding_service
+    effective_listing_type = listing_type
+    extracted_attrs: Dict[str, Any] = {}
+    query_clean: Optional[str] = None
+    try:
+        intent_analysis = await query_understanding_service.analyze_query_async(resolved_query)
+        if not effective_listing_type and intent_analysis.intent in ("product", "service"):
+            effective_listing_type = intent_analysis.intent
+        extracted_attrs = intent_analysis.attributes or {}
+        query_clean = intent_analysis.query_clean
+        if extracted_attrs:
+            logger.info(f"[ATTR FILTER] query={query_text!r} resolved={resolved_query!r} attrs={extracted_attrs} query_clean={query_clean!r}")
+    except Exception as e:
+        logger.warning(f"Query understanding skipped: {e}")
+
+    # Primary text for semantic search embedding: use query_clean if modifiers were extracted, else resolved_query
+    primary_text = query_clean or resolved_query
+    query_script = _script_of(primary_text)
 
     t1 = time.time()
     logger.info(f"[TIMING] Normalization, Intent & Synonyms: {(t1-t0)*1000:.0f}ms")
 
-    # 1. Gate expansion: run parallel expansion only for complex/intent queries
+    # 4. Gate expansion: run parallel expansion only for complex/intent queries
     has_synonym = len(synonym_variants) > 0
     should_expand = getattr(settings, "enable_query_expansion", True) and needs_expansion(query_text, query_script, has_synonym=has_synonym)
 
@@ -725,15 +728,16 @@ async def _run_search(
         original_embedding = await embedding_service.encode_text_async(primary_text, text_type="query")
 
     texts: List[str] = [primary_text]
+    for candidate_t in [resolved_query, normalized_input, query_text]:
+        if candidate_t and candidate_t not in texts:
+            texts.append(candidate_t)
+
     for sv in synonym_variants:
         if sv and sv not in texts:
             texts.append(sv)
 
-    arabicized = arabizi_to_arabic(query_text)
-    if arabicized and arabicized.strip() and arabicized.lower() != query_text.lower():
-        norm_arabicized = normalize_query(arabicized)
-        if norm_arabicized and norm_arabicized not in texts:
-            texts.append(norm_arabicized)
+    if norm_arabicized and norm_arabicized not in texts:
+        texts.append(norm_arabicized)
 
     for v in variants:
         nv = normalize_query(v) or v.strip()
@@ -846,7 +850,7 @@ async def _run_search(
     elif arabicized and arabicized.strip() and arabicized.lower() != query_text.lower() and norm_arabicized:
         rerank_query = norm_arabicized
     else:
-        rerank_query = normalized_query or query_text
+        rerank_query = normalized_input or query_text
 
     # 4. Cross-encode + language-aware ordering.
     scored = await _rerank_and_finalize(rerank_query, fused, query_script)
