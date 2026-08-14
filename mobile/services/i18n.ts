@@ -38,16 +38,20 @@ export const setupI18n = async () => {
 export const toggleLanguage = async () => {
   const currentLang = i18n.locale.includes('ar') ? 'ar' : 'en';
   const newLang = currentLang === 'en' ? 'ar' : 'en';
+  await changeLanguage(newLang);
+};
 
-  const isRTL = newLang === 'ar';
+// Set specific language (ar or en)
+export const changeLanguage = async (targetLang: 'ar' | 'en') => {
+  const isRTL = targetLang === 'ar';
 
   // Persist preference
   try {
-    await SecureStore.setItemAsync(LANGUAGE_KEY, newLang);
+    await SecureStore.setItemAsync(LANGUAGE_KEY, targetLang);
   } catch {}
 
   // Update locale
-  i18n.locale = newLang;
+  i18n.locale = targetLang;
 
   // Force RTL layout if Arabic
   I18nManager.allowRTL(isRTL);
@@ -61,7 +65,6 @@ export const toggleLanguage = async () => {
     }
   } catch (e) {
     // In Expo Go / dev mode, Updates.reloadAsync() will throw or not be available.
-    // We catch this so the caller (like profile.tsx) can show an alert asking the user to manually restart.
     console.warn('Could not auto-reload app, manual restart required:', e);
   }
 };

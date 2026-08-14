@@ -1,204 +1,272 @@
 /**
  * Customer Profile Screen — Account info, settings, search alerts, and logout.
- * Premium dark UI with glassmorphic cards.
- * 
- * All buttons are fully functional:
- * - Edit Profile: opens modal to edit display name (saved to local SecureStore)
- * - Favorites: navigates to favorites screen
- * - Notification Preferences: opens modal with toggle switches
- * - Language: toggles language and prompts restart
- * - Currency: opens currency picker modal
- * - Stock Alerts: opens alerts history modal
- * - Privacy Policy / Terms: opens scrollable text modal
- * - Logout: confirmation dialog → clears session → redirects to gateway
+ * Restructured grouped design with RTL support and working modals.
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView,
-  Modal, FlatList, ActivityIndicator, TextInput, Switch
+  Modal, FlatList, ActivityIndicator, TextInput
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { getUser, saveUser, logout, getCustomerAlerts, AlertResponse, getMyStore } from '../../../services/api';
+import { getUser, saveUser, logout, getCustomerAlerts, AlertResponse, getMyStore, updateProfile } from '../../../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
-import { useThemeColors } from '../../../context/ThemeContext';
-import { t, i18n, toggleLanguage } from '../../../services/i18n';
-// currency removed
+import { useTheme, useThemeColors, ThemeMode } from '../../../context/ThemeContext';
+import { t, i18n, changeLanguage } from '../../../services/i18n';
 import Constants from 'expo-constants';
-import ThemePreferenceRow from '../../../components/ThemePreferenceRow';
-
-// ── Notification Preferences (persisted locally) ──────────────
-import * as SecureStore from 'expo-secure-store';
-
-const NOTIF_PREFS_KEY = 'lamba_notif_prefs';
-
-interface NotifPrefs {
-  stockAlerts: boolean;
-  promotions: boolean;
-  messages: boolean;
-}
-
-const DEFAULT_NOTIF_PREFS: NotifPrefs = {
-  stockAlerts: true,
-  promotions: true,
-  messages: true,
-};
-
-const loadNotifPrefs = async (): Promise<NotifPrefs> => {
-  try {
-    const raw = await SecureStore.getItemAsync(NOTIF_PREFS_KEY);
-    return raw ? JSON.parse(raw) : DEFAULT_NOTIF_PREFS;
-  } catch {
-    return DEFAULT_NOTIF_PREFS;
-  }
-};
-
-const saveNotifPrefs = async (prefs: NotifPrefs): Promise<void> => {
-  try {
-    await SecureStore.setItemAsync(NOTIF_PREFS_KEY, JSON.stringify(prefs));
-  } catch {}
-};
 
 // ── Privacy Policy & Terms Content ────────────────────────────
-const PRIVACY_POLICY_EN = `Last updated: June 2026
+const PRIVACY_POLICY_EN = `Privacy Policy — Lamba App
 
-Lamba ("we", "us", or "our") respects your privacy. This Privacy Policy explains how we collect, use, and protect your information when you use the Lamba mobile application.
+Last updated: August 2026
 
 1. Information We Collect
-• Account information (email, phone number, display name)
-• Location data (GPS coordinates for hyper-local product discovery)
-• Search queries and browsing history within the app
-• Device information (OS version, device model)
+We collect the following information when you use the Lamba app:
+- Account information: name, phone number, email
+- Location: to show nearby stores and products
+- Search history: to improve results and provide better suggestions
+- Messages: conversations between you and stores
 
 2. How We Use Your Information
-• To provide hyper-local product search and discovery
-• To connect you with nearby merchants
-• To send stock availability notifications
-• To improve our services and user experience
+- Display products and services near your location
+- Improve search results based on your preferences
+- Send notifications when products you requested become available
+- Enable communication between buyers and sellers
 
-3. Data Sharing
-We do not sell your personal data. We share information only with:
-• Merchants you interact with (messages, inquiries)
-• Service providers that help us operate (hosting, analytics)
+3. Information Sharing
+We do not sell your personal information to third parties. We may share:
+- Your approximate location with stores to calculate distance
+- Your contact information with stores you communicate with
 
-4. Data Security
-We use industry-standard encryption (TLS) and secure storage (device keychain) to protect your data.
+4. Data Protection
+We use SSL/TLS encryption to protect your data during transit and store passwords in encrypted form.
 
 5. Your Rights
-You may request deletion of your account and associated data at any time by contacting support@lamba.app.
+At any time, you can:
+- Request deletion of your account and data
+- Edit your personal information
+- Disable availability notifications
 
 6. Contact Us
 For privacy inquiries: privacy@lamba.app`;
 
-const PRIVACY_POLICY_AR = `آخر تحديث: يونيو ٢٠٢٦
+const PRIVACY_POLICY_AR = `سياسة الخصوصية - تطبيق لمبة
 
-تحترم لمبة ("نحن") خصوصيتك. توضح سياسة الخصوصية هذه كيفية جمع واستخدام وحماية معلوماتك عند استخدام تطبيق لمبة.
+آخر تحديث: أغسطس ٢٠٢٦
 
 ١. المعلومات التي نجمعها
-• معلومات الحساب (البريد الإلكتروني، رقم الهاتف، الاسم)
-• بيانات الموقع (إحداثيات GPS لاكتشاف المنتجات القريبة)
-• عمليات البحث وسجل التصفح داخل التطبيق
-• معلومات الجهاز (إصدار النظام، طراز الجهاز)
+نجمع المعلومات التالية عند استخدامك لتطبيق لمبة:
+- معلومات الحساب: الاسم، رقم الهاتف، البريد الإلكتروني
+- الموقع الجغرافي: لعرض المتاجر والمنتجات القريبة منك
+- سجل البحث: لتحسين نتائج البحث وتقديم اقتراحات أفضل
+- الرسائل: المحادثات بينك وبين المتاجر
 
 ٢. كيف نستخدم معلوماتك
-• لتوفير البحث والاكتشاف المحلي للمنتجات
-• لربطك بالتجار القريبين
-• لإرسال إشعارات توفر المخزون
-• لتحسين خدماتنا وتجربة المستخدم
+- عرض المنتجات والخدمات القريبة من موقعك
+- تحسين نتائج البحث بناءً على تفضيلاتك
+- إرسال إشعارات عند توفر منتجات طلبتها
+- تمكين التواصل بين المشترين والبائعين
 
-٣. مشاركة البيانات
-لا نبيع بياناتك الشخصية. نشارك المعلومات فقط مع:
-• التجار الذين تتواصل معهم (الرسائل، الاستفسارات)
-• مزودي الخدمات الذين يساعدوننا في التشغيل (الاستضافة، التحليلات)
+٣. مشاركة المعلومات
+لا نبيع معلوماتك الشخصية لأطراف ثالثة. قد نشارك:
+- موقعك التقريبي مع المتاجر لحساب المسافة
+- معلومات الاتصال مع المتاجر التي تتواصل معها
 
-٤. أمان البيانات
-نستخدم التشفير المعياري (TLS) والتخزين الآمن لحماية بياناتك.
+٤. حماية البيانات
+نستخدم تشفير SSL/TLS لحماية بياناتك أثناء النقل وتخزين كلمات المرور بشكل مشفر.
 
 ٥. حقوقك
-يمكنك طلب حذف حسابك والبيانات المرتبطة به في أي وقت عبر التواصل مع support@lamba.app.
+يمكنك في أي وقت:
+- طلب حذف حسابك وبياناتك
+- تعديل معلوماتك الشخصية
+- إيقاف إشعارات التوفر
 
-٦. تواصل معنا
-للاستفسارات المتعلقة بالخصوصية: privacy@lamba.app`;
+٦. التواصل معنا
+للاستفسارات حول الخصوصية: privacy@lamba.app`;
 
-const TERMS_OF_SERVICE_EN = `Last updated: June 2026
+const TERMS_OF_SERVICE_EN = `Terms of Service — Lamba App
 
-Welcome to Lamba. By using our application, you agree to these Terms of Service.
+Last updated: August 2026
 
-1. Service Description
-Lamba is a hyper-local retail discovery platform that connects shoppers with nearby merchants. We facilitate product discovery and communication — we do not process payments or handle transactions.
+1. Acceptance of Terms
+By using the Lamba app, you agree to these terms.
 
-2. User Accounts
-• You must provide accurate information when creating an account
-• You are responsible for maintaining the security of your account
-• You must be at least 13 years old to use Lamba
+2. Service Description
+Lamba is a platform that connects buyers with local stores and service providers. We do not sell products directly — we provide a search and communication tool.
 
-3. Acceptable Use
-You agree not to:
-• Provide false or misleading product information
-• Harass or spam other users or merchants
-• Attempt to reverse-engineer or disrupt the service
-• Use the platform for any illegal purpose
+3. User Accounts
+- Information provided must be accurate
+- You are responsible for maintaining the confidentiality of your account
+- You must be 16 years or older
 
-4. Merchant Responsibilities
-Merchants are solely responsible for:
-• Accuracy of product listings and prices
-• Product availability and stock information
-• Compliance with local business regulations
+4. Seller Responsibilities
+- Product information and prices displayed are the seller's responsibility
+- Products and services offered must be legal
+- Lamba is not responsible for the quality of products or services
 
-5. Limitation of Liability
-Lamba serves as a discovery and communication platform. We are not responsible for:
-• Product quality or accuracy of merchant listings
-• Transactions conducted outside the platform
-• Disputes between shoppers and merchants
+5. Acceptable Use
+Prohibited:
+- Posting offensive or illegal content
+- Using the app for fraud
+- Collecting other users' data
 
-6. Changes to Terms
-We may update these terms from time to time. Continued use of Lamba constitutes acceptance of updated terms.
+6. Disclaimer
+Lamba is an intermediary platform. We do not guarantee the accuracy of information provided by sellers and are not liable for any transactions between buyers and sellers.
 
-7. Contact
-For questions about these terms: legal@lamba.app`;
+7. Modifications
+We reserve the right to modify these terms. You will be notified of any material changes.
 
-const TERMS_OF_SERVICE_AR = `آخر تحديث: يونيو ٢٠٢٦
+8. Contact
+support@lamba.app`;
 
-مرحباً بك في لمبة. باستخدامك لتطبيقنا، فإنك توافق على شروط الخدمة هذه.
+const TERMS_OF_SERVICE_AR = `شروط الخدمة - تطبيق لمبة
 
-١. وصف الخدمة
-لمبة هي منصة اكتشاف تجزئة محلية تربط المتسوقين بالتجار القريبين. نحن نسهل اكتشاف المنتجات والتواصل — لا نعالج المدفوعات أو المعاملات.
+آخر تحديث: أغسطس ٢٠٢٦
 
-٢. حسابات المستخدمين
-• يجب تقديم معلومات دقيقة عند إنشاء الحساب
-• أنت مسؤول عن الحفاظ على أمان حسابك
-• يجب أن يكون عمرك ١٣ سنة على الأقل لاستخدام لمبة
+١. القبول بالشروط
+باستخدامك لتطبيق لمبة، فإنك توافق على هذه الشروط.
 
-٣. الاستخدام المقبول
-توافق على عدم:
-• تقديم معلومات منتج كاذبة أو مضللة
-• مضايقة أو إرسال رسائل غير مرغوبة للمستخدمين أو التجار
-• محاولة عكس هندسة الخدمة أو تعطيلها
-• استخدام المنصة لأي غرض غير قانوني
+٢. وصف الخدمة
+لمبة منصة تربط المشترين بالمتاجر ومقدمي الخدمات المحلية. نحن لا نبيع منتجات مباشرة — نحن نوفر أداة البحث والتواصل.
 
-٤. مسؤوليات التاجر
-التجار مسؤولون وحدهم عن:
-• دقة قوائم المنتجات والأسعار
-• توفر المنتجات ومعلومات المخزون
-• الامتثال للوائح الأعمال المحلية
+٣. حسابات المستخدمين
+- يجب أن تكون المعلومات المقدمة صحيحة
+- أنت مسؤول عن الحفاظ على سرية حسابك
+- يجب أن يكون عمرك ١٦ سنة أو أكثر
 
-٥. تحديد المسؤولية
-تعمل لمبة كمنصة اكتشاف وتواصل. لسنا مسؤولين عن:
-• جودة المنتج أو دقة قوائم التاجر
-• المعاملات التي تتم خارج المنصة
-• النزاعات بين المتسوقين والتجار
+٤. مسؤوليات البائعين
+- المعلومات والأسعار المعروضة هي مسؤولية البائع
+- يجب أن تكون المنتجات والخدمات المعروضة قانونية
+- لمبة غير مسؤولة عن جودة المنتجات أو الخدمات
 
-٦. تغييرات في الشروط
-قد نحدث هذه الشروط من وقت لآخر. الاستمرار في استخدام لمبة يشكل قبولاً للشروط المحدثة.
+٥. الاستخدام المقبول
+يُحظر:
+- نشر محتوى مسيء أو غير قانوني
+- استخدام التطبيق للاحتيال
+- جمع بيانات المستخدمين الآخرين
 
-٧. تواصل معنا
-للأسئلة حول هذه الشروط: legal@lamba.app`;
+٦. إخلاء المسؤولية
+لمبة منصة وسيطة. لا نضمن دقة المعلومات المقدمة من البائعين ولا نتحمل مسؤولية أي معاملات بين المشترين والبائعين.
+
+٧. التعديلات
+نحتفظ بحق تعديل هذه الشروط. سيتم إشعارك بأي تغييرات جوهرية.
+
+٨. التواصل
+support@lamba.app`;
+
+// ── Sub-components for Grouped Layout ─────────────────────────
+const SectionHeader = ({ title }: { title: string }) => {
+  const Colors = useThemeColors();
+  return (
+    <Text style={{
+      color: Colors.textMuted,
+      fontSize: 12,
+      fontWeight: '600',
+      textAlign: 'right',
+      paddingHorizontal: 36,
+      paddingTop: 24,
+      paddingBottom: 8,
+      letterSpacing: 0.5,
+      textTransform: 'uppercase',
+    }}>
+      {title}
+    </Text>
+  );
+};
+
+const Divider = () => {
+  const Colors = useThemeColors();
+  return (
+    <View style={{
+      height: 0.5,
+      backgroundColor: Colors.border,
+      marginHorizontal: 20,
+    }} />
+  );
+};
+
+const MenuRow = ({
+  icon,
+  label,
+  value,
+  badge,
+  onPress,
+  showChevron = true,
+}: {
+  icon: string;
+  label: string;
+  value?: string;
+  badge?: number;
+  onPress: () => void;
+  showChevron?: boolean;
+}) => {
+  const Colors = useThemeColors();
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.6}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 15,
+        paddingHorizontal: 20,
+      }}
+    >
+      {/* Left side: chevron + value / badge */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        {showChevron && (
+          <Ionicons name="chevron-back" size={16} color={Colors.textSecondary} />
+        )}
+        {value && (
+          <Text style={{ color: Colors.textSecondary, fontSize: 13 }}>
+            {value}
+          </Text>
+        )}
+        {badge !== undefined && badge > 0 && (
+          <View style={{
+            backgroundColor: Colors.primary,
+            borderRadius: 10,
+            minWidth: 20,
+            height: 20,
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingHorizontal: 6,
+          }}>
+            <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '700' }}>
+              {badge}
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* Spacer */}
+      <View style={{ flex: 1 }} />
+
+      {/* Right side: label + icon */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <Text style={{ color: Colors.textPrimary, fontSize: 15, fontWeight: '500' }}>
+          {label}
+        </Text>
+        <View style={{
+          width: 32,
+          height: 32,
+          borderRadius: 8,
+          backgroundColor: Colors.surfaceElevated,
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}>
+          <Ionicons name={icon as any} size={18} color={Colors.primary} />
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+};
 
 export default function CustomerProfileScreen() {
   const Colors = useThemeColors();
+  const { mode: themeMode, setMode } = useTheme();
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [loadingUser, setLoadingUser] = useState(true);
@@ -207,31 +275,43 @@ export default function CustomerProfileScreen() {
   const [alerts, setAlerts] = useState<AlertResponse[]>([]);
   const [alertsModalVisible, setAlertsModalVisible] = useState(false);
   const [loadingAlerts, setLoadingAlerts] = useState(false);
-
-  // Currency state removed
+  const [alertCount, setAlertCount] = useState(0);
 
   // Edit Profile state
   const [editProfileVisible, setEditProfileVisible] = useState(false);
   const [editName, setEditName] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
 
-  // Notification Preferences state
-  const [notifModalVisible, setNotifModalVisible] = useState(false);
-  const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>(DEFAULT_NOTIF_PREFS);
-
   // Merchant Store detection state
   const [hasStore, setHasStore] = useState(false);
   const [checkingStore, setCheckingStore] = useState(true);
 
-  // Legal text modals state
+  // Modals state
   const [privacyModalVisible, setPrivacyModalVisible] = useState(false);
   const [termsModalVisible, setTermsModalVisible] = useState(false);
+  const [themeModalVisible, setThemeModalVisible] = useState(false);
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
+
+  const fetchAlertCount = useCallback(async (userId?: string) => {
+    const targetId = userId || user?.id;
+    if (!targetId) return;
+    try {
+      const data = await getCustomerAlerts(targetId);
+      setAlertCount(Array.isArray(data) ? data.length : 0);
+    } catch {
+      setAlertCount(0);
+    }
+  }, [user?.id]);
 
   const loadUserData = useCallback(async () => {
     try {
       setLoadingUser(true);
       const userData = await getUser();
       setUser(userData);
+
+      if (userData?.id) {
+        fetchAlertCount(userData.id);
+      }
 
       // Check if user has an associated store in backend or has merchant role
       try {
@@ -256,7 +336,7 @@ export default function CustomerProfileScreen() {
       setLoadingUser(false);
       setCheckingStore(false);
     }
-  }, []);
+  }, [fetchAlertCount]);
 
   useFocusEffect(
     useCallback(() => {
@@ -266,7 +346,6 @@ export default function CustomerProfileScreen() {
 
   useEffect(() => {
     loadUserData();
-    loadNotifPrefs().then(setNotifPrefs);
   }, [loadUserData]);
 
   // ── Edit Profile ──────────────────────────────────────────────
@@ -283,13 +362,16 @@ export default function CustomerProfileScreen() {
     }
     setSavingProfile(true);
     try {
+      // Persist to backend server
+      await updateProfile({ full_name: trimmedName });
+      // Update local cache
       const updatedUser = { ...user, full_name: trimmedName };
       await saveUser(updatedUser);
       setUser(updatedUser);
       setEditProfileVisible(false);
       Alert.alert(
-        t('profile.profile_updated'),
-        t('profile.profile_updated_desc')
+        t('profile.profile_updated', 'تم حفظ التعديلات'),
+        t('profile.profile_updated_desc', 'تم تحديث ملفك الشخصي بنجاح')
       );
     } catch (err) {
       console.error('Failed to save profile:', err);
@@ -297,21 +379,6 @@ export default function CustomerProfileScreen() {
     } finally {
       setSavingProfile(false);
     }
-  };
-
-  // ── Notification Preferences ──────────────────────────────────
-  const handleToggleNotif = useCallback(async (key: keyof NotifPrefs) => {
-    const updated = { ...notifPrefs, [key]: !notifPrefs[key] };
-    setNotifPrefs(updated);
-    await saveNotifPrefs(updated);
-  }, [notifPrefs]);
-
-  const handleCloseNotifModal = () => {
-    setNotifModalVisible(false);
-    Alert.alert(
-      t('profile.notif_saved'),
-      t('profile.notif_saved_desc')
-    );
   };
 
   // ── Language Toggle ───────────────────────────────────────────
@@ -333,9 +400,10 @@ export default function CustomerProfileScreen() {
     setAlertsModalVisible(true);
     try {
       const data = await getCustomerAlerts(user.id);
-      setAlerts(Array.isArray(data) ? data : []);
+      const alertList = Array.isArray(data) ? data : [];
+      setAlerts(alertList);
+      setAlertCount(alertList.length);
     } catch (err) {
-      // Silently fail and show clean empty state
       setAlerts([]);
     } finally {
       setLoadingAlerts(false);
@@ -345,12 +413,12 @@ export default function CustomerProfileScreen() {
   // ── Logout ────────────────────────────────────────────────────
   const handleLogout = () => {
     Alert.alert(
-      t('profile.logout_title'),
-      t('profile.logout_confirm'),
+      t('profile.logout_title', 'تسجيل الخروج'),
+      t('profile.logout_confirm', 'هل أنت تأكد من رغبتك في تسجيل الخروج؟'),
       [
-        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('common.cancel', 'إلغاء'), style: 'cancel' },
         {
-          text: t('profile.logout'),
+          text: t('profile.logout', 'تسجيل الخروج'),
           style: 'destructive',
           onPress: async () => {
             await logout();
@@ -366,161 +434,15 @@ export default function CustomerProfileScreen() {
   const mainText = hasName ? user.full_name : (user?.email || user?.phone_number || t('profile.lamba_shopper'));
   const initials = mainText ? mainText.charAt(0).toUpperCase() : 'L';
   const isAr = i18n.locale.includes('ar');
+  const userBadge = (user?.user_type === 'merchant' || user?.role === 'merchant' || hasStore)
+    ? t('profile.store_owner', 'صاحب متجر')
+    : t('profile.shopper_account', 'متسوق');
 
   const styles = useMemo(() => StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: Colors.background,
     },
-    scroll: {
-      paddingHorizontal: Spacing.xl,
-      paddingBottom: Spacing.xxxl,
-    },
-    header: {
-      paddingVertical: Spacing.lg,
-    },
-    headerTitle: {
-      ...Typography.h1,
-      color: Colors.textPrimary,
-    },
-
-    // Profile Card
-    profileCard: {
-      backgroundColor: Colors.surface,
-      borderRadius: BorderRadius.xl,
-      padding: Spacing.xl,
-      alignItems: 'center',
-      borderWidth: 1,
-      borderColor: Colors.border,
-      marginBottom: Spacing.lg,
-      ...Shadows.medium,
-    },
-    avatarWrapper: {
-      position: 'relative',
-      marginBottom: Spacing.md,
-    },
-    avatar: {
-      width: 72,
-      height: 72,
-      borderRadius: 36,
-      justifyContent: 'center',
-      alignItems: 'center',
-      ...Shadows.glow,
-    },
-    cameraOverlay: {
-      position: 'absolute',
-      bottom: 0,
-      right: 0,
-      width: 24,
-      height: 24,
-      borderRadius: 12,
-      backgroundColor: Colors.surfaceElevated,
-      justifyContent: 'center',
-      alignItems: 'center',
-      borderWidth: 2,
-      borderColor: Colors.surface,
-    },
-    avatarText: {
-      fontSize: 28,
-      fontWeight: '700',
-      color: Colors.textOnPrimary,
-    },
-    displayNameH2: {
-      ...Typography.h2,
-      color: Colors.textPrimary,
-      marginBottom: 2,
-    },
-    displayEmail: {
-      ...Typography.body,
-      color: Colors.textSecondary,
-      marginBottom: Spacing.sm,
-    },
-    roleBadge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Spacing.xs,
-      paddingVertical: Spacing.xs,
-      paddingHorizontal: Spacing.md,
-      borderRadius: BorderRadius.full,
-      backgroundColor: Colors.primary,
-      borderWidth: 0,
-      marginBottom: Spacing.sm,
-    },
-    roleBadgeText: {
-      ...Typography.caption,
-      color: Colors.textOnPrimary,
-      fontWeight: '700',
-    },
-    memberSince: {
-      ...Typography.caption,
-      color: Colors.textMuted,
-    },
-
-    // Settings
-    sectionCard: {
-      backgroundColor: Colors.surface,
-      borderRadius: BorderRadius.xl,
-      padding: Spacing.lg,
-      borderWidth: 1,
-      borderColor: Colors.border,
-      marginBottom: Spacing.lg,
-    },
-    sectionTitle: {
-      ...Typography.label,
-      color: Colors.textMuted,
-      textTransform: 'uppercase',
-      marginBottom: Spacing.md,
-    },
-    menuItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingVertical: Spacing.md,
-      gap: Spacing.md,
-    },
-    menuIcon: {
-      width: 40,
-      height: 40,
-      borderRadius: 12,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    menuContent: {
-      flex: 1,
-    },
-    menuLabel: {
-      ...Typography.body,
-      color: Colors.textPrimary,
-      fontWeight: '500',
-    },
-    menuValue: {
-      ...Typography.bodySmall,
-      color: Colors.textMuted,
-      marginTop: 1,
-    },
-
-    // Logout
-    logoutButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: Spacing.sm,
-      paddingVertical: Spacing.lg,
-      backgroundColor: 'rgba(226, 75, 74, 0.06)',
-      borderRadius: BorderRadius.xl,
-      borderWidth: 1,
-      borderColor: 'rgba(226, 75, 74, 0.15)',
-      marginBottom: Spacing.lg,
-    },
-    logoutText: {
-      ...Typography.button,
-      color: Colors.error,
-    },
-    footer: {
-      ...Typography.caption,
-      color: Colors.textMuted,
-      textAlign: 'center',
-    },
-
     // Modal styling (shared)
     modalOverlay: {
       flex: 1,
@@ -614,36 +536,6 @@ export default function CustomerProfileScreen() {
       fontWeight: '700',
     },
 
-    // Notification Preferences modal
-    notifBody: {
-      padding: Spacing.xl,
-    },
-    notifRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      backgroundColor: Colors.surfaceElevated,
-      borderRadius: BorderRadius.lg,
-      padding: Spacing.md,
-      borderWidth: 1,
-      borderColor: Colors.border,
-      marginBottom: Spacing.md,
-    },
-    notifTextGroup: {
-      flex: 1,
-      marginRight: Spacing.md,
-    },
-    notifLabel: {
-      ...Typography.body,
-      color: Colors.textPrimary,
-      fontWeight: '600',
-    },
-    notifDesc: {
-      ...Typography.caption,
-      color: Colors.textMuted,
-      marginTop: 2,
-    },
-
     // Legal text modals
     legalBody: {
       padding: Spacing.xl,
@@ -654,222 +546,254 @@ export default function CustomerProfileScreen() {
       color: Colors.textSecondary,
       lineHeight: 22,
     },
+
+    // Theme option row
+    themeOption: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: Spacing.md,
+      paddingHorizontal: Spacing.xl,
+      borderRadius: BorderRadius.lg,
+      backgroundColor: Colors.surfaceElevated,
+      marginBottom: Spacing.md,
+      borderWidth: 1,
+      borderColor: Colors.border,
+    },
+    themeOptionText: {
+      ...Typography.body,
+      color: Colors.textPrimary,
+      fontWeight: '600',
+    },
   }), [Colors]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>{t('profile.title')}</Text>
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+
+        {/* === User Header Card === */}
+        <View style={{
+          backgroundColor: Colors.surface,
+          paddingVertical: 28,
+          paddingHorizontal: 20,
+          alignItems: 'center',
+          borderBottomLeftRadius: 24,
+          borderBottomRightRadius: 24,
+          borderWidth: 1,
+          borderColor: Colors.border,
+          ...Shadows.medium,
+        }}>
+          {/* Avatar */}
+          <View style={{
+            width: 72,
+            height: 72,
+            borderRadius: 36,
+            backgroundColor: Colors.primary,
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginBottom: 12,
+            ...Shadows.glow,
+          }}>
+            <Text style={{ color: '#FFF', fontSize: 28, fontWeight: '700' }}>
+              {initials}
+            </Text>
+          </View>
+          
+          {/* Name */}
+          <Text style={{ color: Colors.textPrimary, fontSize: 18, fontWeight: '700', marginBottom: 4 }}>
+            {hasName ? user.full_name : (user?.email || user?.phone_number || t('profile.user', 'المتسوق'))}
+          </Text>
+          
+          {/* Email / Phone */}
+          <Text style={{ color: Colors.textSecondary, fontSize: 13, marginBottom: 8 }}>
+            {user?.email || user?.phone_number || ''}
+          </Text>
+          
+          {/* Role badge */}
+          <View style={{
+            backgroundColor: Colors.primary + '20',
+            borderRadius: 12,
+            paddingVertical: 4,
+            paddingHorizontal: 12,
+          }}>
+            <Text style={{ color: Colors.primary, fontSize: 12, fontWeight: '600' }}>
+              {userBadge}
+            </Text>
+          </View>
         </View>
 
-        {/* Profile Card */}
-        {loadingUser ? (
-          <View style={[styles.profileCard, { paddingVertical: Spacing.xxl }]}>
-            <ActivityIndicator size="small" color={Colors.primary} />
-          </View>
-        ) : (
-          <View style={styles.profileCard}>
-            <View style={styles.avatarWrapper}>
-              <LinearGradient
-                colors={[Colors.primary, '#8B83FF']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.avatar}
-              >
-                <Text style={styles.avatarText}>{initials}</Text>
-              </LinearGradient>
-              <View style={styles.cameraOverlay}>
-                <Ionicons name="camera" size={12} color={Colors.textPrimary} />
-              </View>
-            </View>
-
-            {hasName ? (
-              <>
-                <Text style={styles.displayNameH2}>{user.full_name}</Text>
-                {!!user.email && <Text style={styles.displayEmail}>{user.email}</Text>}
-              </>
-            ) : (
-              <Text style={styles.displayEmail}>{mainText}</Text>
-            )}
-
-            <View style={styles.roleBadge}>
-              <Ionicons name="cart-outline" size={14} color={Colors.textOnPrimary} />
-              <Text style={styles.roleBadgeText}>
-                {t('profile.shopper_account')}
-              </Text>
-            </View>
-
-            {user?.created_at && (
-              <Text style={styles.memberSince}>
-                {t('profile.member_since')} {new Date(user.created_at).toLocaleDateString(isAr ? 'ar-EG' : 'en-US')}
-              </Text>
-            )}
-          </View>
-        )}
-
-        {/* ── Merchant Access Section: State 1 (No store) vs State 2 (Has store) ── */}
-        {!checkingStore && !hasStore && (
-          <TouchableOpacity
-            onPress={() => router.push('/create-store')}
-            style={{
-              backgroundColor: Colors.surfaceElevated,
-              borderRadius: 12,
-              padding: 20,
-              marginBottom: 16,
-              borderWidth: 1,
-              borderColor: Colors.primary + '40',
-              ...Shadows.small,
-            }}
-            activeOpacity={0.85}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-              <Ionicons name="storefront-outline" size={24} color={Colors.primary} />
-              <Text style={{ color: Colors.textPrimary, fontSize: 16, fontWeight: '600', marginHorizontal: 10 }}>
-                {t('profile.add_store', 'Add Your Store')}
-              </Text>
-            </View>
-            <Text style={{ color: Colors.textSecondary, fontSize: 13 }}>
-              {t('profile.add_store_desc', 'Start selling your products or offering services to the local community')}
-            </Text>
-          </TouchableOpacity>
-        )}
-
+        {/* === Manage Store Button (only if has store) === */}
         {!checkingStore && hasStore && (
           <TouchableOpacity
             onPress={() => router.push('/(merchant)/dashboard')}
             style={{
-              backgroundColor: Colors.primary,
-              borderRadius: 12,
-              padding: 16,
-              marginBottom: 16,
               flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'space-between',
+              backgroundColor: Colors.primary,
+              marginHorizontal: 16,
+              marginTop: 16,
+              borderRadius: 14,
+              paddingVertical: 14,
+              paddingHorizontal: 18,
               ...Shadows.small,
             }}
             activeOpacity={0.85}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Ionicons name="storefront" size={22} color="#FFFFFF" />
-              <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '600', marginHorizontal: 10 }}>
-                {t('profile.manage_store', 'Manage My Store')}
+            <Ionicons name="chevron-back" size={20} color="#FFF" />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '700' }}>
+                {t('profile.manage_store', 'إدارة متجري')}
               </Text>
+              <Ionicons name="storefront" size={20} color="#FFF" />
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
           </TouchableOpacity>
         )}
 
-        {/* Settings Section */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>{t('profile.settings')}</Text>
-
-          {/* Edit Profile */}
-          <TouchableOpacity style={styles.menuItem} onPress={handleOpenEditProfile} activeOpacity={0.7}>
-            <View style={[styles.menuIcon, { backgroundColor: 'rgba(108, 99, 255, 0.1)' }]}>
-              <Ionicons name="pencil-outline" size={20} color={Colors.primary} />
+        {/* === Add Store Button (only if NO store) === */}
+        {!checkingStore && !hasStore && (
+          <TouchableOpacity
+            onPress={() => router.push('/create-store')}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              backgroundColor: Colors.surfaceElevated,
+              marginHorizontal: 16,
+              marginTop: 16,
+              borderRadius: 14,
+              paddingVertical: 14,
+              paddingHorizontal: 18,
+              borderWidth: 1,
+              borderColor: Colors.primary + '30',
+              ...Shadows.small,
+            }}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="chevron-back" size={20} color={Colors.primary} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Text style={{ color: Colors.textPrimary, fontSize: 15, fontWeight: '600' }}>
+                {t('profile.add_store', 'إضافة متجرك')}
+              </Text>
+              <Ionicons name="add-circle-outline" size={20} color={Colors.primary} />
             </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuLabel}>{t('profile.edit_profile')}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
           </TouchableOpacity>
+        )}
 
-          {/* Favorites */}
-          <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/(customer)/favorites')} activeOpacity={0.7}>
-            <View style={[styles.menuIcon, { backgroundColor: 'rgba(255, 107, 157, 0.1)' }]}>
-              <Ionicons name="heart-outline" size={20} color={Colors.accent} />
-            </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuLabel}>{t('profile.favorites')}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
-          </TouchableOpacity>
+        {/* === Section: الحساب (Account) === */}
+        <SectionHeader title="الحساب" />
+        <View style={{
+          backgroundColor: Colors.surface,
+          marginHorizontal: 16,
+          borderRadius: 14,
+          overflow: 'hidden',
+          borderWidth: 1,
+          borderColor: Colors.border,
+        }}>
+          <MenuRow
+            icon="person-outline"
+            label={t('profile.edit_profile', 'تعديل الملف الشخصي')}
+            onPress={handleOpenEditProfile}
+          />
+          <Divider />
+          <MenuRow
+            icon="notifications-outline"
+            label={t('profile.availability_alerts', 'تنبيهات التوفر')}
+            badge={alertCount}
+            onPress={handleOpenAlerts}
+          />
+        </View>
 
-          {/* Notification Preferences */}
-          <TouchableOpacity style={styles.menuItem} onPress={() => setNotifModalVisible(true)} activeOpacity={0.7}>
-            <View style={[styles.menuIcon, { backgroundColor: 'rgba(108, 99, 255, 0.1)' }]}>
-              <Ionicons name="notifications-outline" size={20} color={Colors.primary} />
-            </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuLabel}>{t('profile.notification_prefs')}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
-          </TouchableOpacity>
+        {/* === Section: التطبيق (App Settings) === */}
+        <SectionHeader title="التطبيق" />
+        <View style={{
+          backgroundColor: Colors.surface,
+          marginHorizontal: 16,
+          borderRadius: 14,
+          overflow: 'hidden',
+          borderWidth: 1,
+          borderColor: Colors.border,
+        }}>
+          <MenuRow
+            icon="language-outline"
+            label={t('profile.language', 'اللغة')}
+            value={isAr ? 'العربية' : 'English'}
+            onPress={() => setShowLanguageModal(true)}
+          />
+          <Divider />
+          <MenuRow
+            icon="color-palette-outline"
+            label={t('profile.theme', 'المظهر')}
+            value={themeMode === 'dark' ? 'داكن' : themeMode === 'light' ? 'فاتح' : 'تلقائي'}
+            onPress={() => setThemeModalVisible(true)}
+          />
+        </View>
 
-          {/* Language */}
-          <TouchableOpacity style={styles.menuItem} onPress={handleToggleLanguage} activeOpacity={0.7}>
-            <View style={[styles.menuIcon, { backgroundColor: 'rgba(108, 99, 255, 0.1)' }]}>
-              <Ionicons name="flag-outline" size={20} color={Colors.primary} />
-            </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuLabel}>{t('profile.language')}</Text>
-              <Text style={styles.menuValue}>{t('profile.language_value')}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
-          </TouchableOpacity>
+        {/* === Section: معلومات (Info) === */}
+        <SectionHeader title="معلومات" />
+        <View style={{
+          backgroundColor: Colors.surface,
+          marginHorizontal: 16,
+          borderRadius: 14,
+          overflow: 'hidden',
+          borderWidth: 1,
+          borderColor: Colors.border,
+        }}>
+          <MenuRow
+            icon="shield-checkmark-outline"
+            label={t('profile.privacy_policy', 'سياسة الخصوصية')}
+            onPress={() => setPrivacyModalVisible(true)}
+          />
+          <Divider />
+          <MenuRow
+            icon="document-text-outline"
+            label={t('profile.terms', 'شروط الخدمة')}
+            onPress={() => setTermsModalVisible(true)}
+          />
+          <Divider />
+          <MenuRow
+            icon="information-circle-outline"
+            label={t('profile.version', 'الإصدار')}
+            value={`v${Constants.expoConfig?.version || '1.0.0'}`}
+            showChevron={false}
+            onPress={() => {}}
+          />
+        </View>
 
-          {/* Currency removed */}
-
-          {/* Stock Alerts */}
-          <TouchableOpacity style={styles.menuItem} onPress={handleOpenAlerts} activeOpacity={0.7}>
-            <View style={[styles.menuIcon, { backgroundColor: 'rgba(255, 107, 157, 0.1)' }]}>
-              <Ionicons name="scan-outline" size={20} color={Colors.accent} />
-            </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuLabel}>{t('profile.alerts')}</Text>
-              <Text style={styles.menuValue}>{t('profile.alerts_desc')}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
+        {/* === Sign Out === */}
+        <View style={{ marginHorizontal: 16, marginTop: 24, marginBottom: 20 }}>
+          <TouchableOpacity
+            onPress={handleLogout}
+            activeOpacity={0.8}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: 'rgba(226, 75, 74, 0.06)',
+              borderWidth: 1,
+              borderColor: 'rgba(226, 75, 74, 0.2)',
+              borderRadius: 14,
+              paddingVertical: 14,
+              gap: 8,
+            }}
+          >
+            <Text style={{ color: Colors.error, fontSize: 15, fontWeight: '600' }}>
+              {t('profile.logout', 'تسجيل الخروج')}
+            </Text>
+            <Ionicons name="log-out-outline" size={20} color={Colors.error} />
           </TouchableOpacity>
         </View>
 
-        {/* Appearance — theme picker */}
-        <ThemePreferenceRow />
-
-        {/* About Section */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>{t('profile.about')}</Text>
-
-          <TouchableOpacity style={styles.menuItem} onPress={() => setPrivacyModalVisible(true)} activeOpacity={0.7}>
-            <View style={[styles.menuIcon, { backgroundColor: 'rgba(255, 107, 157, 0.1)' }]}>
-              <Ionicons name="shield-checkmark-outline" size={20} color={Colors.accent} />
-            </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuLabel}>{t('profile.privacy_policy')}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuItem} onPress={() => setTermsModalVisible(true)} activeOpacity={0.7}>
-            <View style={[styles.menuIcon, { backgroundColor: 'rgba(255, 107, 157, 0.1)' }]}>
-              <Ionicons name="document-text-outline" size={20} color={Colors.accent} />
-            </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuLabel}>{t('profile.terms_of_service')}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
-          </TouchableOpacity>
-
-          <View style={styles.menuItem}>
-            <View style={[styles.menuIcon, { backgroundColor: 'rgba(255, 107, 157, 0.1)' }]}>
-              <Ionicons name="information-circle-outline" size={20} color={Colors.accent} />
-            </View>
-            <View style={styles.menuContent}>
-              <Text style={styles.menuLabel}>{t('profile.version')}</Text>
-              <Text style={styles.menuValue}>v{Constants.expoConfig?.version || '1.0.0'} (build 42)</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Logout Button */}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
-          <Ionicons name="log-out-outline" size={20} color={Colors.error} />
-          <Text style={styles.logoutText}>{t('profile.logout')}</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.footer}>Lamba v{Constants.expoConfig?.version || '1.0.0'} • Secure &amp; Hyper-local</Text>
+        {/* Footer */}
+        <Text style={{
+          color: Colors.textMuted,
+          fontSize: 11,
+          textAlign: 'center',
+          marginBottom: 30,
+          opacity: 0.8,
+        }}>
+          لمبة v{Constants.expoConfig?.version || '1.0.0'} · محلي وآمن
+        </Text>
       </ScrollView>
 
       {/* ════════ MODAL: Edit Profile ════════ */}
@@ -877,19 +801,19 @@ export default function CustomerProfileScreen() {
         <View style={styles.modalOverlay}>
           <SafeAreaView style={[styles.modalContainer, { height: '45%' }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('profile.edit_profile')}</Text>
+              <Text style={styles.modalTitle}>{t('profile.edit_profile', 'تعديل الملف الشخصي')}</Text>
               <TouchableOpacity onPress={() => setEditProfileVisible(false)} style={styles.closeBtn}>
                 <Ionicons name="close" size={24} color={Colors.textPrimary} />
               </TouchableOpacity>
             </View>
 
             <View style={styles.editProfileBody}>
-              <Text style={styles.inputLabel}>{t('profile.edit_name')}</Text>
+              <Text style={styles.inputLabel}>{t('profile.edit_name', 'الاسم الكامل')}</Text>
               <TextInput
                 style={styles.textInput}
                 value={editName}
                 onChangeText={setEditName}
-                placeholder={t('profile.edit_name_placeholder')}
+                placeholder={t('profile.edit_name_placeholder', 'أدخل اسمك')}
                 placeholderTextColor={Colors.textMuted}
                 autoCapitalize="words"
                 autoCorrect={false}
@@ -905,7 +829,7 @@ export default function CustomerProfileScreen() {
                 {savingProfile ? (
                   <ActivityIndicator size="small" color={Colors.textOnPrimary} />
                 ) : (
-                  <Text style={styles.saveButtonText}>{t('profile.save')}</Text>
+                  <Text style={styles.saveButtonText}>{t('profile.save', 'حفظ')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -913,60 +837,91 @@ export default function CustomerProfileScreen() {
         </View>
       </Modal>
 
-      {/* ════════ MODAL: Notification Preferences ════════ */}
-      <Modal visible={notifModalVisible} animationType="slide" transparent onRequestClose={handleCloseNotifModal}>
+      {/* ════════ MODAL: Language Selection ════════ */}
+      <Modal visible={showLanguageModal} animationType="slide" transparent onRequestClose={() => setShowLanguageModal(false)}>
         <View style={styles.modalOverlay}>
-          <SafeAreaView style={[styles.modalContainer, { height: '55%' }]}>
+          <SafeAreaView style={[styles.modalContainer, { height: '42%' }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('profile.notification_prefs')}</Text>
-              <TouchableOpacity onPress={handleCloseNotifModal} style={styles.closeBtn}>
+              <Text style={styles.modalTitle}>{t('profile.choose_language', 'اختر اللغة')}</Text>
+              <TouchableOpacity onPress={() => setShowLanguageModal(false)} style={styles.closeBtn}>
                 <Ionicons name="close" size={24} color={Colors.textPrimary} />
               </TouchableOpacity>
             </View>
+            <View style={{ padding: Spacing.xl }}>
+              {[
+                { code: 'ar', label: 'العربية', sublabel: 'Arabic' },
+                { code: 'en', label: 'English', sublabel: 'الإنجليزية' },
+              ].map((lang) => {
+                const isSelected = (isAr && lang.code === 'ar') || (!isAr && lang.code === 'en');
+                return (
+                  <TouchableOpacity
+                    key={lang.code}
+                    style={[styles.themeOption, isSelected && { borderColor: Colors.primary }]}
+                    onPress={async () => {
+                      setShowLanguageModal(false);
+                      if ((lang.code === 'ar' && !isAr) || (lang.code === 'en' && isAr)) {
+                        await changeLanguage(lang.code as 'ar' | 'en');
+                      }
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.themeOptionText, isSelected && { color: Colors.primary }]}>
+                        {lang.label}
+                      </Text>
+                      <Text style={{ color: Colors.textMuted, fontSize: 12, marginTop: 2 }}>
+                        {lang.sublabel}
+                      </Text>
+                    </View>
+                    {isSelected && <Ionicons name="checkmark-circle" size={22} color={Colors.primary} />}
+                  </TouchableOpacity>
+                );
+              })}
+              <TouchableOpacity
+                onPress={() => setShowLanguageModal(false)}
+                style={{ paddingVertical: 14, alignItems: 'center', marginTop: 4 }}
+              >
+                <Text style={{ color: Colors.textSecondary, fontSize: 14 }}>{t('common.cancel', 'إلغاء')}</Text>
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
+        </View>
+      </Modal>
 
-            <ScrollView contentContainerStyle={styles.notifBody}>
-              {/* Stock Alerts toggle */}
-              <View style={styles.notifRow}>
-                <View style={styles.notifTextGroup}>
-                  <Text style={styles.notifLabel}>{t('profile.notif_stock_alerts')}</Text>
-                  <Text style={styles.notifDesc}>{t('profile.notif_stock_alerts_desc')}</Text>
-                </View>
-                <Switch
-                  value={notifPrefs.stockAlerts}
-                  onValueChange={() => handleToggleNotif('stockAlerts')}
-                  trackColor={{ false: Colors.surfaceElevated, true: 'rgba(108, 99, 255, 0.4)' }}
-                  thumbColor={notifPrefs.stockAlerts ? Colors.primary : Colors.textMuted}
-                />
-              </View>
-
-              {/* Promotions toggle */}
-              <View style={styles.notifRow}>
-                <View style={styles.notifTextGroup}>
-                  <Text style={styles.notifLabel}>{t('profile.notif_promotions')}</Text>
-                  <Text style={styles.notifDesc}>{t('profile.notif_promotions_desc')}</Text>
-                </View>
-                <Switch
-                  value={notifPrefs.promotions}
-                  onValueChange={() => handleToggleNotif('promotions')}
-                  trackColor={{ false: Colors.surfaceElevated, true: 'rgba(108, 99, 255, 0.4)' }}
-                  thumbColor={notifPrefs.promotions ? Colors.primary : Colors.textMuted}
-                />
-              </View>
-
-              {/* Messages toggle */}
-              <View style={styles.notifRow}>
-                <View style={styles.notifTextGroup}>
-                  <Text style={styles.notifLabel}>{t('profile.notif_messages')}</Text>
-                  <Text style={styles.notifDesc}>{t('profile.notif_messages_desc')}</Text>
-                </View>
-                <Switch
-                  value={notifPrefs.messages}
-                  onValueChange={() => handleToggleNotif('messages')}
-                  trackColor={{ false: Colors.surfaceElevated, true: 'rgba(108, 99, 255, 0.4)' }}
-                  thumbColor={notifPrefs.messages ? Colors.primary : Colors.textMuted}
-                />
-              </View>
-            </ScrollView>
+      {/* ════════ MODAL: Theme Selection ════════ */}
+      <Modal visible={themeModalVisible} animationType="slide" transparent onRequestClose={() => setThemeModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <SafeAreaView style={[styles.modalContainer, { height: '40%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{t('profile.theme', 'اختيار المظهر')}</Text>
+              <TouchableOpacity onPress={() => setThemeModalVisible(false)} style={styles.closeBtn}>
+                <Ionicons name="close" size={24} color={Colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+            <View style={{ padding: Spacing.xl }}>
+              {(['system', 'light', 'dark'] as ThemeMode[]).map((modeOption) => {
+                const isSelected = themeMode === modeOption;
+                const labels: Record<ThemeMode, string> = {
+                  system: 'تلقائي (حسب النظام)',
+                  light: 'فاتح',
+                  dark: 'داكن',
+                };
+                return (
+                  <TouchableOpacity
+                    key={modeOption}
+                    style={[styles.themeOption, isSelected && { borderColor: Colors.primary }]}
+                    onPress={() => {
+                      setMode(modeOption);
+                      setThemeModalVisible(false);
+                    }}
+                  >
+                    <Text style={[styles.themeOptionText, isSelected && { color: Colors.primary }]}>
+                      {labels[modeOption]}
+                    </Text>
+                    {isSelected && <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </SafeAreaView>
         </View>
       </Modal>
@@ -976,7 +931,7 @@ export default function CustomerProfileScreen() {
         <View style={styles.modalOverlay}>
           <SafeAreaView style={styles.modalContainer}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('profile.privacy_policy')}</Text>
+              <Text style={styles.modalTitle}>{t('profile.privacy_policy', 'سياسة الخصوصية')}</Text>
               <TouchableOpacity onPress={() => setPrivacyModalVisible(false)} style={styles.closeBtn}>
                 <Ionicons name="close" size={24} color={Colors.textPrimary} />
               </TouchableOpacity>
@@ -995,7 +950,7 @@ export default function CustomerProfileScreen() {
         <View style={styles.modalOverlay}>
           <SafeAreaView style={styles.modalContainer}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('profile.terms_of_service')}</Text>
+              <Text style={styles.modalTitle}>{t('profile.terms_of_service', 'شروط الخدمة')}</Text>
               <TouchableOpacity onPress={() => setTermsModalVisible(false)} style={styles.closeBtn}>
                 <Ionicons name="close" size={24} color={Colors.textPrimary} />
               </TouchableOpacity>
@@ -1014,7 +969,7 @@ export default function CustomerProfileScreen() {
         <View style={styles.modalOverlay}>
           <SafeAreaView style={styles.modalContainer}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('profile.stock_notifications')}</Text>
+              <Text style={styles.modalTitle}>{t('profile.stock_notifications', 'تنبيهات التوفر')}</Text>
               <TouchableOpacity onPress={() => setAlertsModalVisible(false)} style={styles.closeBtn}>
                 <Ionicons name="close" size={24} color={Colors.textPrimary} />
               </TouchableOpacity>
@@ -1023,7 +978,7 @@ export default function CustomerProfileScreen() {
             {loadingAlerts ? (
               <View style={styles.modalLoading}>
                 <ActivityIndicator size="large" color={Colors.primary} />
-                <Text style={styles.loadingText}>{t('profile.fetching_alerts')}</Text>
+                <Text style={styles.loadingText}>{t('profile.fetching_alerts', 'جاري تحميل التنبيهات...')}</Text>
               </View>
             ) : (
               <FlatList
@@ -1033,9 +988,9 @@ export default function CustomerProfileScreen() {
                   <View style={styles.alertCard}>
                     <View style={styles.alertHeaderRow}>
                       <View style={styles.alertTextGroup}>
-                        <Text style={styles.alertQueryText}>{t('profile.query')} "{item.query_text}"</Text>
+                        <Text style={styles.alertQueryText}>{t('profile.query', 'البحث:')} "{item.query_text}"</Text>
                         <Text style={styles.alertDate}>
-                          {t('profile.created')} {new Date(item.created_at).toLocaleDateString(isAr ? 'ar-EG' : 'en-US')}
+                          {t('profile.created', 'التاريخ:')} {new Date(item.created_at).toLocaleDateString(isAr ? 'ar-EG' : 'en-US')}
                         </Text>
                       </View>
 
@@ -1052,13 +1007,13 @@ export default function CustomerProfileScreen() {
                           styles.statusText,
                           { color: item.is_active ? Colors.warning : Colors.secondary }
                         ]}>
-                          {item.is_active ? t('profile.awaiting_stock') : t('profile.resolved')}
+                          {item.is_active ? t('profile.awaiting_stock', 'في انتظار التوفر') : t('profile.resolved', 'تم التوفر')}
                         </Text>
                       </View>
                     </View>
                     
                     <Text style={styles.alertGeoText}>
-                      {t('profile.tracking_gps')} {item.latitude.toFixed(4)}, {item.longitude.toFixed(4)} ({t('profile.radius')})
+                      {t('profile.tracking_gps', 'الموقع:')} {item.latitude.toFixed(4)}, {item.longitude.toFixed(4)} ({t('profile.radius', 'نطاق متتبع')})
                     </Text>
                   </View>
                 )}
@@ -1066,8 +1021,8 @@ export default function CustomerProfileScreen() {
                 ListEmptyComponent={
                   <View style={styles.emptyAlerts}>
                     <Ionicons name="notifications-off-outline" size={48} color={Colors.textMuted} />
-                    <Text style={styles.emptyAlertsTitle}>{t('profile.no_alerts')}</Text>
-                    <Text style={styles.emptyAlertsText}>{t('profile.no_alerts_desc')}</Text>
+                    <Text style={styles.emptyAlertsTitle}>{t('profile.no_alerts', 'لا توجد تنبيهات توفر حالياً')}</Text>
+                    <Text style={styles.emptyAlertsText}>{t('profile.no_alerts_desc', 'سنقوم بتنبيهك تلقائياً عند توفر المنتجات غير الموجودة في الدليل')}</Text>
                   </View>
                 }
               />
@@ -1076,7 +1031,6 @@ export default function CustomerProfileScreen() {
         </View>
       </Modal>
 
-      {/* Currency Modal removed */}
     </SafeAreaView>
   );
 }

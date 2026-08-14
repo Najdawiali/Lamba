@@ -93,6 +93,11 @@ export async function getUser(): Promise<any | null> {
   }
 }
 
+export async function updateProfile(data: { full_name?: string; phone_number?: string }): Promise<any> {
+  const { data: result } = await api.patch('/api/v1/customer/profile', data);
+  return result;
+}
+
 // ── Types ──────────────────────────────────────────────────────
 export interface UserResponse {
   id: string;
