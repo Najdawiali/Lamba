@@ -617,10 +617,11 @@ def _classify_category_heuristic(name: str, description: str | None) -> str:
 
 
 async def _classify_category(name: str, description: str | None) -> str:
-    """Classify item/service using LLMAdapter with heuristic fallback."""
+    """Classify item/service using LLMAdapter with heuristic fallback (Gemma 4 31B offline model)."""
     from app.services.llm import llm_adapter
+    from app.config import settings
 
-    text_input = f"Name: {name}\nDescription: {description or ''}"
+    product_text = f"Name: {name}\nDescription: {description or ''}"
     sys_prompt = (
         "You are an expert catalog item and service categorizer. "
         "Choose EXACTLY ONE category from this list that best fits the item/service:\n"
@@ -628,12 +629,11 @@ async def _classify_category(name: str, description: str | None) -> str:
         + "\nReturn ONLY the exact category name, with no punctuation, extra words, or markdown."
     )
     try:
-        res = await llm_adapter.complete_chat(
-            messages=[
-                {"role": "system", "content": sys_prompt},
-                {"role": "user", "content": text_input},
-            ],
-            temperature=0.0,
+        res = await llm_adapter.generate(
+            system_prompt=sys_prompt,
+            user_prompt=f"Classify this product:\n{product_text}",
+            model=settings.offline_llm_model,  # Uses Gemma 4 31B — runs once per product creation
+            enable_thinking=False,
             max_tokens=50,
         )
         if res:
