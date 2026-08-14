@@ -292,11 +292,20 @@ async def _retrieve_fused_candidates(
             rrf_scores[key] += 1.0 / (settings.rrf_k + rank + 1)
 
     fused_keys = sorted(rrf_scores, key=rrf_scores.get, reverse=True)
-    fused_keys = fused_keys[: settings.reranker_top_k]
+    # Deduplicate fused_keys by product (gi.id) to collect the highest-ranked store per unique product
+    unique_fused_keys = []
+    seen_gi_ids = set()
+    for key in fused_keys:
+        gi_id = rows_by_key[key][1].id
+        if gi_id not in seen_gi_ids:
+            seen_gi_ids.add(gi_id)
+            unique_fused_keys.append(key)
+            if len(unique_fused_keys) >= 50:
+                break
 
     # Opportunistic market-schedule refresh for the fused set.
     unique_markets = list(
-        {rows_by_key[k][2].id: rows_by_key[k][2] for k in fused_keys}.values()
+        {rows_by_key[k][2].id: rows_by_key[k][2] for k in unique_fused_keys}.values()
     )
     if unique_markets:
         from app.utils.schedule import check_and_update_markets_schedule
@@ -306,7 +315,7 @@ async def _retrieve_fused_candidates(
             logger.warning(f"Schedule refresh skipped: {e}")
 
     fused: List[dict] = []
-    for key in fused_keys:
+    for key in unique_fused_keys:
         mi, gi, market, lat, lng, dist_km, sem_score, prox_score = rows_by_key[key]
         sem = _safe(sem_score)
         prox = _safe(prox_score)
@@ -500,6 +509,27 @@ def _deduplicate_by_product(results: List[HybridSearchResultItem]) -> List[Hybri
         # else: skip — a higher-scored version of this product is already in the list
     
     return deduplicated
+
+
+def _dedup_candidates(candidates: list, max_unique: int = 50) -> list:
+    """Keep one candidate per global_item_id (nearest/highest-ranked store), limit to max_unique products."""
+    seen_ids = set()
+    unique = []
+    for c in candidates:
+        r = c.get("result") if isinstance(c, dict) else None
+        item_id = (
+            getattr(r, "item_id", None)
+            if r is not None
+            else (c.get("item_id") or c.get("global_item_id") if isinstance(c, dict) else None)
+        )
+        if item_id and item_id in seen_ids:
+            continue
+        if item_id:
+            seen_ids.add(item_id)
+        unique.append(c)
+        if len(unique) >= max_unique:
+            break
+    return unique
 
 
 def _filter_with_guards(
@@ -829,23 +859,15 @@ async def _run_search(
     t4 = time.time()
     logger.info(f"[TIMING] Retrieval: {(t4-t3)*1000:.0f}ms")
 
-    # Diagnostic log: candidates returned by _retrieve_fused_candidates before reranking
-    top_candidates_log = [
-        {
-            "name": f["result"].name,
-            "semantic_score": f["result"].semantic_score,
-            "final_score": f["result"].final_score,
-            "cosine_sim": f.get("cosine_sim"),
-            "distance_km": f["result"].distance_km,
-        }
-        for f in fused[:5]
-    ]
-    logger.info(
-        "[SEARCH DIAGNOSTIC] query=%r candidates_count=%d top_candidates_before_rerank=%s",
-        query_text,
-        len(fused),
-        top_candidates_log,
-    )
+    candidates = fused
+    unique_item_ids_count = len(set(
+        (c["result"].item_id if "result" in c else c.get("item_id"))
+        for c in candidates
+    ))
+    logger.debug(f"[DEDUP PRE-RERANK] Before: {len(candidates)}, unique item_ids: {unique_item_ids_count}")
+
+    candidates = _dedup_candidates(candidates, max_unique=50)
+    logger.debug(f"[DEDUP PRE-RERANK] After: {len(candidates)} unique products")
 
     # Choose the most canonical search term for cross-encoder reranking:
     # 1. If the query had dialect synonyms (e.g. "جاج" -> "دجاج", "عيش" -> "خبز"),
@@ -859,8 +881,8 @@ async def _run_search(
     else:
         rerank_query = normalized_input or query_text
 
-    # 4. Cross-encode + language-aware ordering.
-    scored = await _rerank_and_finalize(rerank_query, fused, query_script)
+    # 4. Cross-encode + language-aware ordering on the 30 unique products.
+    scored = await _rerank_and_finalize(rerank_query, candidates, query_script)
 
     t5 = time.time()
     logger.info(f"[TIMING] Reranker + Finalize: {(t5-t4)*1000:.0f}ms")

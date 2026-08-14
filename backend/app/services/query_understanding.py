@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Known single/two word product terms that skip LLM query understanding
 _SIMPLE_PRODUCT_TERMS = {
-    "حليب", "شاي", "قهوة", "عصير", "ماء", "خبز", "تمر", "بيض", "لبن", "جبنة", "زيت",
+    "حليب", "شاي", "قهوة", "عصير", "ماء", "خبز", "تمر", "بيض", "لبن", "جبنة", "زيت", "زيتون",
     "سكر", "ملح", "عسل", "تفاح", "موز", "برتقال", "خيار", "بصل", "ثوم", "بطاطا",
     "بندورة", "شوكولاتة", "بسكويت", "بيبسي", "كولا", "شيبس", "7aleeb", "7alib", "haleeb", "halib", "shay", "shai",
     "qahwa", "zayt", "zeit", "3asal", "khobz", "bandora", "batata", "khiyar",
@@ -105,6 +105,25 @@ IMPORTANT:
 - If no attributes are present, return empty attributes {}
 - Only include non-null attribute values in the output
 - Do NOT guess attributes that aren't in the query
+
+IMPORTANT — Do NOT extract these as attributes. They are search contexts, not product properties:
+- Meal times: فطور, غداء, عشاء, سحور (breakfast, lunch, dinner, suhoor)
+- Occasions: هدية, حفلة, ضيوف, رمضان, عيد (gift, party, guests, ramadan, eid)
+- Activities: تنظيف, طبخ, سفر, رحلة, مدرسة (cleaning, cooking, travel, school)
+- People: أطفال, بيبي, عائلة (kids, baby, family)
+
+These should be part of query_clean for semantic search, NOT in attributes.
+
+Correct examples:
+- "بدي شي للفطور" → {"intent": "product", "query_clean": "فطور", "attributes": {}}
+- "هدية لصاحبي" → {"intent": "product", "query_clean": "هدية", "attributes": {}}
+- "شي حلو للضيوف" → {"intent": "product", "query_clean": "حلويات ضيوف", "attributes": {}}
+- "أرخص شاي أخضر" → {"intent": "product", "query_clean": "شاي", "attributes": {"type": "أخضر"}}
+- "شاي أخضر" → {"intent": "product", "query_clean": "شاي", "attributes": {"type": "أخضر"}}
+- "حليب قليل الدسم" → {"intent": "product", "query_clean": "حليب", "attributes": {"dietary": "قليل الدسم"}}
+
+ONLY extract attributes that are physical/measurable properties of the product itself:
+type, color, flavor, origin, organic, temperature, dietary, gender, brand, size, material
 
 Examples:
 - "شاي أخضر" → {"intent": "product", "query_clean": "شاي", "category_name": null, "brand": null, "search_query": "شاي أخضر", "attributes": {"type": "أخضر"}}
