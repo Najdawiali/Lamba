@@ -38,6 +38,7 @@ from app.models.global_item import GlobalItem
 from app.models.product_image import ProductImage
 from app.models.market_item import MarketItem
 from app.models.pos_receipt import POSReceipt, POSReceiptItem
+from app.models.offer import Offer
 from app.api.auth import get_current_user
 from app.schemas.merchant_v1 import (
     MarketCreate, MarketResponse, MarketStatusUpdateRequest,
@@ -51,6 +52,7 @@ from app.schemas.special_offer import (
     SpecialOfferUpdate,
     SpecialOfferResponse
 )
+from app.schemas.offer import OfferCreate, OfferUpdate, OfferResponse
 from app.services.embedding import embedding_service
 from app.services.indexer import IndexerService
 from app.services.alert_service import check_and_trigger_stock_alerts
@@ -72,6 +74,20 @@ def get_merchant(user: User = Depends(get_current_user)) -> User:
             detail="Merchant access required",
         )
     return user
+
+
+async def get_user_market(user: User, db: AsyncSession) -> Market:
+    """Retrieve the physical market profile for a user or 404."""
+    result = await db.execute(
+        select(Market).where(Market.merchant_id == user.id).order_by(Market.created_at.desc())
+    )
+    market = result.scalars().first()
+    if market is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Market not found. Complete onboarding first.",
+        )
+    return market
 
 
 # ── GET /market & /my-store ──────────────────────────────────────
@@ -1077,190 +1093,133 @@ async def upload_items_csv(
     }
 
 
-# ── GET /offers ─────────────────────────────────────────────────
-@router.get("/offers", response_model=List[SpecialOfferResponse])
-async def get_merchant_offers(
-    user: User = Depends(get_merchant),
-    db: AsyncSession = Depends(get_db),
-):
-    """Retrieve all special offers for the merchant's physical market."""
-    from app.models.special_offer import SpecialOffer
-    
-    result = await db.execute(
-        select(SpecialOffer, MarketItem, GlobalItem)
-        .join(MarketItem, SpecialOffer.market_item_id == MarketItem.id)
-        .join(GlobalItem, MarketItem.item_id == GlobalItem.id)
-        .join(Market, MarketItem.market_id == Market.id)
-        .where(Market.merchant_id == user.id)
-        .order_by(SpecialOffer.created_at.desc())
-    )
-    
-    offers = []
-    for row in result.unique().all():
-        so, mi, gi = row[0], row[1], row[2]
-        offers.append(
-            SpecialOfferResponse(
-                id=so.id,
-                market_item_id=so.market_item_id,
-                offer_type=so.offer_type,
-                discount_percentage=so.discount_percentage,
-                description=so.description,
-                power=so.power,
-                is_active=so.is_active,
-                created_at=so.created_at,
-                name=gi.name,
-                category=gi.category,
-                image_url=gi.image_url,
-                price=mi.price,
-                stock_count=mi.stock_count,
-            )
-        )
-    return offers
-
-
 # ── POST /offers ────────────────────────────────────────────────
-@router.post("/offers", response_model=SpecialOfferResponse, status_code=201)
-async def create_special_offer(
-    data: SpecialOfferCreate,
-    user: User = Depends(get_merchant),
+@router.post("/offers", response_model=OfferResponse, status_code=status.HTTP_201_CREATED)
+async def create_offer(
+    payload: OfferCreate,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new special offer for the merchant's physical store."""
-    from app.models.special_offer import SpecialOffer
+    market = await get_user_market(current_user, db)
 
-    # Verify that the target market item actually belongs to the merchant
+    # Verify the market_item belongs to this market
     result = await db.execute(
-        select(MarketItem, GlobalItem, Market)
+        select(MarketItem, GlobalItem)
         .join(GlobalItem, MarketItem.item_id == GlobalItem.id)
-        .join(Market, MarketItem.market_id == Market.id)
-        .where(MarketItem.id == data.market_item_id, Market.merchant_id == user.id)
+        .where(
+            MarketItem.id == payload.market_item_id,
+            MarketItem.market_id == market.id,
+        )
     )
     row = result.unique().first()
     if not row:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Forbidden. Target market item does not exist or does not belong to your shop.",
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found in your store")
+
+    item, global_item = row[0], row[1]
+
+    offer = Offer(
+        market_id=market.id,
+        market_item_id=payload.market_item_id,
+        offer_type=payload.offer_type,
+        config=payload.config,
+        description=payload.description,
+        expires_at=payload.expires_at,
+    )
+    db.add(offer)
+    await db.commit()
+    await db.refresh(offer)
+
+    return OfferResponse(
+        **{c.name: getattr(offer, c.name) for c in offer.__table__.columns},
+        item_name=global_item.name if global_item else getattr(item, 'name', None),
+        item_name_ar=getattr(global_item, 'name_ar', None) if global_item else getattr(item, 'name_ar', None),
+        item_price=item.price,
+        item_image_url=getattr(global_item, 'image_url', None) if global_item else getattr(item, 'image_url', None),
+    )
+
+
+# ── GET /offers ─────────────────────────────────────────────────
+@router.get("/offers", response_model=List[OfferResponse])
+async def list_offers(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    market = await get_user_market(current_user, db)
+    result = await db.execute(
+        select(Offer, MarketItem, GlobalItem)
+        .join(MarketItem, Offer.market_item_id == MarketItem.id)
+        .outerjoin(GlobalItem, MarketItem.item_id == GlobalItem.id)
+        .where(Offer.market_id == market.id)
+        .order_by(Offer.created_at.desc())
+    )
+    rows = result.unique().all()
+    return [
+        OfferResponse(
+            **{c.name: getattr(offer, c.name) for c in offer.__table__.columns},
+            item_name=global_item.name if global_item else getattr(item, 'name', None),
+            item_name_ar=getattr(global_item, 'name_ar', None) if global_item else getattr(item, 'name_ar', None),
+            item_price=item.price,
+            item_image_url=getattr(global_item, 'image_url', None) if global_item else getattr(item, 'image_url', None),
         )
-    
-    mi, gi, market = row[0], row[1], row[2]
-
-    # Calculate inherent power score
-    if data.offer_type.upper() == "BOGO":
-        power = 100.0
-    elif data.offer_type.upper() == "DISCOUNT":
-        power = float(data.discount_percentage) if data.discount_percentage is not None else 50.0
-    else:
-        power = 50.0
-
-    so = SpecialOffer(
-        market_item_id=data.market_item_id,
-        offer_type=data.offer_type.upper(),
-        discount_percentage=data.discount_percentage,
-        description=data.description,
-        power=power,
-        is_active=True,
-    )
-    db.add(so)
-    await db.flush()
-
-    return SpecialOfferResponse(
-        id=so.id,
-        market_item_id=so.market_item_id,
-        offer_type=so.offer_type,
-        discount_percentage=so.discount_percentage,
-        description=so.description,
-        power=so.power,
-        is_active=so.is_active,
-        created_at=so.created_at,
-        name=gi.name,
-        category=gi.category,
-        image_url=gi.image_url,
-        price=mi.price,
-        stock_count=mi.stock_count,
-    )
+        for offer, item, global_item in rows
+    ]
 
 
 # ── PATCH /offers/{offer_id} ────────────────────────────────────
-@router.patch("/offers/{offer_id}", response_model=SpecialOfferResponse)
-async def update_special_offer(
+@router.patch("/offers/{offer_id}", response_model=OfferResponse)
+async def update_offer(
     offer_id: uuid.UUID,
-    data: SpecialOfferUpdate,
-    user: User = Depends(get_merchant),
+    payload: OfferUpdate,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Toggle status, modify discount percentage, or edit details of a special offer."""
-    from app.models.special_offer import SpecialOffer
-
+    market = await get_user_market(current_user, db)
     result = await db.execute(
-        select(SpecialOffer, MarketItem, GlobalItem, Market)
-        .join(MarketItem, SpecialOffer.market_item_id == MarketItem.id)
-        .join(GlobalItem, MarketItem.item_id == GlobalItem.id)
-        .join(Market, MarketItem.market_id == Market.id)
-        .where(SpecialOffer.id == offer_id, Market.merchant_id == user.id)
+        select(Offer, MarketItem, GlobalItem)
+        .join(MarketItem, Offer.market_item_id == MarketItem.id)
+        .outerjoin(GlobalItem, MarketItem.item_id == GlobalItem.id)
+        .where(Offer.id == offer_id, Offer.market_id == market.id)
     )
     row = result.unique().first()
     if not row:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Special offer not found or does not belong to your shop.",
-        )
-    
-    so, mi, gi, market = row[0], row[1], row[2], row[3]
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Offer not found")
 
-    if data.is_active is not None:
-        so.is_active = data.is_active
-    if data.discount_percentage is not None:
-        so.discount_percentage = data.discount_percentage
-        if so.offer_type.upper() == "DISCOUNT":
-            so.power = float(data.discount_percentage)
-    if data.description is not None:
-        so.description = data.description
+    offer, item, global_item = row[0], row[1], row[2]
+    update_data = payload.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(offer, field, value)
 
-    await db.flush()
+    await db.commit()
+    await db.refresh(offer)
 
-    return SpecialOfferResponse(
-        id=so.id,
-        market_item_id=so.market_item_id,
-        offer_type=so.offer_type,
-        discount_percentage=so.discount_percentage,
-        description=so.description,
-        power=so.power,
-        is_active=so.is_active,
-        created_at=so.created_at,
-        name=gi.name,
-        category=gi.category,
-        image_url=gi.image_url,
-        price=mi.price,
-        stock_count=mi.stock_count,
+    return OfferResponse(
+        **{c.name: getattr(offer, c.name) for c in offer.__table__.columns},
+        item_name=global_item.name if global_item else getattr(item, 'name', None),
+        item_name_ar=getattr(global_item, 'name_ar', None) if global_item else getattr(item, 'name_ar', None),
+        item_price=item.price,
+        item_image_url=getattr(global_item, 'image_url', None) if global_item else getattr(item, 'image_url', None),
     )
 
 
 # ── DELETE /offers/{offer_id} ───────────────────────────────────
-@router.delete("/offers/{offer_id}", status_code=200)
-async def delete_special_offer(
+@router.delete("/offers/{offer_id}", status_code=status.HTTP_200_OK)
+async def delete_offer(
     offer_id: uuid.UUID,
-    user: User = Depends(get_merchant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Permanently delete a special offer."""
-    from app.models.special_offer import SpecialOffer
-
+    market = await get_user_market(current_user, db)
     result = await db.execute(
-        select(SpecialOffer)
-        .join(MarketItem, SpecialOffer.market_item_id == MarketItem.id)
-        .join(Market, MarketItem.market_id == Market.id)
-        .where(SpecialOffer.id == offer_id, Market.merchant_id == user.id)
+        select(Offer).where(Offer.id == offer_id, Offer.market_id == market.id)
     )
-    so = result.scalar_one_or_none()
-    if not so:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Special offer not found or does not belong to your shop.",
-        )
-    
-    await db.delete(so)
-    await db.flush()
-    return {"success": True, "message": "Special offer deleted successfully"}
+    offer = result.unique().scalar_one_or_none()
+    if not offer:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Offer not found")
+
+    await db.delete(offer)
+    await db.commit()
+    return {"deleted": True}
+
 
 
 # ── GET /market/item/barcode/{barcode} ───────────────────────────

@@ -948,6 +948,61 @@ export async function deleteSpecialOffer(offerId: string): Promise<{ message: st
   return data;
 }
 
+// ── Offers ──
+
+export interface OfferConfig {
+  percent?: number;
+  amount?: number;
+  buy?: number;
+  get?: number;
+  quantity?: number;
+  price?: number;
+}
+
+export interface OfferResponse {
+  id: string;
+  market_id: string;
+  market_item_id: string;
+  offer_type: 'percentage' | 'fixed_amount' | 'buy_x_get_y' | 'quantity_price';
+  config: OfferConfig;
+  description?: string;
+  is_active: boolean;
+  starts_at: string;
+  expires_at?: string;
+  created_at: string;
+  item_name?: string;
+  item_name_ar?: string;
+  item_price?: number;
+  item_image_url?: string;
+}
+
+export interface OfferCreatePayload {
+  market_item_id: string;
+  offer_type: string;
+  config: OfferConfig;
+  description?: string;
+  expires_at?: string;
+}
+
+export async function createOffer(payload: OfferCreatePayload): Promise<OfferResponse> {
+  const { data } = await api.post<OfferResponse>('/api/v1/merchant/offers', payload);
+  return data;
+}
+
+export async function getOffers(): Promise<OfferResponse[]> {
+  const { data } = await api.get<OfferResponse[]>('/api/v1/merchant/offers');
+  return data;
+}
+
+export async function updateOffer(offerId: string, payload: { is_active?: boolean; description?: string; expires_at?: string }): Promise<OfferResponse> {
+  const { data } = await api.patch<OfferResponse>(`/api/v1/merchant/offers/${offerId}`, payload);
+  return data;
+}
+
+export async function deleteOffer(offerId: string): Promise<void> {
+  await api.delete(`/api/v1/merchant/offers/${offerId}`);
+}
+
 export interface CustomerOffersFilters {
   query?: string;
   offer_type?: string;

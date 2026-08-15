@@ -1,1239 +1,1652 @@
 /**
- * Merchant Special Offers Manager Screen
- * Allows merchants to add/remove special offers (BOGO, Percentage Discount)
- * and toggle active status.
+ * Merchant Offers Management Screen
+ * Complete CRUD management for store offers and promotions.
  */
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, Alert, Switch, RefreshControl, Image,
-  Modal, TextInput, ScrollView
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  Switch,
+  RefreshControl,
+  Image,
+  Modal,
+  TextInput,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
 import {
-  getMerchantSpecialOffers, createSpecialOffer, updateSpecialOffer,
-  deleteSpecialOffer, getMarketItems, addNewItem, getMyMarket,
-  SpecialOfferResponse, MarketItemDashboardResponse
+  getOffers,
+  createOffer,
+  updateOffer,
+  deleteOffer,
+  getMarketItems,
+  OfferResponse,
+  OfferCreatePayload,
+  MarketItemDashboardResponse,
 } from '../../services/api';
-import { Spacing, BorderRadius, Typography, Shadows, TAB_BAR_OVERFLOW } from '../../constants/theme';
-import { useThemeColors } from '../../context/ThemeContext';
-import { t, i18n } from '../../services/i18n';
-import { resolveImageUrl } from '../../services/utils';
 import { formatPrice } from '../../services/currency';
+import { t, i18n } from '../../services/i18n';
+import { useThemeColors } from '../../context/ThemeContext';
+import { Spacing, BorderRadius, Typography, Shadows, TAB_BAR_OVERFLOW } from '../../constants/theme';
+import { resolveImageUrl } from '../../services/utils';
+
+type OfferTypeKey = 'percentage' | 'fixed_amount' | 'buy_x_get_y' | 'quantity_price';
+
+interface OfferTypeMeta {
+  key: OfferTypeKey;
+  labelAr: string;
+  labelEn: string;
+  subtitleAr: string;
+  subtitleEn: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  bg: string;
+}
+
+const OFFER_TYPES_CONFIG: Record<OfferTypeKey, OfferTypeMeta> = {
+  percentage: {
+    key: 'percentage',
+    labelAr: 'نسبة تخفيض',
+    labelEn: 'Percentage Discount',
+    subtitleAr: 'مثال: خصم 20%',
+    subtitleEn: 'e.g. 20% off',
+    icon: 'pricetag-outline',
+    color: '#00D68F',
+    bg: 'rgba(0, 217, 126, 0.12)',
+  },
+  fixed_amount: {
+    key: 'fixed_amount',
+    labelAr: 'تخفيض ثابت',
+    labelEn: 'Fixed Discount',
+    subtitleAr: 'مثال: خصم 0.50 د.أ',
+    subtitleEn: 'e.g. 0.50 JOD off',
+    icon: 'cash-outline',
+    color: '#6C63FF',
+    bg: 'rgba(108, 99, 255, 0.12)',
+  },
+  buy_x_get_y: {
+    key: 'buy_x_get_y',
+    labelAr: 'اشتر واحصل',
+    labelEn: 'Buy X Get Y',
+    subtitleAr: 'مثال: اشتر 2 واحصل على 1',
+    subtitleEn: 'e.g. Buy 2 Get 1 Free',
+    icon: 'gift-outline',
+    color: '#9C27B0',
+    bg: 'rgba(156, 39, 176, 0.12)',
+  },
+  quantity_price: {
+    key: 'quantity_price',
+    labelAr: 'سعر الكمية',
+    labelEn: 'Quantity Bundle',
+    subtitleAr: 'مثال: 3 بـ 5 د.أ',
+    subtitleEn: 'e.g. 3 for 5 JOD',
+    icon: 'layers-outline',
+    color: '#FF9800',
+    bg: 'rgba(255, 152, 0, 0.12)',
+  },
+};
 
 export default function MerchantOffersScreen() {
   const Colors = useThemeColors();
-  const isAr = i18n.locale.includes('ar');
-  const [offers, setOffers] = useState<SpecialOfferResponse[]>([]);
+  const isAr = i18n.locale?.startsWith('ar');
+
+  // Main state
+  const [offers, setOffers] = useState<OfferResponse[]>([]);
   const [products, setProducts] = useState<MarketItemDashboardResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Add Offer Modal States
-  const [addModalVisible, setAddModalVisible] = useState(false);
+  // Create Modal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [createStep, setCreateStep] = useState<1 | 2 | 3>(1);
+  const [searchProductQuery, setSearchProductQuery] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<MarketItemDashboardResponse | null>(null);
-  const [offerType, setOfferType] = useState<'BOGO' | 'DISCOUNT'>('BOGO');
-  const [discountPercentage, setDiscountPercentage] = useState('');
-  const [description, setDescription] = useState('');
+  const [selectedOfferType, setSelectedOfferType] = useState<OfferTypeKey>('percentage');
+
+  // Form Inputs
+  const [percentInput, setPercentInput] = useState('');
+  const [amountInput, setAmountInput] = useState('');
+  const [buyInput, setBuyInput] = useState('');
+  const [getInput, setGetInput] = useState('');
+  const [quantityInput, setQuantityInput] = useState('');
+  const [priceInput, setPriceInput] = useState('');
+  const [descriptionInput, setDescriptionInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [actionInProgressId, setActionInProgressId] = useState<string | null>(null);
 
-  // Inline Product Selection View Toggle
-  const [showSelector, setShowSelector] = useState(false);
-
-  // New Product Inline Creation States
-  const [formMode, setFormMode] = useState<'catalog' | 'new'>('catalog');
-  const [newItemName, setNewItemName] = useState('');
-  const [newItemPrice, setNewItemPrice] = useState('');
-  const [newItemBarcode, setNewItemBarcode] = useState('');
-  const [newItemImageUri, setNewItemImageUri] = useState<string | null>(null);
-  const [marketId, setMarketId] = useState<string | null>(null);
-
-  // Search filter for inline catalog selector
-  const [selectorSearch, setSelectorSearch] = useState('');
-
-  const filteredProducts = useMemo(() => {
-    if (!selectorSearch.trim()) return products;
-    const q = selectorSearch.toLowerCase();
-    return products.filter(p =>
-      p.name.toLowerCase().includes(q) ||
-      (p.category && p.category.toLowerCase().includes(q))
-    );
-  }, [products, selectorSearch]);
-
-  const loadData = useCallback(async () => {
+  // ── Load Offers ───────────────────────────────────────────────
+  const loadOffers = useCallback(async () => {
     try {
-      const [fetchedOffers, fetchedProducts] = await Promise.all([
-        getMerchantSpecialOffers(),
-        getMarketItems(),
-      ]);
-      setOffers(fetchedOffers);
-      setProducts(fetchedProducts);
-    } catch (err) {
-      console.error('Failed to fetch merchant offers:', err);
-      Alert.alert(
-        t('common.error', 'Connection Error'),
-        t('offers.error_loading', 'Failed to load offers and products. Pull down to refresh.')
-      );
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+      const data = await getOffers();
+      setOffers(data || []);
+    } catch (err: any) {
+      console.error('Failed to load offers:', err);
     }
   }, []);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  // ── Load Products (for offer creation) ────────────────────────
+  const loadProducts = useCallback(async () => {
+    try {
+      const items = await getMarketItems();
+      setProducts(items || []);
+    } catch (err: any) {
+      console.error('Failed to load market items:', err);
+    }
+  }, []);
 
-  const handleRefresh = () => {
+  // ── Initial Fetch ─────────────────────────────────────────────
+  useEffect(() => {
+    const init = async () => {
+      setLoading(true);
+      await Promise.all([loadOffers(), loadProducts()]);
+      setLoading(false);
+    };
+    init();
+  }, [loadOffers, loadProducts]);
+
+  // ── Pull to Refresh ───────────────────────────────────────────
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    loadData();
+    await Promise.all([loadOffers(), loadProducts()]);
+    setRefreshing(false);
+  }, [loadOffers, loadProducts]);
+
+  // ── Reset Create Form ─────────────────────────────────────────
+  const resetCreateForm = () => {
+    setCreateStep(1);
+    setSearchProductQuery('');
+    setSelectedProduct(null);
+    setSelectedOfferType('percentage');
+    setPercentInput('');
+    setAmountInput('');
+    setBuyInput('');
+    setGetInput('');
+    setQuantityInput('');
+    setPriceInput('');
+    setDescriptionInput('');
+    setSubmitting(false);
   };
 
-  const handleToggleActive = async (offerId: string, currentStatus: boolean) => {
-    try {
-      const updated = await updateSpecialOffer(offerId, { is_active: !currentStatus });
-      setOffers(prev => prev.map(o => o.id === offerId ? { ...o, is_active: updated.is_active } : o));
-    } catch (err) {
-      Alert.alert(
-        t('common.error', 'Error'),
-        t('offers.failed_update', 'Failed to update offer status.')
-      );
+  const openCreateModal = () => {
+    resetCreateForm();
+    setModalVisible(true);
+    if (products.length === 0) {
+      loadProducts();
     }
   };
 
-  const handleDeleteOffer = (offerId: string) => {
-    Alert.alert(
-      t('offers.confirm_delete', 'Confirm Delete'),
-      t('offers.confirm_delete_desc', 'Are you sure you want to delete this special offer?'),
-      [
-        { text: t('common.cancel', 'Cancel'), style: 'cancel' },
-        {
-          text: t('common.delete', 'Delete'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteSpecialOffer(offerId);
-              setOffers(prev => prev.filter(o => o.id !== offerId));
-            } catch (err) {
-              Alert.alert(
-                t('common.error', 'Error'),
-                t('offers.failed_delete', 'Failed to delete offer.')
-              );
-            }
-          }
-        }
-      ]
-    );
+  const closeCreateModal = () => {
+    setModalVisible(false);
+    resetCreateForm();
   };
 
-  const pickNewItemImage = async () => {
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (permissionResult.granted === false) {
-      Alert.alert(
-        t('scanner.permission_denied', 'Gallery Permission Required'),
-        t('addProduct.media_library_permission', 'Library permissions are required to upload a product photo.')
+  // ── Toggle Active / Inactive ──────────────────────────────────
+  const handleToggleActive = async (offer: OfferResponse) => {
+    const newActive = !offer.is_active;
+    // Optimistic UI update
+    setOffers((prev) =>
+      prev.map((o) => (o.id === offer.id ? { ...o, is_active: newActive } : o))
+    );
+    setActionInProgressId(offer.id);
+    try {
+      await updateOffer(offer.id, { is_active: newActive });
+    } catch (err: any) {
+      // Revert on error
+      setOffers((prev) =>
+        prev.map((o) => (o.id === offer.id ? { ...o, is_active: !newActive } : o))
       );
+      Alert.alert(
+        isAr ? 'خطأ' : 'Error',
+        err?.response?.data?.detail ||
+          (isAr ? 'فشل تحديث حالة العرض' : 'Failed to update offer status')
+      );
+    } finally {
+      setActionInProgressId(null);
+    }
+  };
+
+  // ── Delete Offer ──────────────────────────────────────────────
+  const handleDeleteOffer = (offer: OfferResponse) => {
+    const title = isAr ? 'حذف العرض' : 'Delete Offer';
+    const message = isAr
+      ? `هل أنت متأكد من رغبتك في حذف عرض "${offer.item_name_ar || offer.item_name || 'المنتج'}"؟`
+      : `Are you sure you want to delete this offer?`;
+
+    Alert.alert(title, message, [
+      { text: isAr ? 'إلغاء' : 'Cancel', style: 'cancel' },
+      {
+        text: isAr ? 'حذف' : 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          setActionInProgressId(offer.id);
+          try {
+            await deleteOffer(offer.id);
+            setOffers((prev) => prev.filter((o) => o.id !== offer.id));
+          } catch (err: any) {
+            Alert.alert(
+              isAr ? 'خطأ' : 'Error',
+              err?.response?.data?.detail ||
+                (isAr ? 'فشل حذف العرض' : 'Failed to delete offer')
+            );
+          } finally {
+            setActionInProgressId(null);
+          }
+        },
+      },
+    ]);
+  };
+
+  // ── Submit Create Offer ───────────────────────────────────────
+  const handleSubmitOffer = async () => {
+    if (!selectedProduct) {
+      Alert.alert(
+        isAr ? 'تنبيه' : 'Alert',
+        isAr ? 'يرجى اختيار منتج أولاً' : 'Please select a product first'
+      );
+      setCreateStep(1);
       return;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
+    let config: Record<string, any> = {};
 
-    if (!result.canceled) {
-      setNewItemImageUri(result.assets[0].uri);
-    }
-  };
-
-  const handleCreateOffer = async () => {
-    let resolvedItemId = '';
-    let enrichedName = '';
-    let enrichedImageUrl = '';
-    let enrichedPrice = 0;
-    let enrichedStock = 10;
-    let enrichedCategory = '';
-
-    if (formMode === 'catalog') {
-      if (!selectedProduct) {
+    if (selectedOfferType === 'percentage') {
+      const p = parseFloat(percentInput.trim());
+      if (isNaN(p) || p <= 0 || p > 100) {
         Alert.alert(
-          t('common.error', 'Alert'),
-          t('offers.select_product_prompt', 'Please select a product to apply the offer to.')
+          isAr ? 'قيمة غير صحيحة' : 'Invalid Value',
+          isAr
+            ? 'يرجى إدخال نسبة خصم صحيحة بين 1% و 100%'
+            : 'Please enter a valid discount percentage between 1 and 100'
         );
         return;
       }
-      resolvedItemId = selectedProduct.id;
-      enrichedName = selectedProduct.name;
-      enrichedImageUrl = selectedProduct.image_url || '';
-      enrichedPrice = selectedProduct.price || 0;
-      enrichedStock = selectedProduct.stock_count || 0;
-      enrichedCategory = selectedProduct.category || '';
-    } else {
-      // Validate brand new product inputs
-      if (!newItemName.trim()) {
+      config = { percent: p };
+    } else if (selectedOfferType === 'fixed_amount') {
+      const a = parseFloat(amountInput.trim());
+      if (isNaN(a) || a <= 0) {
         Alert.alert(
-          t('common.error', 'Alert'),
-          t('addProduct.product_name', 'Please enter the product name.')
+          isAr ? 'قيمة غير صحيحة' : 'Invalid Value',
+          isAr
+            ? 'يرجى إدخال مبلغ خصم أكبر من صفر'
+            : 'Please enter a discount amount greater than 0'
         );
         return;
       }
-
-      const priceVal = parseFloat(newItemPrice);
-      if (isNaN(priceVal) || priceVal < 0) {
+      if (selectedProduct.price && a >= selectedProduct.price) {
         Alert.alert(
-          t('common.error', 'Alert'),
-          t('addProduct.price', 'Please enter a valid product price.')
+          isAr ? 'تنبيه' : 'Warning',
+          isAr
+            ? 'مبلغ الخصم يجب أن يكون أقل من سعر المنتج الأصلي'
+            : 'Discount amount must be less than the original price'
         );
         return;
       }
-
-      if (!newItemImageUri) {
+      config = { amount: a };
+    } else if (selectedOfferType === 'buy_x_get_y') {
+      const b = parseInt(buyInput.trim(), 10);
+      const g = parseInt(getInput.trim(), 10);
+      if (isNaN(b) || b < 1 || isNaN(g) || g < 1) {
         Alert.alert(
-          t('common.error', 'Alert'),
-          t('offers.select_image_prompt', 'Please select a picture for the new product.')
+          isAr ? 'قيمة غير صحيحة' : 'Invalid Value',
+          isAr
+            ? 'يرجى إدخال أعداد صحيحة (1 أو أكثر) لكل من كمية الشراء والهدية'
+            : 'Please enter valid quantities (>= 1) for buy and get'
         );
         return;
       }
-
-      setSubmitting(true);
-      try {
-        // Get marketId if not cached
-        let mId = marketId;
-        if (!mId) {
-          const market = await getMyMarket();
-          mId = market.id;
-          setMarketId(mId);
-        }
-
-        const formData = new FormData();
-        formData.append('market_id', mId);
-        formData.append('name', newItemName.trim());
-        formData.append('price', priceVal.toString());
-        formData.append('stock_count', '10');
-        if (newItemBarcode.trim()) {
-          formData.append('barcode', newItemBarcode.trim());
-        }
-
-        const filename = newItemImageUri.split('/').pop() || 'photo.jpg';
-        const match = /\.(\w+)$/.exec(filename);
-        const type = match ? `image/${match[1]}` : 'image/jpeg';
-
-        formData.append('image', {
-          uri: newItemImageUri,
-          name: filename,
-          type,
-        } as any);
-
-        const newProductResp = await addNewItem(formData);
-        if (!newProductResp.market_item_id) {
-          throw new Error('No market_item_id returned from catalog ingestion.');
-        }
-
-        resolvedItemId = newProductResp.market_item_id;
-        enrichedName = newItemName.trim();
-        enrichedImageUrl = newItemImageUri;
-        enrichedPrice = priceVal;
-        enrichedStock = 10;
-        enrichedCategory = '';
-      } catch (err: any) {
-        console.error('Failed to create new catalog product:', err);
-        const errMsg = err?.response?.data?.detail || t('offers.failed_create_product', 'Failed to create new product in catalog.');
-        Alert.alert(t('common.error'), errMsg);
-        setSubmitting(false);
+      config = { buy: b, get: g };
+    } else if (selectedOfferType === 'quantity_price') {
+      const q = parseInt(quantityInput.trim(), 10);
+      const pr = parseFloat(priceInput.trim());
+      if (isNaN(q) || q < 2) {
+        Alert.alert(
+          isAr ? 'قيمة غير صحيحة' : 'Invalid Value',
+          isAr
+            ? 'يرجى إدخال كمية صحيحة (2 أو أكثر)'
+            : 'Please enter a valid quantity of 2 or more'
+        );
         return;
       }
+      if (isNaN(pr) || pr <= 0) {
+        Alert.alert(
+          isAr ? 'قيمة غير صحيحة' : 'Invalid Value',
+          isAr
+            ? 'يرجى إدخال سعر إجمالي صحيح أكبر من صفر'
+            : 'Please enter a valid total price greater than 0'
+        );
+        return;
+      }
+      config = { quantity: q, price: pr };
     }
 
-    let pct: number | undefined = undefined;
-    if (offerType === 'DISCOUNT') {
-      const val = parseFloat(discountPercentage);
-      if (isNaN(val) || val <= 0 || val > 100) {
-        Alert.alert(
-          t('common.error', 'Alert'),
-          t('offers.invalid_discount', 'Please enter a valid discount percentage between 1 and 100.')
-        );
-        setSubmitting(false);
-        return;
-      }
-      pct = val;
-    }
+    const payload: OfferCreatePayload = {
+      market_item_id: selectedProduct.id,
+      offer_type: selectedOfferType,
+      config,
+      description: descriptionInput.trim() || undefined,
+    };
 
-    if (!submitting) {
-      setSubmitting(true);
-    }
-    
+    setSubmitting(true);
     try {
-      const newOffer = await createSpecialOffer({
-        market_item_id: resolvedItemId,
-        offer_type: offerType,
-        discount_percentage: pct,
-        description: description.trim() || undefined,
-      });
-
-      // Insert product info locally so UI shows it right away
-      const enrichedOffer = {
-        ...newOffer,
-        name: newOffer.name || enrichedName,
-        category: newOffer.category || enrichedCategory || null,
-        image_url: newOffer.image_url || enrichedImageUrl || null,
-        price: newOffer.price != null ? newOffer.price : enrichedPrice,
-        stock_count: newOffer.stock_count || enrichedStock,
-      };
-
-      setOffers(prev => [enrichedOffer, ...prev]);
-      setAddModalVisible(false);
-      
-      // Reset form states
-      setSelectedProduct(null);
-      setOfferType('BOGO');
-      setDiscountPercentage('');
-      setDescription('');
-      setFormMode('catalog');
-      setNewItemName('');
-      setNewItemPrice('');
-      setNewItemBarcode('');
-      setNewItemImageUri(null);
-
+      await createOffer(payload);
+      closeCreateModal();
+      await loadOffers();
       Alert.alert(
-        t('common.success'),
-        t('offers.offer_created')
+        isAr ? 'تم بنجاح' : 'Success',
+        isAr
+          ? 'تم إنشاء العرض ونشره بنجاح في متجرك'
+          : 'Offer has been published successfully!'
       );
     } catch (err: any) {
-      console.error('Failed to create offer:', err);
-      const errMsg = err?.response?.data?.detail || (isAr ? 'فشل إنشاء العرض الخاص.' : 'Failed to create special offer.');
-      Alert.alert(t('common.error'), errMsg);
+      Alert.alert(
+        isAr ? 'خطأ' : 'Error',
+        err?.response?.data?.detail ||
+          (isAr
+            ? 'فشل إنشاء العرض، يرجى المحاولة مرة أخرى'
+            : 'Failed to create offer. Please try again.')
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
-  const renderOfferItem = useCallback(({ item }: { item: SpecialOfferResponse }) => {
-    const isBogo = item.offer_type === 'BOGO';
-    const offerBadgeText = isBogo
-      ? (isAr ? 'اشترِ قطعة واحصل على الثانية مجاناً' : 'Buy 1 Get 1 Free')
-      : `${item.discount_percentage}% ${isAr ? 'تخفيض' : 'OFF'}`;
+  // ── Offer Readable Summary Helper ─────────────────────────────
+  const getOfferSummary = (offer: OfferResponse): string => {
+    switch (offer.offer_type) {
+      case 'percentage':
+        return isAr
+          ? `خصم ${offer.config?.percent ?? 0}%`
+          : `${offer.config?.percent ?? 0}% off`;
+      case 'fixed_amount':
+        return isAr
+          ? `خصم ${offer.config?.amount ?? 0} د.أ`
+          : `${offer.config?.amount ?? 0} JOD off`;
+      case 'buy_x_get_y':
+        return isAr
+          ? `اشتر ${offer.config?.buy ?? 0} واحصل على ${offer.config?.get ?? 0} مجاناً`
+          : `Buy ${offer.config?.buy ?? 0} Get ${offer.config?.get ?? 0} Free`;
+      case 'quantity_price':
+        return isAr
+          ? `${offer.config?.quantity ?? 0} بـ ${offer.config?.price ?? 0} د.أ`
+          : `${offer.config?.quantity ?? 0} for ${offer.config?.price ?? 0} JOD`;
+      default:
+        return '';
+    }
+  };
+
+  // ── Filter Products for Step 1 ────────────────────────────────
+  const filteredProducts = useMemo(() => {
+    if (!searchProductQuery.trim()) return products;
+    const q = searchProductQuery.toLowerCase().trim();
+    return products.filter((p) => {
+      const name = (p.name || '').toLowerCase();
+      const cat = (p.category || '').toLowerCase();
+      return name.includes(q) || cat.includes(q);
+    });
+  }, [products, searchProductQuery]);
+
+  // ── Render Single Offer Card ──────────────────────────────────
+  const renderOfferCard = ({ item }: { item: OfferResponse }) => {
+    const meta =
+      OFFER_TYPES_CONFIG[item.offer_type as OfferTypeKey] ||
+      OFFER_TYPES_CONFIG.percentage;
+    const productName = item.item_name_ar || item.item_name || (isAr ? 'منتج غير معروف' : 'Item');
+    const summary = getOfferSummary(item);
+    const resolvedImg = resolveImageUrl(item.item_image_url);
 
     return (
-      <View style={[styles.offerCard, !item.is_active && styles.inactiveCard]}>
-        <View style={styles.cardHeader}>
-          <Image
-            source={
-              item.image_url
-                ? { uri: resolveImageUrl(item.image_url) }
-                : require('../../assets/icon.png')
-            }
-            style={styles.productImage}
-          />
-          <View style={styles.cardInfo}>
-            <Text style={styles.productName} numberOfLines={1}>{item.name}</Text>
-            <Text style={styles.productCategory}>{item.category || (isAr ? 'غير مصنف' : 'Uncategorized')}</Text>
-            
-            <View style={styles.badgeContainer}>
-              <View style={[styles.badge, isBogo ? styles.bogoBadge : styles.discountBadge]}>
-                <Ionicons
-                  name={isBogo ? "gift-outline" : "pricetag-outline"}
-                  size={12}
-                  color={isBogo ? Colors.background : Colors.textOnPrimary}
-                />
-                <Text style={[styles.badgeText, isBogo ? styles.bogoBadgeText : styles.discountBadgeText]}>
-                  {offerBadgeText}
+      <View
+        style={[
+          styles.offerCard,
+          {
+            backgroundColor: Colors.surface,
+            borderColor: item.is_active ? Colors.border : 'rgba(150, 150, 150, 0.2)',
+            opacity: item.is_active ? 1 : 0.72,
+          },
+        ]}
+      >
+        {/* Card Header: Image + Product Info + Badge */}
+        <View style={[styles.cardHeader, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+          {resolvedImg ? (
+            <Image source={{ uri: resolvedImg }} style={styles.productThumbnail} />
+          ) : (
+            <View style={[styles.productThumbnailPlaceholder, { backgroundColor: Colors.border }]}>
+              <Ionicons name="cube-outline" size={24} color={Colors.textMuted} />
+            </View>
+          )}
+
+          <View style={[styles.productDetails, { alignItems: isAr ? 'flex-end' : 'flex-start' }]}>
+            <View style={[styles.badgeAndStatusRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+              <View style={[styles.typeBadge, { backgroundColor: meta.bg }]}>
+                <Ionicons name={meta.icon} size={12} color={meta.color} style={{ marginRight: 4 }} />
+                <Text style={[styles.typeBadgeText, { color: meta.color }]}>
+                  {isAr ? meta.labelAr : meta.labelEn}
                 </Text>
               </View>
+
+              {!item.is_active && (
+                <View style={[styles.inactiveBadge, { backgroundColor: 'rgba(150, 150, 150, 0.15)' }]}>
+                  <Text style={[styles.inactiveBadgeText, { color: Colors.textMuted }]}>
+                    {isAr ? 'معطل' : 'Inactive'}
+                  </Text>
+                </View>
+              )}
             </View>
 
-            {item.price != null && (
-              <Text style={styles.priceText}>
-                {formatPrice(item.price)}
+            <Text
+              style={[
+                styles.productName,
+                { color: Colors.textPrimary, textAlign: isAr ? 'right' : 'left' },
+              ]}
+              numberOfLines={2}
+            >
+              {productName}
+            </Text>
+
+            {item.item_price !== null && item.item_price !== undefined && (
+              <Text style={[styles.originalPrice, { color: Colors.textMuted }]}>
+                {isAr ? 'السعر الأصلي:' : 'Original:'}{' '}
+                <Text style={{ color: Colors.textSecondary, fontWeight: '600' }}>
+                  {formatPrice(item.item_price)}
+                </Text>
               </Text>
             )}
           </View>
         </View>
 
-        {item.description ? (
-          <View style={styles.descriptionContainer}>
-            <Text style={styles.descriptionText}>{item.description}</Text>
-          </View>
-        ) : null}
+        {/* Offer Summary Banner */}
+        <View
+          style={[
+            styles.summaryBanner,
+            {
+              backgroundColor: meta.bg,
+              borderLeftColor: isAr ? 'transparent' : meta.color,
+              borderRightColor: isAr ? meta.color : 'transparent',
+              flexDirection: isAr ? 'row-reverse' : 'row',
+            },
+          ]}
+        >
+          <Ionicons name={meta.icon} size={18} color={meta.color} />
+          <Text
+            style={[
+              styles.summaryText,
+              { color: Colors.textPrimary, textAlign: isAr ? 'right' : 'left' },
+            ]}
+          >
+            {summary}
+          </Text>
+        </View>
 
-        <View style={styles.divider} />
+        {/* Optional Description */}
+        {!!item.description && (
+          <Text
+            style={[
+              styles.offerDescription,
+              { color: Colors.textSecondary, textAlign: isAr ? 'right' : 'left' },
+            ]}
+            numberOfLines={2}
+          >
+            {item.description}
+          </Text>
+        )}
 
-        <View style={styles.cardActions}>
-          <View style={styles.actionLeft}>
-            <Text style={styles.statusLabel}>
-              {item.is_active ? t('offers.active') : t('offers.inactive')}
-            </Text>
+        {/* Card Footer: Toggle Switch + Delete Button */}
+        <View
+          style={[
+            styles.cardFooter,
+            {
+              borderTopColor: Colors.border,
+              flexDirection: isAr ? 'row-reverse' : 'row',
+            },
+          ]}
+        >
+          {/* Active Switch */}
+          <View style={[styles.toggleContainer, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
             <Switch
               value={item.is_active}
-              onValueChange={() => handleToggleActive(item.id, item.is_active)}
-              trackColor={{ false: Colors.toggleInactive, true: Colors.toggleOfferActive }}
-              thumbColor={'#FFFFFF'}
+              onValueChange={() => handleToggleActive(item)}
+              disabled={actionInProgressId === item.id}
+              trackColor={{
+                false: Colors.toggleInactive || '#333333',
+                true: Colors.toggleOfferActive || Colors.primary,
+              }}
+              thumbColor="#FFFFFF"
+              ios_backgroundColor={Colors.toggleInactive || '#333333'}
             />
+            <Text style={[styles.toggleLabel, { color: item.is_active ? Colors.textPrimary : Colors.textMuted }]}>
+              {item.is_active ? (isAr ? 'العرض نشط' : 'Active') : (isAr ? 'العرض متوقف' : 'Paused')}
+            </Text>
           </View>
 
+          {/* Delete Button */}
           <TouchableOpacity
             style={styles.deleteButton}
-            onPress={() => handleDeleteOffer(item.id)}
+            onPress={() => handleDeleteOffer(item)}
+            disabled={actionInProgressId === item.id}
+            activeOpacity={0.7}
           >
             <Ionicons name="trash-outline" size={20} color={Colors.error} />
+            <Text style={[styles.deleteButtonText, { color: Colors.error }]}>
+              {isAr ? 'حذف' : 'Delete'}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
     );
-  }, [isAr, handleToggleActive, handleDeleteOffer]);
+  };
 
-  const styles = useMemo(() => StyleSheet.create({
+  // ── Render Empty State ────────────────────────────────────────
+  const renderEmptyState = () => (
+    <View style={styles.emptyContainer}>
+      <View style={[styles.emptyIconCircle, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+        <Ionicons name="pricetags-outline" size={48} color={Colors.primary} />
+      </View>
+      <Text style={[styles.emptyTitle, { color: Colors.textPrimary }]}>
+        {isAr ? 'لا توجد عروض بعد' : 'No Offers Yet'}
+      </Text>
+      <Text style={[styles.emptySubtitle, { color: Colors.textMuted }]}>
+        {isAr
+          ? 'أنشئ عروضاً وخصومات لجذب زبائن جدد وزيادة مبيعات متجرك'
+          : 'Create promotions and discounts to attract more shoppers to your store.'}
+      </Text>
+      <TouchableOpacity
+        style={[styles.emptyCreateButton, { backgroundColor: Colors.primary }]}
+        onPress={openCreateModal}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" style={{ marginRight: 6 }} />
+        <Text style={styles.emptyCreateButtonText}>
+          {isAr ? 'إنشاء أول عرض' : 'Create First Offer'}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: Colors.background }]} edges={['top']}>
+      {/* Screen Header */}
+      <View style={[styles.header, { borderBottomColor: Colors.border }]}>
+        <View style={{ alignItems: isAr ? 'flex-end' : 'flex-start' }}>
+          <Text style={[styles.headerTitle, { color: Colors.textPrimary }]}>
+            {isAr ? 'العروض الخاصة' : 'Special Offers'}
+          </Text>
+          <Text style={[styles.headerSubtitle, { color: Colors.textMuted }]}>
+            {isAr ? 'أدر العروض والخصومات في متجرك' : 'Manage promotions and discounts'}
+          </Text>
+        </View>
+      </View>
+
+      {/* Main List / Loading */}
+      {loading ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={[styles.loadingText, { color: Colors.textMuted }]}>
+            {isAr ? 'جاري تحميل العروض...' : 'Loading offers...'}
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={offers}
+          keyExtractor={(item) => item.id}
+          renderItem={renderOfferCard}
+          contentContainerStyle={[
+            styles.listContent,
+            offers.length === 0 && styles.flexGrow,
+          ]}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={Colors.primary}
+              colors={[Colors.primary]}
+            />
+          }
+          ListEmptyComponent={renderEmptyState}
+        />
+      )}
+
+      {/* FAB: Green circle with white "+" bottom-right */}
+      <TouchableOpacity
+        style={[styles.fab, { backgroundColor: Colors.tabActive }]}
+        onPress={openCreateModal}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="add" size={32} color="#FFFFFF" />
+      </TouchableOpacity>
+
+      {/* ── CREATE OFFER 3-STEP MODAL ────────────────────────────── */}
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={closeCreateModal}
+      >
+        <SafeAreaView style={[styles.modalSafeArea, { backgroundColor: Colors.background }]}>
+          {/* Modal Header */}
+          <View style={[styles.modalHeader, { borderBottomColor: Colors.border }]}>
+            <View style={[styles.modalHeaderRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+              {createStep > 1 ? (
+                <TouchableOpacity
+                  style={styles.modalBackButton}
+                  onPress={() => setCreateStep((prev) => (prev - 1) as 1 | 2)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons
+                    name={isAr ? 'arrow-forward' : 'arrow-back'}
+                    size={24}
+                    color={Colors.textPrimary}
+                  />
+                </TouchableOpacity>
+              ) : (
+                <View style={{ width: 32 }} />
+              )}
+
+              <View style={{ alignItems: 'center' }}>
+                <Text style={[styles.modalTitle, { color: Colors.textPrimary }]}>
+                  {createStep === 1 && (isAr ? 'اختر المنتج' : 'Select Product')}
+                  {createStep === 2 && (isAr ? 'نوع العرض' : 'Offer Type')}
+                  {createStep === 3 && (isAr ? 'تفاصيل العرض' : 'Offer Details')}
+                </Text>
+                <Text style={[styles.stepIndicator, { color: Colors.textMuted }]}>
+                  {isAr ? `خطوة ${createStep} من 3` : `Step ${createStep} of 3`}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={closeCreateModal}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="close" size={24} color={Colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* ── STEP 1: PICK PRODUCT ───────────────────────────── */}
+          {createStep === 1 && (
+            <View style={styles.stepContainer}>
+              {/* Product Search Bar */}
+              <View
+                style={[
+                  styles.searchBarContainer,
+                  {
+                    backgroundColor: Colors.surface,
+                    borderColor: Colors.border,
+                    flexDirection: isAr ? 'row-reverse' : 'row',
+                  },
+                ]}
+              >
+                <Ionicons name="search-outline" size={20} color={Colors.textMuted} />
+                <TextInput
+                  style={[
+                    styles.searchInput,
+                    {
+                      color: Colors.textPrimary,
+                      textAlign: isAr ? 'right' : 'left',
+                    },
+                  ]}
+                  placeholder={
+                    isAr
+                      ? 'ابحث باسم المنتج أو الصنف...'
+                      : 'Search by product name or category...'
+                  }
+                  placeholderTextColor={Colors.textMuted}
+                  value={searchProductQuery}
+                  onChangeText={setSearchProductQuery}
+                  clearButtonMode="while-editing"
+                />
+                {!!searchProductQuery && (
+                  <TouchableOpacity onPress={() => setSearchProductQuery('')}>
+                    <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Product Selection List */}
+              <FlatList
+                data={filteredProducts}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.pickerListContent}
+                renderItem={({ item }) => {
+                  const resolvedImg = resolveImageUrl(item.image_url);
+                  return (
+                    <TouchableOpacity
+                      style={[
+                        styles.productPickRow,
+                        {
+                          backgroundColor: Colors.surface,
+                          borderColor: Colors.border,
+                          flexDirection: isAr ? 'row-reverse' : 'row',
+                        },
+                      ]}
+                      onPress={() => {
+                        setSelectedProduct(item);
+                        setCreateStep(2);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      {resolvedImg ? (
+                        <Image source={{ uri: resolvedImg }} style={styles.pickThumbnail} />
+                      ) : (
+                        <View
+                          style={[
+                            styles.pickThumbnailPlaceholder,
+                            { backgroundColor: Colors.border },
+                          ]}
+                        >
+                          <Ionicons name="cube-outline" size={20} color={Colors.textMuted} />
+                        </View>
+                      )}
+
+                      <View
+                        style={[
+                          styles.pickProductInfo,
+                          { alignItems: isAr ? 'flex-end' : 'flex-start' },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.pickProductName,
+                            { color: Colors.textPrimary, textAlign: isAr ? 'right' : 'left' },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {item.name}
+                        </Text>
+                        <Text style={[styles.pickProductMeta, { color: Colors.textMuted }]}>
+                          {item.category || (isAr ? 'منتج عام' : 'General')} • {isAr ? 'المتوفر:' : 'Stock:'}{' '}
+                          <Text style={{ color: Colors.textSecondary, fontWeight: '600' }}>
+                            {item.stock_count}
+                          </Text>
+                        </Text>
+                      </View>
+
+                      <View style={{ alignItems: isAr ? 'flex-start' : 'flex-end' }}>
+                        <Text style={[styles.pickProductPrice, { color: Colors.primary }]}>
+                          {formatPrice(item.price)}
+                        </Text>
+                        <Ionicons
+                          name={isAr ? 'chevron-back' : 'chevron-forward'}
+                          size={18}
+                          color={Colors.textMuted}
+                          style={{ marginTop: 4 }}
+                        />
+                      </View>
+                    </TouchableOpacity>
+                  );
+                }}
+                ListEmptyComponent={
+                  <View style={styles.emptyPickerContainer}>
+                    <Ionicons name="search" size={36} color={Colors.textMuted} />
+                    <Text style={[styles.emptyPickerText, { color: Colors.textMuted }]}>
+                      {isAr
+                        ? 'لم يتم العثور على منتجات مطابقة'
+                        : 'No matching products found'}
+                    </Text>
+                  </View>
+                }
+              />
+            </View>
+          )}
+
+          {/* ── STEP 2: PICK OFFER TYPE ────────────────────────── */}
+          {createStep === 2 && (
+            <ScrollView style={styles.stepContainer} contentContainerStyle={styles.stepContentScroll}>
+              {/* Selected Product Context Banner */}
+              {selectedProduct && (
+                <View
+                  style={[
+                    styles.contextCard,
+                    {
+                      backgroundColor: Colors.surface,
+                      borderColor: Colors.border,
+                      flexDirection: isAr ? 'row-reverse' : 'row',
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.contextInfo,
+                      { alignItems: isAr ? 'flex-end' : 'flex-start' },
+                    ]}
+                  >
+                    <Text style={[styles.contextLabel, { color: Colors.textMuted }]}>
+                      {isAr ? 'المنتج المحدد' : 'Selected Product'}
+                    </Text>
+                    <Text style={[styles.contextName, { color: Colors.textPrimary }]} numberOfLines={1}>
+                      {selectedProduct.name}
+                    </Text>
+                  </View>
+                  <Text style={[styles.contextPrice, { color: Colors.primary }]}>
+                    {formatPrice(selectedProduct.price)}
+                  </Text>
+                </View>
+              )}
+
+              <Text
+                style={[
+                  styles.sectionInstruction,
+                  { color: Colors.textSecondary, textAlign: isAr ? 'right' : 'left' },
+                ]}
+              >
+                {isAr
+                  ? 'اختر نوع العرض المناسب لترويج هذا المنتج:'
+                  : 'Choose the offer structure for this product:'}
+              </Text>
+
+              {/* 4 Offer Type Cards */}
+              {(Object.keys(OFFER_TYPES_CONFIG) as OfferTypeKey[]).map((key) => {
+                const meta = OFFER_TYPES_CONFIG[key];
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    style={[
+                      styles.typeCard,
+                      {
+                        backgroundColor: Colors.surface,
+                        borderColor: Colors.border,
+                        flexDirection: isAr ? 'row-reverse' : 'row',
+                      },
+                    ]}
+                    onPress={() => {
+                      setSelectedOfferType(key);
+                      setCreateStep(3);
+                    }}
+                    activeOpacity={0.75}
+                  >
+                    {/* Icon Container */}
+                    <View style={[styles.typeIconContainer, { backgroundColor: meta.bg }]}>
+                      <Ionicons name={meta.icon} size={26} color={meta.color} />
+                    </View>
+
+                    {/* Titles */}
+                    <View
+                      style={[
+                        styles.typeTextContainer,
+                        { alignItems: isAr ? 'flex-end' : 'flex-start' },
+                      ]}
+                    >
+                      <Text style={[styles.typeCardTitle, { color: Colors.textPrimary }]}>
+                        {isAr ? meta.labelAr : meta.labelEn}
+                      </Text>
+                      <Text style={[styles.typeCardSubtitle, { color: Colors.textMuted }]}>
+                        {isAr ? meta.subtitleAr : meta.subtitleEn}
+                      </Text>
+                    </View>
+
+                    {/* Action Arrow */}
+                    <Ionicons
+                      name={isAr ? 'chevron-back' : 'chevron-forward'}
+                      size={20}
+                      color={Colors.textMuted}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          )}
+
+          {/* ── STEP 3: CONFIGURE AND SUBMIT ───────────────────── */}
+          {createStep === 3 && (
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              style={{ flex: 1 }}
+            >
+              <ScrollView style={styles.stepContainer} contentContainerStyle={styles.stepContentScroll}>
+                {/* Context Card: Product + Type Badge */}
+                {selectedProduct && (
+                  <View
+                    style={[
+                      styles.contextCard,
+                      {
+                        backgroundColor: Colors.surface,
+                        borderColor: Colors.border,
+                        flexDirection: isAr ? 'row-reverse' : 'row',
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.contextInfo,
+                        { alignItems: isAr ? 'flex-end' : 'flex-start' },
+                      ]}
+                    >
+                      <Text style={[styles.contextName, { color: Colors.textPrimary }]} numberOfLines={1}>
+                        {selectedProduct.name}
+                      </Text>
+                      <View
+                        style={[
+                          styles.typeBadge,
+                          {
+                            backgroundColor: OFFER_TYPES_CONFIG[selectedOfferType].bg,
+                            marginTop: 4,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.typeBadgeText,
+                            { color: OFFER_TYPES_CONFIG[selectedOfferType].color },
+                          ]}
+                        >
+                          {isAr
+                            ? OFFER_TYPES_CONFIG[selectedOfferType].labelAr
+                            : OFFER_TYPES_CONFIG[selectedOfferType].labelEn}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={[styles.contextPrice, { color: Colors.primary }]}>
+                      {formatPrice(selectedProduct.price)}
+                    </Text>
+                  </View>
+                )}
+
+                {/* ── Type 1: Percentage ─────────────────────── */}
+                {selectedOfferType === 'percentage' && (
+                  <View style={styles.formGroup}>
+                    <Text
+                      style={[
+                        styles.inputLabel,
+                        { color: Colors.textPrimary, textAlign: isAr ? 'right' : 'left' },
+                      ]}
+                    >
+                      {isAr ? 'نسبة الخصم (%) *' : 'Discount Percentage (%) *'}
+                    </Text>
+                    <TextInput
+                      style={[
+                        styles.textInput,
+                        {
+                          backgroundColor: Colors.surface,
+                          borderColor: Colors.border,
+                          color: Colors.textPrimary,
+                          textAlign: isAr ? 'right' : 'left',
+                        },
+                      ]}
+                      keyboardType="number-pad"
+                      placeholder={isAr ? 'مثال: 20، 50، 75' : 'e.g. 20, 50, 75'}
+                      placeholderTextColor={Colors.textMuted}
+                      value={percentInput}
+                      onChangeText={setPercentInput}
+                    />
+
+                    {/* Preview Calculation */}
+                    {!!percentInput && !isNaN(parseFloat(percentInput)) && selectedProduct?.price && (
+                      <View style={[styles.previewBox, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                        <Text style={[styles.previewLabel, { color: Colors.textMuted }]}>
+                          {isAr ? 'معاينة سعر الزبون بعد الخصم:' : 'Customer price after discount:'}
+                        </Text>
+                        <Text style={[styles.previewValue, { color: Colors.success }]}>
+                          {formatPrice(
+                            Math.max(
+                              0,
+                              selectedProduct.price * (1 - parseFloat(percentInput) / 100)
+                            )
+                          )}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* ── Type 2: Fixed Amount ───────────────────── */}
+                {selectedOfferType === 'fixed_amount' && (
+                  <View style={styles.formGroup}>
+                    <Text
+                      style={[
+                        styles.inputLabel,
+                        { color: Colors.textPrimary, textAlign: isAr ? 'right' : 'left' },
+                      ]}
+                    >
+                      {isAr ? 'مبلغ الخصم (د.أ) *' : 'Discount Amount (JOD) *'}
+                    </Text>
+                    <TextInput
+                      style={[
+                        styles.textInput,
+                        {
+                          backgroundColor: Colors.surface,
+                          borderColor: Colors.border,
+                          color: Colors.textPrimary,
+                          textAlign: isAr ? 'right' : 'left',
+                        },
+                      ]}
+                      keyboardType="decimal-pad"
+                      placeholder={isAr ? 'مثال: 0.50' : 'e.g. 0.50'}
+                      placeholderTextColor={Colors.textMuted}
+                      value={amountInput}
+                      onChangeText={setAmountInput}
+                    />
+
+                    {/* Preview Calculation */}
+                    {!!amountInput && !isNaN(parseFloat(amountInput)) && selectedProduct?.price && (
+                      <View style={[styles.previewBox, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                        <Text style={[styles.previewLabel, { color: Colors.textMuted }]}>
+                          {isAr ? 'معاينة سعر الزبون بعد الخصم:' : 'Customer price after discount:'}
+                        </Text>
+                        <Text style={[styles.previewValue, { color: Colors.success }]}>
+                          {formatPrice(Math.max(0, selectedProduct.price - parseFloat(amountInput)))}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* ── Type 3: Buy X Get Y ─────────────────────── */}
+                {selectedOfferType === 'buy_x_get_y' && (
+                  <View style={styles.formGroup}>
+                    <View style={[styles.rowInputs, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.inputLabel,
+                            { color: Colors.textPrimary, textAlign: isAr ? 'right' : 'left' },
+                          ]}
+                        >
+                          {isAr ? 'اشتر (الكمية) *' : 'Buy Quantity *'}
+                        </Text>
+                        <TextInput
+                          style={[
+                            styles.textInput,
+                            {
+                              backgroundColor: Colors.surface,
+                              borderColor: Colors.border,
+                              color: Colors.textPrimary,
+                              textAlign: isAr ? 'right' : 'left',
+                            },
+                          ]}
+                          keyboardType="number-pad"
+                          placeholder={isAr ? 'مثال: 2' : 'e.g. 2'}
+                          placeholderTextColor={Colors.textMuted}
+                          value={buyInput}
+                          onChangeText={setBuyInput}
+                        />
+                      </View>
+
+                      <View style={{ width: Spacing.md }} />
+
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.inputLabel,
+                            { color: Colors.textPrimary, textAlign: isAr ? 'right' : 'left' },
+                          ]}
+                        >
+                          {isAr ? 'واحصل على مجاناً *' : 'Get Free *'}
+                        </Text>
+                        <TextInput
+                          style={[
+                            styles.textInput,
+                            {
+                              backgroundColor: Colors.surface,
+                              borderColor: Colors.border,
+                              color: Colors.textPrimary,
+                              textAlign: isAr ? 'right' : 'left',
+                            },
+                          ]}
+                          keyboardType="number-pad"
+                          placeholder={isAr ? 'مثال: 1' : 'e.g. 1'}
+                          placeholderTextColor={Colors.textMuted}
+                          value={getInput}
+                          onChangeText={setGetInput}
+                        />
+                      </View>
+                    </View>
+
+                    {/* Preview summary text */}
+                    {!!buyInput && !!getInput && (
+                      <View style={[styles.previewBox, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                        <Text style={[styles.previewValue, { color: OFFER_TYPES_CONFIG.buy_x_get_y.color }]}>
+                          {isAr
+                            ? `اشتر ${buyInput} واحصل على ${getInput} مجاناً`
+                            : `Buy ${buyInput} Get ${getInput} Free`}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* ── Type 4: Quantity Bundle ─────────────────── */}
+                {selectedOfferType === 'quantity_price' && (
+                  <View style={styles.formGroup}>
+                    <View style={[styles.rowInputs, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.inputLabel,
+                            { color: Colors.textPrimary, textAlign: isAr ? 'right' : 'left' },
+                          ]}
+                        >
+                          {isAr ? 'الكمية *' : 'Quantity *'}
+                        </Text>
+                        <TextInput
+                          style={[
+                            styles.textInput,
+                            {
+                              backgroundColor: Colors.surface,
+                              borderColor: Colors.border,
+                              color: Colors.textPrimary,
+                              textAlign: isAr ? 'right' : 'left',
+                            },
+                          ]}
+                          keyboardType="number-pad"
+                          placeholder={isAr ? 'مثال: 3' : 'e.g. 3'}
+                          placeholderTextColor={Colors.textMuted}
+                          value={quantityInput}
+                          onChangeText={setQuantityInput}
+                        />
+                      </View>
+
+                      <View style={{ width: Spacing.md }} />
+
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.inputLabel,
+                            { color: Colors.textPrimary, textAlign: isAr ? 'right' : 'left' },
+                          ]}
+                        >
+                          {isAr ? 'السعر الإجمالي (د.أ) *' : 'Total Bundle Price (JOD) *'}
+                        </Text>
+                        <TextInput
+                          style={[
+                            styles.textInput,
+                            {
+                              backgroundColor: Colors.surface,
+                              borderColor: Colors.border,
+                              color: Colors.textPrimary,
+                              textAlign: isAr ? 'right' : 'left',
+                            },
+                          ]}
+                          keyboardType="decimal-pad"
+                          placeholder={isAr ? 'مثال: 5.00' : 'e.g. 5.00'}
+                          placeholderTextColor={Colors.textMuted}
+                          value={priceInput}
+                          onChangeText={setPriceInput}
+                        />
+                      </View>
+                    </View>
+
+                    {/* Preview summary text */}
+                    {!!quantityInput && !!priceInput && (
+                      <View style={[styles.previewBox, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
+                        <Text style={[styles.previewValue, { color: OFFER_TYPES_CONFIG.quantity_price.color }]}>
+                          {isAr
+                            ? `${quantityInput} قطع بـ ${priceInput} د.أ`
+                            : `${quantityInput} for ${priceInput} JOD`}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* Description (Optional) */}
+                <View style={styles.formGroup}>
+                  <Text
+                    style={[
+                      styles.inputLabel,
+                      { color: Colors.textPrimary, textAlign: isAr ? 'right' : 'left' },
+                    ]}
+                  >
+                    {isAr ? 'وصف العرض (اختياري)' : 'Offer Description (Optional)'}
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.textAreaInput,
+                      {
+                        backgroundColor: Colors.surface,
+                        borderColor: Colors.border,
+                        color: Colors.textPrimary,
+                        textAlign: isAr ? 'right' : 'left',
+                      },
+                    ]}
+                    multiline
+                    numberOfLines={3}
+                    placeholder={
+                      isAr
+                        ? 'اكتب شروط أو تفاصيل إضافية للعرض...'
+                        : 'Enter extra conditions or details for the offer...'
+                    }
+                    placeholderTextColor={Colors.textMuted}
+                    value={descriptionInput}
+                    onChangeText={setDescriptionInput}
+                  />
+                </View>
+
+                {/* Submit Action Button */}
+                <TouchableOpacity
+                  style={[
+                    styles.submitButton,
+                    { backgroundColor: Colors.tabActive },
+                    submitting && { opacity: 0.7 },
+                  ]}
+                  onPress={handleSubmitOffer}
+                  disabled={submitting}
+                  activeOpacity={0.85}
+                >
+                  {submitting ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.submitButtonText}>
+                      {isAr ? 'تأكيد ونشر العرض' : 'Confirm & Publish Offer'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </ScrollView>
+            </KeyboardAvoidingView>
+          )}
+        </SafeAreaView>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+// ── Styles ──────────────────────────────────────────────────────
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: Colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   header: {
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.divider,
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: Colors.textPrimary,
+    ...Typography.h2,
   },
   headerSubtitle: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
-    marginTop: 4,
+    ...Typography.caption,
+    marginTop: 2,
   },
-  newOfferBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.divider,
-  },
-  addButton: {
+  centered: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.secondary,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.md,
-    gap: Spacing.xs,
-    ...Shadows.small,
+    alignItems: 'center',
+    padding: Spacing.xl,
   },
-  addButtonText: {
-    ...Typography.button,
-    color: Colors.background,
-    fontSize: 14,
+  loadingText: {
+    ...Typography.bodySmall,
+    marginTop: Spacing.md,
   },
   listContent: {
     padding: Spacing.lg,
     paddingBottom: TAB_BAR_OVERFLOW,
   },
+  flexGrow: {
+    flexGrow: 1,
+  },
+
+  // ── Offer Card ──
   offerCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    marginBottom: Spacing.lg,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
     ...Shadows.small,
   },
-  inactiveCard: {
-    opacity: 0.6,
-  },
   cardHeader: {
-    flexDirection: 'row',
+    alignItems: 'center',
   },
-  productImage: {
-    width: 80,
-    height: 80,
-    borderRadius: BorderRadius.sm,
-    backgroundColor: Colors.surfaceElevated,
+  productThumbnail: {
+    width: 60,
+    height: 60,
+    borderRadius: BorderRadius.md,
+    backgroundColor: '#333333',
   },
-  cardInfo: {
-    flex: 1,
-    marginLeft: Spacing.md,
+  productThumbnailPlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: BorderRadius.md,
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  productName: {
-    ...Typography.h3,
-    color: Colors.textPrimary,
+  productDetails: {
+    flex: 1,
+    marginHorizontal: Spacing.md,
   },
-  productCategory: {
-    ...Typography.caption,
-    color: Colors.textMuted,
-    marginTop: 2,
-    textTransform: 'uppercase',
+  badgeAndStatusRow: {
+    alignItems: 'center',
+    marginBottom: 4,
   },
-  badgeContainer: {
-    flexDirection: 'row',
-    marginTop: Spacing.xs,
-  },
-  badge: {
+  typeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: Spacing.sm,
-    paddingVertical: 4,
-    borderRadius: BorderRadius.full,
+    paddingVertical: 3,
+    borderRadius: BorderRadius.xl,
   },
-  bogoBadge: {
-    backgroundColor: Colors.secondary,
+  typeBadgeText: {
+    ...Typography.badge,
   },
-  discountBadge: {
-    backgroundColor: Colors.primary,
-  },
-  badgeText: {
-    ...Typography.caption,
-    fontSize: 10,
-    fontWeight: '700',
-    marginLeft: 4,
-  },
-  bogoBadgeText: {
-    color: Colors.background,
-  },
-  discountBadgeText: {
-    color: Colors.textOnPrimary,
-  },
-  priceText: {
-    ...Typography.label,
-    color: Colors.textSecondary,
-    marginTop: Spacing.sm,
-  },
-  descriptionContainer: {
-    marginTop: Spacing.sm,
-    padding: Spacing.sm,
-    backgroundColor: Colors.surfaceElevated,
+  inactiveBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
     borderRadius: BorderRadius.sm,
+    marginHorizontal: 6,
   },
-  descriptionText: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
-    fontStyle: 'italic',
+  inactiveBadgeText: {
+    ...Typography.badge,
+    fontSize: 10,
   },
-  divider: {
-    height: 1,
-    backgroundColor: Colors.divider,
+  productName: {
+    ...Typography.subheading,
+    marginBottom: 2,
+  },
+  originalPrice: {
+    ...Typography.caption,
+  },
+  summaryBanner: {
     marginVertical: Spacing.md,
-  },
-  cardActions: {
-    flexDirection: 'row',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    borderLeftWidth: 3,
+    borderRightWidth: 3,
     alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  summaryText: {
+    ...Typography.body,
+    fontWeight: '700',
+    flex: 1,
+  },
+  offerDescription: {
+    ...Typography.caption,
+    marginBottom: Spacing.sm,
+  },
+  cardFooter: {
+    borderTopWidth: 1,
+    paddingTop: Spacing.md,
+    marginTop: Spacing.xs,
     justifyContent: 'space-between',
-  },
-  actionLeft: {
-    flexDirection: 'row',
     alignItems: 'center',
   },
-  statusLabel: {
-    ...Typography.label,
-    color: Colors.textSecondary,
-    marginRight: Spacing.sm,
+  toggleContainer: {
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  toggleLabel: {
+    ...Typography.caption,
+    fontWeight: '600',
   },
   deleteButton: {
-    padding: Spacing.sm,
-  },
-  emptyContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    gap: 4,
+  },
+  deleteButtonText: {
+    ...Typography.caption,
+    fontWeight: '600',
+  },
+
+  // ── Empty State ──
+  emptyContainer: {
+    flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.xxxl,
+  },
+  emptyIconCircle: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
   },
   emptyTitle: {
     ...Typography.h2,
-    color: Colors.textSecondary,
-    marginTop: Spacing.md,
+    marginBottom: Spacing.xs,
   },
   emptySubtitle: {
-    ...Typography.body,
-    color: Colors.textMuted,
+    ...Typography.bodySmall,
     textAlign: 'center',
-    marginTop: Spacing.sm,
-    paddingHorizontal: Spacing.xl,
+    marginBottom: Spacing.xl,
   },
-  emptyButton: {
-    backgroundColor: Colors.primary,
+  emptyCreateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.md,
-    marginTop: Spacing.xl,
+    borderRadius: BorderRadius.full,
+    ...Shadows.small,
   },
-  emptyButtonText: {
+  emptyCreateButtonText: {
     ...Typography.button,
-    color: Colors.textOnPrimary,
+    color: '#FFFFFF',
   },
 
-  // Modals Styling
-  modalOverlay: {
+  // ── FAB ──
+  fab: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Shadows.medium,
+  },
+
+  // ── Modal ──
+  modalSafeArea: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: Colors.background,
-    borderTopLeftRadius: BorderRadius.xl,
-    borderTopRightRadius: BorderRadius.xl,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.lg,
-    maxHeight: '90%',
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  modalContentFullHeight: {
-    height: '90%',
   },
   modalHeader: {
-    flexDirection: 'row',
+    borderBottomWidth: 1,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+  },
+  modalHeaderRow: {
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.divider,
-    paddingBottom: Spacing.md,
+  },
+  modalBackButton: {
+    width: 32,
+    justifyContent: 'center',
+  },
+  modalCloseButton: {
+    width: 32,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
   },
   modalTitle: {
-    ...Typography.h2,
-    color: Colors.textPrimary,
+    ...Typography.h3,
   },
-  closeButton: {
-    padding: 4,
+  stepIndicator: {
+    ...Typography.muted,
+    marginTop: 2,
   },
-  modalForm: {
-    paddingVertical: Spacing.lg,
+  stepContainer: {
+    flex: 1,
+  },
+  stepContentScroll: {
+    padding: Spacing.lg,
     paddingBottom: Spacing.xxxl,
   },
-  inputLabel: {
-    ...Typography.label,
-    color: Colors.textPrimary,
-    marginTop: Spacing.md,
-    marginBottom: Spacing.sm,
-  },
-  productPicker: {
-    backgroundColor: Colors.surface,
+
+  // ── Modal Step 1: Product Picker ──
+  searchBarContainer: {
+    margin: Spacing.lg,
+    marginBottom: Spacing.xs,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Platform.OS === 'ios' ? Spacing.sm : 2,
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  searchInput: {
+    flex: 1,
+    ...Typography.body,
+  },
+  pickerListContent: {
+    padding: Spacing.lg,
+    paddingTop: Spacing.sm,
+  },
+  productPickRow: {
+    borderWidth: 1,
     borderRadius: BorderRadius.md,
     padding: Spacing.md,
+    marginBottom: Spacing.sm,
+    alignItems: 'center',
   },
-  pickerPlaceholder: {
-    flexDirection: 'row',
+  pickThumbnail: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: '#333333',
+  },
+  pickThumbnailPlaceholder: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pickProductInfo: {
+    flex: 1,
+    marginHorizontal: Spacing.md,
+  },
+  pickProductName: {
+    ...Typography.body,
+    fontWeight: '600',
+  },
+  pickProductMeta: {
+    ...Typography.caption,
+    marginTop: 2,
+  },
+  pickProductPrice: {
+    ...Typography.price,
+  },
+  emptyPickerContainer: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xxl,
+    gap: Spacing.sm,
+  },
+  emptyPickerText: {
+    ...Typography.bodySmall,
+  },
+
+  // ── Modal Step 2: Offer Types ──
+  contextCard: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  pickerPlaceholderText: {
+  contextInfo: {
     flex: 1,
-    ...Typography.body,
-    color: Colors.textMuted,
-    marginLeft: Spacing.sm,
   },
-  selectedProductRow: {
-    flexDirection: 'row',
+  contextLabel: {
+    ...Typography.caption,
+  },
+  contextName: {
+    ...Typography.subheading,
+  },
+  contextPrice: {
+    ...Typography.price,
+    fontWeight: '700',
+  },
+  sectionInstruction: {
+    ...Typography.body,
+    marginBottom: Spacing.md,
+  },
+  typeCard: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
     alignItems: 'center',
   },
-  miniProductImage: {
-    width: 48,
-    height: 48,
-    borderRadius: BorderRadius.sm,
-    backgroundColor: Colors.surfaceElevated,
-    marginRight: Spacing.md,
+  typeIconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  selectedProductName: {
-    ...Typography.h3,
-    color: Colors.textPrimary,
+  typeTextContainer: {
+    flex: 1,
+    marginHorizontal: Spacing.md,
   },
-  selectedProductPrice: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
+  typeCardTitle: {
+    ...Typography.subheading,
+  },
+  typeCardSubtitle: {
+    ...Typography.caption,
     marginTop: 2,
   },
-  typeButtonsRow: {
-    flexDirection: 'column',
-    gap: Spacing.sm,
+
+  // ── Modal Step 3: Form Configuration ──
+  formGroup: {
+    marginBottom: Spacing.lg,
   },
-  typeOptionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    gap: Spacing.sm,
-  },
-  typeOptionActiveBogo: {
-    backgroundColor: Colors.secondary,
-    borderColor: Colors.secondaryLight,
-  },
-  typeOptionActiveDiscount: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primaryLight,
-  },
-  typeOptionText: {
-    ...Typography.label,
-    color: Colors.textSecondary,
-  },
-  typeOptionTextActiveBogo: {
-    color: Colors.background,
-    fontWeight: '700',
-  },
-  typeOptionTextActiveDiscount: {
-    color: Colors.textOnPrimary,
-    fontWeight: '700',
+  inputLabel: {
+    ...Typography.bodySmall,
+    fontWeight: '600',
+    marginBottom: Spacing.xs,
   },
   textInput: {
-    backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
     borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    color: Colors.textPrimary,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Platform.OS === 'ios' ? Spacing.md : Spacing.sm,
     ...Typography.body,
   },
-  textArea: {
+  textAreaInput: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    ...Typography.body,
     height: 80,
     textAlignVertical: 'top',
   },
-  submitButton: {
-    flexDirection: 'row',
+  rowInputs: {
+    alignItems: 'center',
+  },
+  previewBox: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginTop: Spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.secondary,
-    paddingVertical: Spacing.md,
+  },
+  previewLabel: {
+    ...Typography.caption,
+    marginBottom: 2,
+  },
+  previewValue: {
+    ...Typography.subheading,
+    fontWeight: '700',
+  },
+  submitButton: {
     borderRadius: BorderRadius.md,
-    marginTop: Spacing.xxl,
-    gap: Spacing.xs,
-    ...Shadows.glow,
+    paddingVertical: Spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: Spacing.md,
+    ...Shadows.small,
   },
   submitButtonText: {
     ...Typography.button,
-    color: Colors.background,
+    color: '#FFFFFF',
+    fontSize: 16,
   },
-
-  // Segmented Tabs
-  segmentContainer: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: BorderRadius.md,
-    padding: 4,
-    marginBottom: Spacing.lg,
-  },
-  segmentBtn: {
-    flex: 1,
-    paddingVertical: Spacing.sm,
-    alignItems: 'center',
-    borderRadius: BorderRadius.sm,
-  },
-  segmentActiveBtn: {
-    backgroundColor: Colors.surface,
-    ...Shadows.small,
-  },
-  segmentBtnText: {
-    ...Typography.label,
-    color: Colors.textMuted,
-  },
-  segmentActiveBtnText: {
-    color: Colors.textPrimary,
-    fontWeight: '700',
-  },
-  newProductFieldsContainer: {
-    flexDirection: 'column',
-    gap: 0,
-  },
-
-  // Image Picker Control
-  imagePickerBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: Colors.border,
-    borderRadius: BorderRadius.md,
-    paddingVertical: Spacing.xl,
-    gap: Spacing.sm,
-    marginTop: Spacing.xs,
-  },
-  imagePickerText: {
-    ...Typography.body,
-    color: Colors.textSecondary,
-  },
-  previewImageContainer: {
-    position: 'relative',
-    marginTop: Spacing.xs,
-    alignSelf: 'flex-start',
-  },
-  previewImage: {
-    width: 120,
-    height: 120,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.surfaceElevated,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  clearImageBtn: {
-    position: 'absolute',
-    top: -8,
-    right: -8,
-    backgroundColor: Colors.background,
-    borderRadius: BorderRadius.full,
-  },
-
-  // Search Bar Inside Catalog Selector
-  searchBarInlineContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: BorderRadius.md,
-    paddingHorizontal: Spacing.md,
-    marginVertical: Spacing.md,
-  },
-  searchIconInline: {
-    marginRight: Spacing.xs,
-  },
-  searchBarInline: {
-    flex: 1,
-    paddingVertical: Spacing.md,
-    color: Colors.textPrimary,
-    ...Typography.body,
-  },
-  clearSearchBtnInline: {
-    padding: 4,
-  },
-  selectorListInline: {
-    paddingBottom: Spacing.xxl,
-  },
-  emptySelector: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing.xxl,
-  },
-  emptySelectorText: {
-    ...Typography.body,
-    color: Colors.textMuted,
-    marginTop: Spacing.md,
-  },
-
-  // Selector list item row
-  selectorItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.md,
-    marginBottom: Spacing.sm,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  selectorItemImage: {
-    width: 50,
-    height: 50,
-    borderRadius: BorderRadius.sm,
-    backgroundColor: Colors.surfaceElevated,
-  },
-  selectorItemName: {
-    ...Typography.label,
-    color: Colors.textPrimary,
-  },
-  selectorItemCategory: {
-    ...Typography.caption,
-    color: Colors.textMuted,
-    marginTop: 2,
-  },
-  selectorItemPrice: {
-    ...Typography.caption,
-    color: Colors.textSecondary,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-}), [Colors]);
-
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </View>
-    );
-  }
-
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>
-          {t('offers.title', 'Special Offers')}
-        </Text>
-        <Text style={styles.headerSubtitle}>
-          {t('offers.subtitle', 'Manage and activate product promotions')}
-        </Text>
-      </View>
-
-      {/* Dedicated New Offer CTA — full-width bar so it's always in correct place */}
-      <View style={styles.newOfferBar}>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => setAddModalVisible(true)}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="add-circle-outline" size={20} color={Colors.background} />
-          <Text style={styles.addButtonText}>{t('offers.new_offer', 'New Offer')}</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Main List */}
-      <FlatList
-        data={offers}
-        keyExtractor={(item) => item.id}
-        renderItem={renderOfferItem}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={Colors.primary}
-          />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="pricetags-outline" size={60} color={Colors.textMuted} />
-            <Text style={styles.emptyTitle}>{t('offers.no_offers_yet', 'No Active Promotions')}</Text>
-            <Text style={styles.emptySubtitle}>
-              {t('offers.no_offers_prompt', 'Add your first special offer to attract more customers!')}
-            </Text>
-            <TouchableOpacity
-              style={styles.emptyButton}
-              onPress={() => setAddModalVisible(true)}
-            >
-              <Text style={styles.emptyButtonText}>{t('offers.create_offer', 'Create First Offer')}</Text>
-            </TouchableOpacity>
-          </View>
-        }
-      />
-
-      {/* Add Offer Modal */}
-      <Modal
-        visible={addModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => {
-          setAddModalVisible(false);
-          setShowSelector(false);
-          setSelectorSearch('');
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, showSelector && styles.modalContentFullHeight]}>
-            {showSelector ? (
-              <View style={{ flex: 1, paddingBottom: Spacing.xl }}>
-                <View style={styles.modalHeader}>
-                  <TouchableOpacity
-                    onPress={() => {
-                      setShowSelector(false);
-                      setSelectorSearch('');
-                    }}
-                    style={styles.closeButton}
-                  >
-                    <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
-                  </TouchableOpacity>
-                  <Text style={styles.modalTitle}>
-                    {t('offers.select_product', 'Select Product for Offer')}
-                  </Text>
-                  <View style={{ width: 24 }} />
-                </View>
-
-                {/* Search box for filtering products list */}
-                <View style={styles.searchBarInlineContainer}>
-                  <Ionicons name="search-outline" size={18} color={Colors.textMuted} style={styles.searchIconInline} />
-                  <TextInput
-                    style={styles.searchBarInline}
-                    placeholder={t('offers.search_placeholder', 'Search by name or category...')}
-                    placeholderTextColor={Colors.textMuted}
-                    value={selectorSearch}
-                    onChangeText={setSelectorSearch}
-                  />
-                  {selectorSearch.length > 0 && (
-                    <TouchableOpacity onPress={() => setSelectorSearch('')} style={styles.clearSearchBtnInline}>
-                      <Ionicons name="close-circle" size={16} color={Colors.textMuted} />
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                <FlatList
-                  data={filteredProducts}
-                  keyExtractor={(item) => item.id}
-                  contentContainerStyle={styles.selectorListInline}
-                  ListEmptyComponent={
-                    <View style={styles.emptySelector}>
-                      <Ionicons name="cube-outline" size={40} color={Colors.textMuted} />
-                      <Text style={styles.emptySelectorText}>
-                        {t('explore.no_results', 'No matching products found.')}
-                      </Text>
-                    </View>
-                  }
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={styles.selectorItemRow}
-                      onPress={() => {
-                        setSelectedProduct(item);
-                        setShowSelector(false);
-                        setSelectorSearch('');
-                      }}
-                    >
-                      <Image
-                        source={
-                          item.image_url
-                            ? { uri: resolveImageUrl(item.image_url) }
-                            : require('../../assets/icon.png')
-                        }
-                        style={styles.selectorItemImage}
-                      />
-                      <View style={{ flex: 1, marginHorizontal: Spacing.md }}>
-                        <Text style={styles.selectorItemName} numberOfLines={1}>{item.name}</Text>
-                        <Text style={styles.selectorItemCategory}>{item.category || t('common.uncategorized', 'Uncategorized')}</Text>
-                        <Text style={styles.selectorItemPrice}>
-                          {formatPrice(item.price)}
-                        </Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
-                    </TouchableOpacity>
-                  )}
-                />
-              </View>
-            ) : (
-              <>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>{t('offers.create_offer', 'Create Special Offer')}</Text>
-                  <TouchableOpacity
-                    onPress={() => {
-                      setAddModalVisible(false);
-                      setFormMode('catalog');
-                      setSelectedProduct(null);
-                      setNewItemName('');
-                      setNewItemPrice('');
-                      setNewItemBarcode('');
-                      setNewItemImageUri(null);
-                    }}
-                    style={styles.closeButton}
-                  >
-                    <Ionicons name="close" size={24} color={Colors.textPrimary} />
-                  </TouchableOpacity>
-                </View>
-
-                <ScrollView contentContainerStyle={styles.modalForm} showsVerticalScrollIndicator={false}>
-                  {/* Segmented/Tab Selector for Dual Mode */}
-                  <View style={styles.segmentContainer}>
-                    <TouchableOpacity
-                      style={[styles.segmentBtn, formMode === 'catalog' && styles.segmentActiveBtn]}
-                      onPress={() => setFormMode('catalog')}
-                    >
-                      <Text style={[styles.segmentBtnText, formMode === 'catalog' && styles.segmentActiveBtnText]}>
-                        {t('offers.choose_catalog')}
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.segmentBtn, formMode === 'new' && styles.segmentActiveBtn]}
-                      onPress={() => setFormMode('new')}
-                    >
-                      <Text style={[styles.segmentBtnText, formMode === 'new' && styles.segmentActiveBtnText]}>
-                        {t('offers.create_new')}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {formMode === 'catalog' ? (
-                    <View>
-                      {/* Product Picker Button */}
-                      <Text style={styles.inputLabel}>{t('offers.target_product', isAr ? 'المنتج المستهدف' : 'Target Product')}</Text>
-                      <TouchableOpacity
-                        style={styles.productPicker}
-                        onPress={() => setShowSelector(true)}
-                      >
-                        {selectedProduct ? (
-                          <View style={styles.selectedProductRow}>
-                            <Image
-                              source={
-                                selectedProduct.image_url
-                                  ? { uri: resolveImageUrl(selectedProduct.image_url) }
-                                  : require('../../assets/icon.png')
-                              }
-                              style={styles.miniProductImage}
-                            />
-                            <View style={{ flex: 1, marginHorizontal: Spacing.sm }}>
-                              <Text style={styles.selectedProductName} numberOfLines={1}>
-                                {selectedProduct.name}
-                              </Text>
-                              <Text style={styles.selectedProductPrice}>
-                                {formatPrice(selectedProduct.price)}
-                              </Text>
-                            </View>
-                            <Ionicons name="swap-horizontal-outline" size={20} color={Colors.primary} />
-                          </View>
-                        ) : (
-                          <View style={styles.pickerPlaceholder}>
-                            <Ionicons name="cube-outline" size={20} color={Colors.textMuted} />
-                            <Text style={styles.pickerPlaceholderText}>
-                              {t('offers.choose_catalog_prompt', isAr ? 'اختر منتج من الكتالوج...' : 'Choose a product from catalog...')}
-                            </Text>
-                            <Ionicons name="chevron-down" size={18} color={Colors.textMuted} />
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <View style={styles.newProductFieldsContainer}>
-                      {/* Brand-New Product Fields */}
-                      <Text style={styles.inputLabel}>{t('addProduct.product_name')}</Text>
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder={t('addProduct.product_name', isAr ? 'اسم المنتج الجديد...' : 'New product name...')}
-                        placeholderTextColor={Colors.textMuted}
-                        value={newItemName}
-                        onChangeText={setNewItemName}
-                      />
-
-                      <Text style={styles.inputLabel}>{t('addProduct.price')}</Text>
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder={t('offers.price_placeholder', isAr ? 'مثال: 5.99' : 'e.g. 5.99')}
-                        placeholderTextColor={Colors.textMuted}
-                        keyboardType="numeric"
-                        value={newItemPrice}
-                        onChangeText={setNewItemPrice}
-                      />
-
-                      <Text style={styles.inputLabel}>{t('addProduct.barcode')}</Text>
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder={t('scanner.enter_manually', isAr ? 'أدخل باركود المنتج...' : 'Type product barcode...')}
-                        placeholderTextColor={Colors.textMuted}
-                        value={newItemBarcode}
-                        onChangeText={setNewItemBarcode}
-                      />
-
-                      <Text style={styles.inputLabel}>{t('offers.product_picture')}</Text>
-                      {newItemImageUri ? (
-                        <View style={styles.previewImageContainer}>
-                          <Image source={{ uri: newItemImageUri }} style={styles.previewImage} />
-                          <TouchableOpacity style={styles.clearImageBtn} onPress={() => setNewItemImageUri(null)}>
-                            <Ionicons name="close-circle" size={24} color={Colors.error} />
-                          </TouchableOpacity>
-                        </View>
-                      ) : (
-                        <TouchableOpacity style={styles.imagePickerBtn} onPress={pickNewItemImage}>
-                          <Ionicons name="camera-outline" size={26} color={Colors.primary} />
-                          <Text style={styles.imagePickerText}>{t('offers.select_image')}</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  )}
-
-                  {/* Offer Type Selection */}
-                  <Text style={styles.inputLabel}>{t('offers.offer_type', 'Offer Type')}</Text>
-                  <View style={styles.typeButtonsRow}>
-                    <TouchableOpacity
-                      style={[
-                        styles.typeOptionButton,
-                        offerType === 'BOGO' && styles.typeOptionActiveBogo
-                      ]}
-                      onPress={() => setOfferType('BOGO')}
-                    >
-                      <Ionicons
-                        name="gift-outline"
-                        size={18}
-                        color={offerType === 'BOGO' ? Colors.background : Colors.textSecondary}
-                      />
-                      <Text style={[
-                        styles.typeOptionText,
-                        offerType === 'BOGO' && styles.typeOptionTextActiveBogo
-                      ]}>
-                        {t('offers.bogo', 'Buy 1 Get 1 Free')}
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.typeOptionButton,
-                        offerType === 'DISCOUNT' && styles.typeOptionActiveDiscount
-                      ]}
-                      onPress={() => setOfferType('DISCOUNT')}
-                    >
-                      <Ionicons
-                        name="pricetag-outline"
-                        size={18}
-                        color={offerType === 'DISCOUNT' ? Colors.textOnPrimary : Colors.textSecondary}
-                      />
-                      <Text style={[
-                        styles.typeOptionText,
-                        offerType === 'DISCOUNT' && styles.typeOptionTextActiveDiscount
-                      ]}>
-                        {isAr ? 'نسبة تخفيض مئوية' : 'Percentage Discount'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Percentage input (Conditional) */}
-                  {offerType === 'DISCOUNT' && (
-                    <View>
-                      <Text style={styles.inputLabel}>{isAr ? 'نسبة الخصم المئوية (%)' : 'Discount Percentage (%)'}</Text>
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder={isAr ? 'مثال: 20، 50، 75' : 'e.g. 20, 50, 75'}
-                        placeholderTextColor={Colors.textMuted}
-                        keyboardType="numeric"
-                        value={discountPercentage}
-                        onChangeText={setDiscountPercentage}
-                      />
-                    </View>
-                  )}
-
-                  {/* Description Input */}
-                  <Text style={styles.inputLabel}>{isAr ? 'تفاصيل العرض (اختياري)' : 'Offer Description (Optional)'}</Text>
-                  <TextInput
-                    style={[styles.textInput, styles.textArea]}
-                    placeholder={isAr ? 'اكتب شروط أو تفاصيل العرض...' : 'Write custom rules or promotion details...'}
-                    placeholderTextColor={Colors.textMuted}
-                    multiline={true}
-                    numberOfLines={3}
-                    value={description}
-                    onChangeText={setDescription}
-                  />
-
-                  {/* Submit Buttons */}
-                  <TouchableOpacity
-                    style={styles.submitButton}
-                    onPress={handleCreateOffer}
-                    disabled={submitting}
-                  >
-                    {submitting ? (
-                      <ActivityIndicator color={Colors.background} size="small" />
-                    ) : (
-                      <>
-                        <Ionicons name="checkmark-circle-outline" size={20} color={Colors.background} />
-                        <Text style={styles.submitButtonText}>
-                          {isAr ? 'تأكيد ونشر العرض' : 'Confirm and Publish Offer'}
-                        </Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                </ScrollView>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
-  );
-}
+});

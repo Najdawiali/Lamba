@@ -10,8 +10,14 @@ from app.schemas.special_offer import (
     SpecialOfferResponse,
     CustomerSpecialOfferResponse,
 )
+from app.schemas.offer import (
+    OfferCreate,
+    OfferUpdate,
+    OfferResponse,
+)
 
 __all__ = [
     "UserCreate", "UserLogin", "UserResponse", "TokenResponse",
     "SpecialOfferCreate", "SpecialOfferUpdate", "SpecialOfferResponse", "CustomerSpecialOfferResponse",
+    "OfferCreate", "OfferUpdate", "OfferResponse",
 ]

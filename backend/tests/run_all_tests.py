@@ -50,6 +50,8 @@ from tests.test_optimizations import (
 )
 from tests.test_customer_auth import TestCustomerAuth
 from tests.test_synonym_table import TestSynonymTable
+from tests.test_offer_model_and_schemas import TestOfferModelAndSchemas
+from tests.test_merchant_offers_api import TestMerchantOffersAPI
 
 
 class TestArabicNorm(unittest.TestCase):
