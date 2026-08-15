@@ -375,8 +375,11 @@ async def update_market_item(
     
     mi, gi, market, lat, lng = row[0], row[1], row[2], row[3], row[4]
     
-    if data.name is not None:
-        gi.name = data.name
+    name_changed = False
+    if data.name is not None and data.name.strip() and data.name.strip() != gi.name:
+        gi.name = data.name.strip()
+        name_changed = True
+
     if data.stock_count is not None:
         mi.stock_count = data.stock_count
         # Auto-update status based on stock count
@@ -384,25 +387,32 @@ async def update_market_item(
             mi.status = False
         else:
             mi.status = True
+
     if data.price is not None:
         mi.price = data.price
 
-    # Re-compute embeddings BEFORE commit so DB + ES stay consistent in one transaction boundary.
+    # Re-compute embeddings ONLY if name actually changed
     embedding = None
-    if data.name is not None:
-        combined_text = gi.name
-        if gi.description:
-            combined_text = f"{gi.name}. {gi.description}"
-        # Re-generate text vector (MiniLM) and image vector (CLIP)
-        text_vec = (await embedding_service.encode_text_async(combined_text)).tolist()
-        image_vec = (await embedding_service.encode_product_async(gi.name, gi.description)).tolist()
-        gi.text_embedding = text_vec
-        gi.image_embedding = image_vec
-        embedding = np.array(image_vec)
+    if name_changed:
+        try:
+            combined_text = gi.name
+            if gi.description:
+                combined_text = f"{gi.name}. {gi.description}"
+            # Re-generate text vector (MiniLM) and image vector (CLIP)
+            text_vec = (await embedding_service.encode_text_async(combined_text)).tolist()
+            image_vec = (await embedding_service.encode_product_async(gi.name, gi.description)).tolist()
+            gi.text_embedding = text_vec
+            gi.image_embedding = image_vec
+            embedding = np.array(image_vec)
+        except Exception as e:
+            logger.warning(f"Re-embedding for item {gi.id} skipped due to error: {e}")
 
     await db.flush()
     if mi.status:
-        await check_and_trigger_stock_alerts(db, mi.id)
+        try:
+            await check_and_trigger_stock_alerts(db, mi.id)
+        except Exception as alert_err:
+            logger.warning(f"Stock alert check failed: {alert_err}")
     await db.commit()
 
     # Elasticsearch update
@@ -418,8 +428,8 @@ async def update_market_item(
             category=gi.category,
             image_url=gi.image_url,
             in_stock=mi.status,
-            latitude=float(lat),
-            longitude=float(lng),
+            latitude=float(lat) if lat is not None else 0.0,
+            longitude=float(lng) if lng is not None else 0.0,
             embedding=embedding
         )
     except Exception as e:

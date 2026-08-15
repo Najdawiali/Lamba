@@ -1056,7 +1056,7 @@ export default function MerchantOffersScreen() {
                   {formMode === 'catalog' ? (
                     <View>
                       {/* Product Picker Button */}
-                      <Text style={styles.inputLabel}>{t('offers.target_product', 'Target Product')}</Text>
+                      <Text style={styles.inputLabel}>{t('offers.target_product', isAr ? 'المنتج المستهدف' : 'Target Product')}</Text>
                       <TouchableOpacity
                         style={styles.productPicker}
                         onPress={() => setShowSelector(true)}
@@ -1085,7 +1085,7 @@ export default function MerchantOffersScreen() {
                           <View style={styles.pickerPlaceholder}>
                             <Ionicons name="cube-outline" size={20} color={Colors.textMuted} />
                             <Text style={styles.pickerPlaceholderText}>
-                              {t('offers.choose_catalog_prompt', 'Choose a product from catalog...')}
+                              {t('offers.choose_catalog_prompt', isAr ? 'اختر منتج من الكتالوج...' : 'Choose a product from catalog...')}
                             </Text>
                             <Ionicons name="chevron-down" size={18} color={Colors.textMuted} />
                           </View>
@@ -1098,7 +1098,7 @@ export default function MerchantOffersScreen() {
                       <Text style={styles.inputLabel}>{t('addProduct.product_name')}</Text>
                       <TextInput
                         style={styles.textInput}
-                        placeholder={t('addProduct.product_name', 'New product name...')}
+                        placeholder={t('addProduct.product_name', isAr ? 'اسم المنتج الجديد...' : 'New product name...')}
                         placeholderTextColor={Colors.textMuted}
                         value={newItemName}
                         onChangeText={setNewItemName}
@@ -1107,7 +1107,7 @@ export default function MerchantOffersScreen() {
                       <Text style={styles.inputLabel}>{t('addProduct.price')}</Text>
                       <TextInput
                         style={styles.textInput}
-                        placeholder="e.g. 5.99"
+                        placeholder={t('offers.price_placeholder', isAr ? 'مثال: 5.99' : 'e.g. 5.99')}
                         placeholderTextColor={Colors.textMuted}
                         keyboardType="numeric"
                         value={newItemPrice}
@@ -1117,7 +1117,7 @@ export default function MerchantOffersScreen() {
                       <Text style={styles.inputLabel}>{t('addProduct.barcode')}</Text>
                       <TextInput
                         style={styles.textInput}
-                        placeholder={t('scanner.enter_manually', 'Type product barcode...')}
+                        placeholder={t('scanner.enter_manually', isAr ? 'أدخل باركود المنتج...' : 'Type product barcode...')}
                         placeholderTextColor={Colors.textMuted}
                         value={newItemBarcode}
                         onChangeText={setNewItemBarcode}
@@ -1190,7 +1190,7 @@ export default function MerchantOffersScreen() {
                       <Text style={styles.inputLabel}>{isAr ? 'نسبة الخصم المئوية (%)' : 'Discount Percentage (%)'}</Text>
                       <TextInput
                         style={styles.textInput}
-                        placeholder="e.g. 20, 50, 75"
+                        placeholder={isAr ? 'مثال: 20، 50، 75' : 'e.g. 20, 50, 75'}
                         placeholderTextColor={Colors.textMuted}
                         keyboardType="numeric"
                         value={discountPercentage}

@@ -379,10 +379,16 @@ export default function ReceiptHistoryScreen() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backBtn}
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(merchant)/cashier');
+            }
+          }}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
+          <Ionicons name={isAr ? "arrow-forward" : "arrow-back"} size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
           {t('history.title')}

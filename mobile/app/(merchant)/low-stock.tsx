@@ -19,6 +19,7 @@ type StockFilterMode = 'all' | 'out_of_stock' | 'critical' | 'low';
 export default function LowStockScreen() {
   const router = useRouter();
   const Colors = useThemeColors();
+  const isAr = i18n.locale?.startsWith('ar');
   const [products, setProducts] = useState<MarketItemDashboardResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -547,10 +548,16 @@ export default function LowStockScreen() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backBtn}
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(merchant)/profile');
+            }
+          }}
           activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
+          <Ionicons name={isAr ? "arrow-forward" : "arrow-back"} size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
           {t('lowStock.title', 'تنبيهات نقص المخزون')}

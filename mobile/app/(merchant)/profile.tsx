@@ -790,8 +790,8 @@ export default function MerchantProfileScreen() {
                   <Ionicons name="storefront" size={20} color={Colors.secondary} />
                 </View>
                 <View style={styles.menuContent}>
-                  <Text style={styles.menuLabel}>{market.name}</Text>
-                  <Text style={styles.menuValue}>{market.address}</Text>
+                  <Text style={styles.menuLabel}>{t('profile.store_name', isAr ? 'اسم المتجر' : 'Store Name')}</Text>
+                  <Text style={styles.menuValue}>{(isAr && market.name_ar) ? market.name_ar : market.name}</Text>
                 </View>
               </View>
               <View style={styles.menuItem}>
@@ -799,9 +799,9 @@ export default function MerchantProfileScreen() {
                   <Ionicons name="location" size={20} color={Colors.primary} />
                 </View>
                 <View style={styles.menuContent}>
-                  <Text style={styles.menuLabel}>{t('merchant.coordinates', 'الإحداثيات')}</Text>
+                  <Text style={styles.menuLabel}>{t('merchant.store_address', isAr ? 'عنوان المتجر' : 'Store Address')}</Text>
                   <Text style={styles.menuValue}>
-                    {market.latitude.toFixed(4)}, {market.longitude.toFixed(4)}
+                    {(isAr && market.address_ar) ? market.address_ar : (market.address || market.address_ar || t('common.na', 'غير متوفر'))}
                   </Text>
                 </View>
               </View>

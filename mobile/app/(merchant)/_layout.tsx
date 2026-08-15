@@ -8,68 +8,24 @@
  * - Inactive tint: #5A5E7A
  * - Background: #0A0B14
  * - Top border: #1E2040
- * - 5 evenly-spaced destinations (no center slot hack)
- *
- * "Add product" is the merchant's primary *action*, not a destination — so it
- * is rendered as a Floating Action Button (FAB) hovering above the bar (right
- * edge, bottom-aligned; mirrored to left in RTL). The FAB auto-hides on
- * full-screen routes where the tab bar is already hidden. Pattern follows
- * Material Design + iOS HIG (≤5 tab destinations + FAB for primary action).
+ * - 5 evenly-spaced destinations
+ * - backBehavior="history" ensures sub-screens pop back to cashier / caller tab
  */
 
-import React, { useMemo } from 'react';
-import { View, StyleSheet, Platform, Pressable } from 'react-native';
-import { Tabs, useRouter, usePathname } from 'expo-router';
+import React from 'react';
+import { View, StyleSheet, Platform } from 'react-native';
+import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Spacing, Shadows } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
-import { t, i18n } from '../../services/i18n';
-
-// Routes on which the FAB should be hidden (full-screen flows / own action target).
-const FAB_HIDDEN_TRAILS = [
-  '/onboarding',
-  '/scanner',
-  '/quick-sale',
-  '/history',
-  '/low-stock',
-  '/add-product',
-];
+import { t } from '../../services/i18n';
 
 export default function MerchantLayout() {
   const Colors = useThemeColors();
-  const router = useRouter();
-  const pathname = usePathname();
-  const isAr = i18n.locale?.startsWith('ar');
-
-  const fabVisible = !FAB_HIDDEN_TRAILS.some((p) => pathname.endsWith(p));
-
-  const styles = useMemo(() => StyleSheet.create({
-    wrapper: { flex: 1 },
-    fab: {
-      position: 'absolute',
-      width: 60,
-      height: 60,
-      borderRadius: 30,
-      backgroundColor: Colors.tabActive,
-      justifyContent: 'center',
-      alignItems: 'center',
-      bottom: Platform.OS === 'ios' ? 104 : 80, // clears the 88/64 tab bar + safe area
-      // RTL: FAB mirrors to the left edge
-      ...(isAr ? { left: Spacing.lg } : { right: Spacing.lg }),
-      ...Shadows.glow,
-    },
-    fabPressed: {
-      transform: [{ scale: 0.94 }],
-      opacity: 0.9,
-    },
-    fabIcon: {
-      marginTop: 2, // visual centering of the + glyph
-    },
-  }), [Colors, isAr]);
 
   return (
     <View style={styles.wrapper}>
       <Tabs
+        backBehavior="history"
         screenOptions={{
           headerShown: false,
           tabBarStyle: {
@@ -129,7 +85,7 @@ export default function MerchantLayout() {
         <Tabs.Screen
           name="add-product"
           options={{
-            href: null, // Hidden from tab bar — reachable via the FAB
+            href: null, // Hidden from tab bar — reachable via inventory actions
           }}
         />
         <Tabs.Screen
@@ -164,18 +120,10 @@ export default function MerchantLayout() {
           }}
         />
       </Tabs>
-
-      {fabVisible && (
-        <Pressable
-          style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
-          onPress={() => router.push('/(merchant)/add-product')}
-          accessibilityRole="button"
-          accessibilityLabel={t('tabs.add', 'Add Product')}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons name="add" size={32} color="#FFFFFF" style={styles.fabIcon} />
-        </Pressable>
-      )}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  wrapper: { flex: 1 },
+});

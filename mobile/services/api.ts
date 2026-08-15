@@ -236,7 +236,9 @@ export interface MarketResponse {
   id: string;
   merchant_id: string;
   name: string;
+  name_ar?: string | null;
   address: string;
+  address_ar?: string | null;
   latitude: number;
   longitude: number;
   business_nature?: string | null;

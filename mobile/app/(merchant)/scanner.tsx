@@ -20,6 +20,7 @@ import {
   POSCheckoutResponse,
   logout
 } from '../../services/api';
+import { formatPrice } from '../../services/currency';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const VIEWFINDER_SIZE = SCREEN_WIDTH * 0.7;
@@ -871,7 +872,7 @@ const styles = useMemo(() => StyleSheet.create({
           });
 
           // Flash temporary HUD green notification
-          setHudMessage(`+1 ${result.name} (${result.price?.toFixed(2)} SAR)`);
+          setHudMessage(`+1 ${result.name} (${formatPrice(result.price)})`);
           setTimeout(() => setHudMessage(null), 1800);
 
           // Snappy cool-down before next automatic continuous scan
@@ -1093,8 +1094,18 @@ const styles = useMemo(() => StyleSheet.create({
         <View style={styles.overlayTop}>
           <SafeAreaView style={styles.headerSafeArea} edges={['top']}>
             <View style={styles.headerOverlay}>
-              <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn} activeOpacity={0.7}>
-                <Ionicons name="arrow-back" size={24} color="#FFF" />
+              <TouchableOpacity
+                onPress={() => {
+                  if (router.canGoBack()) {
+                    router.back();
+                  } else {
+                    router.replace('/(merchant)/cashier');
+                  }
+                }}
+                style={styles.headerBtn}
+                activeOpacity={0.7}
+              >
+                <Ionicons name={isAr ? "arrow-forward" : "arrow-back"} size={24} color="#FFF" />
               </TouchableOpacity>
               
               {/* Segmented Mode Selector */}
@@ -1171,7 +1182,7 @@ const styles = useMemo(() => StyleSheet.create({
             <Text style={styles.summaryLabel}>{t('scanner.items', 'Scanned Items')}</Text>
           </View>
           <View style={styles.summaryAction}>
-            <Text style={styles.summaryTotal}>{calculateTotal().toFixed(2)} SAR</Text>
+            <Text style={styles.summaryTotal}>{formatPrice(calculateTotal())}</Text>
             <Ionicons name="chevron-up" size={20} color="#FFF" />
           </View>
         </TouchableOpacity>
@@ -1396,7 +1407,7 @@ const styles = useMemo(() => StyleSheet.create({
               <View style={styles.cartItemRow}>
                 <View style={styles.cartItemText}>
                   <Text style={styles.cartItemName} numberOfLines={1}>{item.name}</Text>
-                  <Text style={styles.cartItemSub}>{item.price.toFixed(2)} SAR × {item.quantity}</Text>
+                  <Text style={styles.cartItemSub}>{formatPrice(item.price)} × {item.quantity}</Text>
                 </View>
 
                 <View style={styles.cartItemActions}>
@@ -1419,16 +1430,16 @@ const styles = useMemo(() => StyleSheet.create({
           <View style={styles.receiptSummary}>
             <View style={styles.receiptRow}>
               <Text style={styles.receiptLabel}>{t('scanner.subtotal', 'Subtotal')}</Text>
-              <Text style={styles.receiptValue}>{calculateTotal().toFixed(2)} {t('common.sar', 'SAR')}</Text>
+              <Text style={styles.receiptValue}>{formatPrice(calculateTotal())}</Text>
             </View>
             <View style={styles.receiptRow}>
               <Text style={styles.receiptLabel}>{t('scanner.taxes_inclusive', 'Taxes (Inclusive)')}</Text>
-              <Text style={styles.receiptValue}>0.00 {t('common.sar', 'SAR')}</Text>
+              <Text style={styles.receiptValue}>{formatPrice(0)}</Text>
             </View>
             <View style={styles.receiptRowDivider} />
             <View style={styles.receiptRowTotal}>
               <Text style={styles.receiptTotalLabel}>{t('scanner.total', 'Grand Total')}</Text>
-              <Text style={styles.receiptTotalValue}>{calculateTotal().toFixed(2)} {t('common.sar', 'SAR')}</Text>
+              <Text style={styles.receiptTotalValue}>{formatPrice(calculateTotal())}</Text>
             </View>
           </View>
 
@@ -1506,11 +1517,11 @@ const styles = useMemo(() => StyleSheet.create({
                   <View style={{ flex: 2 }}>
                     <Text style={styles.receiptItemDetailsName}>{item.name}</Text>
                     <Text style={styles.receiptItemDetailsSub}>
-                      {item.unit_price.toFixed(2)} {t('common.sar', 'SAR')} × {item.quantity}
+                      {formatPrice(item.unit_price)} × {item.quantity}
                     </Text>
                   </View>
                   <Text style={styles.receiptItemDetailsSubtotal}>
-                    {item.subtotal.toFixed(2)} {t('common.sar', 'SAR')}
+                    {formatPrice(item.subtotal)}
                   </Text>
                 </View>
               )}
@@ -1523,7 +1534,7 @@ const styles = useMemo(() => StyleSheet.create({
             <View style={styles.receiptScreenTotalRow}>
               <Text style={styles.receiptScreenTotalLabel}>{t('scanner.total', 'GRAND TOTAL')}</Text>
               <Text style={styles.receiptScreenTotalValue}>
-                {(lastReceipt?.total_cost || 0).toFixed(2)} {t('common.sar', 'SAR')}
+                {formatPrice(lastReceipt?.total_cost || 0)}
               </Text>
             </View>
             <View style={styles.receiptScreenDivider} />

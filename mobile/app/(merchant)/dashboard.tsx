@@ -25,6 +25,31 @@ import { t, toggleLanguage, i18n } from '../../services/i18n';
 import { resolveImageUrl } from '../../services/utils';
 import { formatPrice, getCurrencyCode } from '../../services/currency';
 
+const CATEGORY_AR_FALLBACK: Record<string, string> = {
+  'Food & Beverages': 'الأغذية والمشروبات',
+  'Home & Personal Care': 'العناية المنزلية والشخصية',
+  'Electronics & Tech': 'الإلكترونيات والتقنية',
+  'Home & Kitchen': 'المنزل والمطبخ',
+  'Services': 'الخدمات',
+  'Fruits & Vegetables': 'الخضار والفواكه',
+  'Cooking Essentials': 'مستلزمات الطبخ',
+  'Dairy & Eggs': 'الألبان والبيض',
+  'Meat & Poultry': 'اللحوم والدواجن',
+  'Beverages': 'المشروبات',
+  'Snacks': 'المأكولات الخفيفة',
+  'Bakery': 'المخبوزات',
+  'Frozen Food': 'الأطعمة المجمدة',
+  'Cleaning & Detergents': 'التنظيف المنزلي',
+  'Beauty & Personal Care': 'العناية الشخصية',
+  'Electronics': 'الإلكترونيات',
+  'Mobiles & Tech': 'الهواتف والتقنية',
+  'Cookware & Kitchenware': 'أدوات المطبخ',
+  'Beauty & Personal Care Services': 'خدمات التجميل والعناية الشخصية',
+  'Vehicle Maintenance & Care': 'صيانة وتغسيل السيارات',
+  'Home & Maintenance Services': 'خدمات وصيانة المنازل',
+  'Education & Tutoring': 'التعليم والدروس الخصوصية',
+};
+
 export default function DashboardScreen() {
   const router = useRouter();
   const Colors = useThemeColors();
@@ -280,10 +305,12 @@ export default function DashboardScreen() {
       } catch (valErr) {
         console.warn('Failed to refresh inventory value:', valErr);
       }
-    } catch (err) {
+    } catch (err: any) {
+      console.error('Failed to update item details:', err?.response?.data || err);
+      const detailMsg = err?.response?.data?.detail;
       Alert.alert(
         t('common.error'),
-        isAr ? 'تعذر حفظ تعديلات المنتج. يرجى التحقق من الاتصال والمحاولة مجدداً.' : 'Could not update item details. Please check connection and try again.'
+        detailMsg || (isAr ? 'تعذر حفظ تعديلات المنتج. يرجى التحقق من الاتصال والمحاولة مجدداً.' : 'Could not update item details. Please check connection and try again.')
       );
     } finally {
       setSavingEdit(false);
@@ -395,9 +422,20 @@ export default function DashboardScreen() {
 
   // Extract unique categories for filter chips
   const categories = useMemo(() => {
-    const cats = new Set<string>();
-    products.forEach(p => { if (p.category) cats.add(p.category); });
-    return [t('dashboard.filter_all', 'All'), ...Array.from(cats)];
+    const map = new Map<string, { name: string; name_ar?: string | null; name_en?: string | null }>();
+    products.forEach(p => {
+      if (p.category && !map.has(p.category)) {
+        map.set(p.category, {
+          name: p.category,
+          name_ar: p.category_name_ar || CATEGORY_AR_FALLBACK[p.category] || p.category,
+          name_en: p.category_name_en || p.category,
+        });
+      }
+    });
+    return [
+      { name: 'All', name_ar: 'الكل', name_en: 'All' },
+      ...Array.from(map.values()),
+    ];
   }, [products]);
 
   // Filtered products by search and category
@@ -405,7 +443,12 @@ export default function DashboardScreen() {
     let filtered = products;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      filtered = filtered.filter(p => p.name.toLowerCase().includes(q) || (p.category && p.category.toLowerCase().includes(q)));
+      filtered = filtered.filter(p =>
+        p.name.toLowerCase().includes(q) ||
+        (p.name_ar && p.name_ar.toLowerCase().includes(q)) ||
+        (p.category && p.category.toLowerCase().includes(q)) ||
+        (p.category_name_ar && p.category_name_ar.includes(searchQuery.trim()))
+      );
     }
     if (activeCategory !== 'All' && activeCategory !== t('dashboard.filter_all', 'All')) {
       filtered = filtered.filter(p => p.category === activeCategory);
@@ -422,42 +465,58 @@ export default function DashboardScreen() {
   headerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
   },
   headerTextCol: {
     flex: 1,
-    paddingRight: Spacing.sm,
+    alignItems: 'center',
   },
-  backToShoppingLink: {
+  emptyAddBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    gap: 6,
+    marginTop: Spacing.lg,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
     borderRadius: BorderRadius.md,
-    backgroundColor: Colors.primary + '15',
-    borderWidth: 1,
-    borderColor: Colors.primary + '30',
+    backgroundColor: Colors.tabActive,
   },
-  backToShoppingLinkText: {
-    color: Colors.primary,
-    fontSize: 13,
-    fontWeight: '600',
+  emptyAddBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
-  greeting: { fontSize: 32, fontWeight: '700', color: Colors.textPrimary },
-  subtitle: { fontSize: 14, color: Colors.textMuted, marginTop: 2 },
+  fab: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Colors.tabActive,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  greeting: { fontSize: 22, fontWeight: '700', color: Colors.textPrimary, textAlign: 'center' },
+  subtitle: { fontSize: 14, color: Colors.textMuted, marginTop: 2, textAlign: 'center' },
 
   // Stat Chips
   statChipsRow: {
-    flexDirection: 'row', paddingHorizontal: Spacing.xl, gap: Spacing.sm, marginBottom: Spacing.lg,
+    flexDirection: 'row', paddingHorizontal: Spacing.xl, gap: Spacing.xs, marginBottom: Spacing.md,
   },
   statChip: {
-    flex: 1, backgroundColor: Colors.surfaceElevated, borderRadius: 10,
-    paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md,
-    alignItems: 'center', flexDirection: 'column', gap: 2,
+    flex: 1, backgroundColor: Colors.surfaceElevated, borderRadius: 8,
+    paddingVertical: Spacing.xs, paddingHorizontal: Spacing.sm,
+    alignItems: 'center', flexDirection: 'column', gap: 1,
   },
-  statChipNumber: { fontSize: 20, fontWeight: '700', color: Colors.textPrimary },
-  statChipLabel: { fontSize: 10, fontWeight: '600', color: Colors.textMuted, textTransform: 'uppercase' },
+  statChipNumber: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary },
+  statChipLabel: { fontSize: 9, fontWeight: '600', color: Colors.textMuted, textTransform: 'uppercase' },
 
   // Search Bar
   searchContainer: { paddingHorizontal: Spacing.xl, marginBottom: Spacing.sm },
@@ -469,16 +528,40 @@ export default function DashboardScreen() {
   searchInput: { flex: 1, color: Colors.textPrimary, fontSize: 14 },
 
   // Filter Chips
-  filterRow: { marginBottom: Spacing.md, height: 46 },
-  filterRowContent: { paddingHorizontal: Spacing.xl, gap: Spacing.sm, alignItems: 'center', paddingVertical: 4 },
-  filterChip: {
-    backgroundColor: Colors.surfaceElevated, borderRadius: 20,
-    paddingHorizontal: Spacing.lg, height: 36,
-    justifyContent: 'center', alignItems: 'center',
+  filterRow: {
+    marginBottom: Spacing.xl,
+    marginTop: Spacing.xs,
+    height: 48,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    overflow: 'visible',
   },
-  filterChipActive: { backgroundColor: Colors.primary },
-  filterChipText: { fontSize: 13, fontWeight: '600', color: Colors.textMuted },
-  filterChipTextActive: { color: '#FFFFFF' },
+  filterRowContent: {
+    paddingHorizontal: Spacing.xl,
+    paddingRight: Spacing.xxxl,
+    gap: 0,
+    alignItems: 'stretch',
+  },
+  filterChip: {
+    paddingHorizontal: Spacing.xl,
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderBottomWidth: 2.5,
+    borderBottomColor: 'transparent',
+  },
+  filterChipActive: {
+    borderBottomColor: Colors.primary,
+  },
+  filterChipText: {
+    fontSize: 15,
+    fontWeight: '400',
+    color: Colors.textMuted,
+  },
+  filterChipTextActive: {
+    color: Colors.textPrimary,
+    fontWeight: '700',
+  },
 
   // Product List & Cards
   listContent: { paddingHorizontal: Spacing.xl, paddingBottom: TAB_BAR_OVERFLOW },
@@ -518,6 +601,10 @@ export default function DashboardScreen() {
     flex: 1,
     backgroundColor: 'rgba(10, 10, 26, 0.6)',
     justifyContent: 'flex-end',
+  },
+  modalBackdropDismiss: {
+    flex: 1,
+    width: '100%',
   },
   modalContent: {
     backgroundColor: Colors.surface,
@@ -994,24 +1081,12 @@ export default function DashboardScreen() {
         <View style={styles.headerTopRow}>
           <View style={styles.headerTextCol}>
             <Text style={styles.greeting} numberOfLines={1}>
-              {market?.name || t('tabs.dashboard', 'المخزون')}
+              {(isAr && market?.name_ar) ? market.name_ar : (market?.name || t('tabs.dashboard', 'المخزون'))}
             </Text>
             <Text style={styles.subtitle} numberOfLines={1}>
-              {market?.address || t('merchant.dashboard_subtitle', 'إدارة المخزون والمبيعات')}
+              {(isAr && market?.address_ar) ? market.address_ar : (market?.address || t('merchant.dashboard_subtitle', 'إدارة المخزون والمبيعات'))}
             </Text>
           </View>
-
-          {/* Option B: Back to Shopping header button */}
-          <TouchableOpacity
-            onPress={() => router.replace('/(customer)/search')}
-            style={styles.backToShoppingLink}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.backToShoppingLinkText}>
-              {t('merchant.back_to_shopping', 'العودة للتسوق')}
-            </Text>
-            <Ionicons name={isAr ? "arrow-back" : "arrow-forward"} size={16} color={Colors.primary} />
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -1061,24 +1136,30 @@ export default function DashboardScreen() {
         style={styles.filterRow}
         contentContainerStyle={styles.filterRowContent}
       >
-        {categories.map((cat) => (
-          <TouchableOpacity
-            key={cat}
-            style={[
-              styles.filterChip,
-              activeCategory === cat && styles.filterChipActive,
-            ]}
-            onPress={() => setActiveCategory(cat)}
-            activeOpacity={0.7}
-          >
-            <Text style={[
-              styles.filterChipText,
-              activeCategory === cat && styles.filterChipTextActive,
-            ]}>
-              {cat}
-            </Text>
-          </TouchableOpacity>
-        ))}
+        {categories.map((cat) => {
+          const displayName = isAr
+            ? (cat.name_ar || CATEGORY_AR_FALLBACK[cat.name] || cat.name)
+            : (cat.name_en || cat.name);
+          const isSelected = activeCategory === cat.name;
+          return (
+            <TouchableOpacity
+              key={cat.name}
+              style={[
+                styles.filterChip,
+                isSelected && styles.filterChipActive,
+              ]}
+              onPress={() => setActiveCategory(cat.name)}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.filterChipText,
+                isSelected && styles.filterChipTextActive,
+              ]}>
+                {displayName}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
 
       {/* Product List */}
@@ -1119,13 +1200,15 @@ export default function DashboardScreen() {
             {/* Product Metadata Info */}
             <View style={styles.productInfo}>
               <Text style={styles.productName} numberOfLines={1}>
-                {i18n.locale?.startsWith('ar') ? (item.name_ar || truncatedName) : (item.name_en || truncatedName)}
+                {isAr ? (item.name_ar || truncatedName) : (item.name_en || truncatedName)}
               </Text>
               <Text style={styles.categoryLabel}>
-                {(i18n.locale?.startsWith('ar') ? (item.category_name_ar || item.category) : (item.category_name_en || item.category)) || t('common.general', 'عام')}
+                {(isAr
+                  ? (item.category_name_ar || CATEGORY_AR_FALLBACK[item.category || ''] || item.category)
+                  : (item.category_name_en || item.category)) || t('common.general', 'عام')}
               </Text>
               <Text style={styles.priceText}>{formatPrice(item.price)}</Text>
-              <Text style={styles.stockCountText}>{t('dashboard.stock_label', 'المخزون')}: {item.stock_count}</Text>
+              <Text style={styles.stockCountText}>{t('dashboard.stock_label', 'المخزون')}: {item.in_stock ? item.stock_count : 0}</Text>
             </View>
 
             {/* In-Stock Status Control */}
@@ -1148,112 +1231,131 @@ export default function DashboardScreen() {
             </View>
             <Text style={styles.emptyTitle}>{t('dashboard.no_products', "لا توجد منتجات بالمخزون في هذا المتجر.")}</Text>
             <Text style={styles.emptyText}>{t('dashboard.empty_subtitle', "أضف أو امسح منتجك الأول للبدء.")}</Text>
+            <TouchableOpacity
+              style={styles.emptyAddBtn}
+              onPress={() => router.push('/(merchant)/add-product')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="add" size={20} color="#FFFFFF" />
+              <Text style={styles.emptyAddBtnText}>{t('dashboard.add_product', 'إضافة منتج')}</Text>
+            </TouchableOpacity>
           </View>
         }
       />
+
+      {/* Floating Add Product Button */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => router.push('/(merchant)/add-product')}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="add" size={28} color="#FFFFFF" />
+      </TouchableOpacity>
 
       {/* Edit Product Modal */}
       <Modal
         visible={editModalVisible}
         transparent
         animationType="slide"
+        statusBarTranslucent
         onRequestClose={() => setEditModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={{ width: '100%' }}
-          >
-            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-              <View style={styles.modalContent}>
-                {/* Modal Header */}
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>{t('dashboard.edit_product', 'تعديل تفاصيل المنتج')}</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}>
-                    {keyboardVisible && (
-                      <TouchableOpacity 
-                        onPress={() => Keyboard.dismiss()} 
-                        style={styles.keyboardDismissBtn}
-                        activeOpacity={0.7}
-                      >
-                        <Ionicons name="keypad-outline" size={18} color={Colors.primary} />
-                        <Text style={styles.keyboardDismissText}>{t('rating.done', 'تم')}</Text>
-                      </TouchableOpacity>
-                    )}
-                    <TouchableOpacity onPress={() => setEditModalVisible(false)}>
-                      <Ionicons name="close" size={24} color={Colors.textPrimary} />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <TouchableWithoutFeedback onPress={() => setEditModalVisible(false)}>
+            <View style={styles.modalBackdropDismiss} />
+          </TouchableWithoutFeedback>
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.modalContent}>
+              {/* Modal Header */}
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{t('dashboard.edit_product', 'تعديل تفاصيل المنتج')}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}>
+                  {keyboardVisible && (
+                    <TouchableOpacity 
+                      onPress={() => Keyboard.dismiss()} 
+                      style={styles.keyboardDismissBtn}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="keypad-outline" size={18} color={Colors.primary} />
+                      <Text style={styles.keyboardDismissText}>{t('rating.done', 'تم')}</Text>
                     </TouchableOpacity>
+                  )}
+                  <TouchableOpacity onPress={() => setEditModalVisible(false)}>
+                    <Ionicons name="close" size={24} color={Colors.textPrimary} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Inputs */}
+              <Text style={styles.inputLabel}>{t('dashboard.product_name', 'اسم المنتج')}</Text>
+              <View style={styles.modalInputWrapper}>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder={t('dashboard.product_name', 'اسم المنتج')}
+                  placeholderTextColor={Colors.textMuted}
+                  value={editName}
+                  onChangeText={setEditName}
+                />
+              </View>
+
+              <View style={styles.inputRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>{t('dashboard.stock_count', 'كمية المخزون')}</Text>
+                  <View style={styles.modalInputWrapper}>
+                    <TextInput
+                      style={styles.modalInput}
+                      placeholder={t('dashboard.stock_count', 'كمية المخزون')}
+                      placeholderTextColor={Colors.textMuted}
+                      value={editStock}
+                      onChangeText={setEditStock}
+                      keyboardType="number-pad"
+                    />
                   </View>
                 </View>
 
-            {/* Inputs */}
-            <Text style={styles.inputLabel}>{t('dashboard.product_name', 'اسم المنتج')}</Text>
-            <View style={styles.modalInputWrapper}>
-              <TextInput
-                style={styles.modalInput}
-                placeholder={t('dashboard.product_name', 'اسم المنتج')}
-                placeholderTextColor={Colors.textMuted}
-                value={editName}
-                onChangeText={setEditName}
-              />
-            </View>
-
-            <View style={styles.inputRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.inputLabel}>{t('dashboard.stock_count', 'كمية المخزون')}</Text>
-                <View style={styles.modalInputWrapper}>
-                  <TextInput
-                    style={styles.modalInput}
-                    placeholder={t('dashboard.stock_count', 'كمية المخزون')}
-                    placeholderTextColor={Colors.textMuted}
-                    value={editStock}
-                    onChangeText={setEditStock}
-                    keyboardType="number-pad"
-                  />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>{t('dashboard.price_cost', isAr ? 'السعر/التكلفة (د.أ)' : 'Price/Cost (JOD)')}</Text>
+                  <View style={styles.modalInputWrapper}>
+                    <TextInput
+                      style={styles.modalInput}
+                      placeholder={t('dashboard.price_cost', isAr ? 'السعر/التكلفة (د.أ)' : 'Price/Cost (JOD)')}
+                      placeholderTextColor={Colors.textMuted}
+                      value={editPrice}
+                      onChangeText={setEditPrice}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
                 </View>
               </View>
 
-              <View style={{ flex: 1 }}>
-                <Text style={styles.inputLabel}>{t('dashboard.price_cost', 'السعر')}</Text>
-                <View style={styles.modalInputWrapper}>
-                  <TextInput
-                    style={styles.modalInput}
-                    placeholder={t('dashboard.price_cost', 'السعر')}
-                    placeholderTextColor={Colors.textMuted}
-                    value={editPrice}
-                    onChangeText={setEditPrice}
-                    keyboardType="decimal-pad"
-                  />
-                </View>
+              {/* Action Buttons */}
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.modalBtn, styles.modalBtnCancel]}
+                  onPress={() => setEditModalVisible(false)}
+                  disabled={savingEdit}
+                >
+                  <Text style={styles.modalBtnTextCancel}>{t('common.cancel', 'إلغاء')}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.modalBtn, styles.modalBtnSave]}
+                  onPress={handleSaveEdit}
+                  disabled={savingEdit}
+                >
+                  {savingEdit ? (
+                    <ActivityIndicator color={Colors.textOnPrimary} />
+                  ) : (
+                    <Text style={styles.modalBtnTextSave}>{t('dashboard.save_changes', 'حفظ التغييرات')}</Text>
+                  )}
+                </TouchableOpacity>
               </View>
             </View>
-
-            {/* Action Buttons */}
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalBtn, styles.modalBtnCancel]}
-                onPress={() => setEditModalVisible(false)}
-                disabled={savingEdit}
-              >
-                <Text style={styles.modalBtnTextCancel}>{t('common.cancel', 'إلغاء')}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.modalBtn, styles.modalBtnSave]}
-                onPress={handleSaveEdit}
-                disabled={savingEdit}
-              >
-                {savingEdit ? (
-                  <ActivityIndicator color={Colors.textOnPrimary} />
-                ) : (
-                  <Text style={styles.modalBtnTextSave}>{t('dashboard.save_changes', 'حفظ التغييرات')}</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-              </View>
-            </TouchableWithoutFeedback>
-          </KeyboardAvoidingView>
-        </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

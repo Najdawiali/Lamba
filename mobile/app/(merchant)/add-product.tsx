@@ -621,8 +621,18 @@ export default function AddProductScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton} activeOpacity={0.7}>
-            <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
+          <TouchableOpacity
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(merchant)/dashboard');
+              }
+            }}
+            style={styles.backButton}
+            activeOpacity={0.7}
+          >
+            <Ionicons name={isAr ? "arrow-forward" : "arrow-back"} size={24} color={Colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t('merchant.add_product_title', 'Add Product / Service')}</Text>
           <View style={{ width: 40 }} />

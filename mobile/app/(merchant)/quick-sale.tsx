@@ -237,8 +237,22 @@ export default function QuickSaleScreen() {
       paddingHorizontal: Spacing.xl, paddingVertical: Spacing.lg,
       borderBottomWidth: 1, borderColor: Colors.border, marginBottom: Spacing.lg,
     },
-    headerTitle: { fontSize: 28, fontWeight: '700', color: Colors.textPrimary },
-    headerSubtitle: { ...Typography.caption, color: Colors.textMuted, marginTop: 6, lineHeight: 16 },
+    headerTopRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 6,
+    },
+    backBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: Colors.surfaceElevated,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    headerTitle: { fontSize: 24, fontWeight: '700', color: Colors.textPrimary },
+    headerSubtitle: { ...Typography.caption, color: Colors.textMuted, marginTop: 2, lineHeight: 16 },
     content: { flex: 1, paddingHorizontal: Spacing.xl, paddingBottom: 140 },
     searchContainer: {
       flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surfaceElevated,
@@ -348,9 +362,25 @@ export default function QuickSaleScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>
-          {t('merchant.quick_sale', 'بيع سريع')}
-        </Text>
+        <View style={styles.headerTopRow}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(merchant)/cashier');
+              }
+            }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name={isAr ? "arrow-forward" : "arrow-back"} size={24} color={Colors.textPrimary} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>
+            {t('merchant.quick_sale', 'بيع سريع')}
+          </Text>
+          <View style={{ width: 40 }} />
+        </View>
         <Text style={styles.headerSubtitle}>
           {t('merchant.quick_sale_desc', 'ابحث في المخزون وأتمم عملية البيع دون الحاجة لمسح باركود.')}
         </Text>
