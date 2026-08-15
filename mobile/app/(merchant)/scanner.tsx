@@ -15,9 +15,11 @@ import {
   linkBarcodeToMarket,
   updateMarketItem,
   checkoutPOS,
+  getMarketItems,
   BarcodeLookupResponse,
   POSCheckoutItem,
   POSCheckoutResponse,
+  MarketItemDashboardResponse,
   logout
 } from '../../services/api';
 import { formatPrice } from '../../services/currency';
@@ -79,6 +81,7 @@ const styles = useMemo(() => StyleSheet.create({
   },
   headerSafeArea: { width: '100%' },
   headerOverlay: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.md,
@@ -275,6 +278,8 @@ const styles = useMemo(() => StyleSheet.create({
 
   // Single Item details summary card (Inventory Mode)
   itemSummaryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.03)',
     borderRadius: BorderRadius.md,
     padding: Spacing.md,
@@ -347,6 +352,7 @@ const styles = useMemo(() => StyleSheet.create({
     marginBottom: Spacing.xs,
   },
   adjusterRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderRadius: BorderRadius.md,
@@ -469,6 +475,7 @@ const styles = useMemo(() => StyleSheet.create({
     maxHeight: 220,
   },
   cartItemRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: Spacing.sm,
@@ -491,6 +498,7 @@ const styles = useMemo(() => StyleSheet.create({
     marginTop: 2,
   },
   cartItemActions: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
@@ -636,6 +644,7 @@ const styles = useMemo(() => StyleSheet.create({
     marginVertical: Spacing.xs,
   },
   receiptItemDetailsRow: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: Spacing.md,
@@ -661,6 +670,7 @@ const styles = useMemo(() => StyleSheet.create({
     paddingBottom: Spacing.xl,
   },
   receiptScreenTotalRow: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: Spacing.md,
@@ -693,6 +703,156 @@ const styles = useMemo(() => StyleSheet.create({
     ...Shadows.medium,
   },
   receiptScreenCloseBtnText: {
+    ...Typography.button,
+    color: '#FFF',
+    fontWeight: '700',
+  },
+  manualAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: Spacing.md,
+    paddingVertical: 10,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  manualAddBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  manualAddContainer: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  manualAddHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  manualAddTitle: {
+    ...Typography.h3,
+    color: Colors.textPrimary,
+  },
+  manualAddSearchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surfaceElevated,
+    marginHorizontal: Spacing.xl,
+    marginVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    height: 44,
+    gap: Spacing.sm,
+  },
+  manualAddSearchInput: {
+    flex: 1,
+    color: Colors.textPrimary,
+    fontSize: 14,
+  },
+  manualAddItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  manualAddItemActive: {
+    backgroundColor: 'rgba(108, 99, 255, 0.06)',
+  },
+  manualAddItemName: {
+    ...Typography.body,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  manualAddItemSub: {
+    ...Typography.caption,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  manualAddPlusBtn: {
+    padding: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  manualItemStepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(108, 99, 255, 0.3)',
+  },
+  manualStepperBtn: {
+    padding: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  manualStepperQty: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    minWidth: 20,
+    textAlign: 'center',
+  },
+  manualAddBottomBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    backgroundColor: Colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    ...Shadows.medium,
+  },
+  manualAddCartInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  manualAddCartBadge: {
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    minWidth: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  manualAddCartBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+  manualAddTotalText: {
+    ...Typography.h3,
+    color: Colors.textPrimary,
+    fontWeight: '700',
+  },
+  manualAddDoneBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.primary,
+    paddingVertical: 10,
+    paddingHorizontal: Spacing.xl,
+    borderRadius: BorderRadius.md,
+    ...Shadows.small,
+  },
+  manualAddDoneBtnText: {
     ...Typography.button,
     color: '#FFF',
     fontWeight: '700',
@@ -731,6 +891,12 @@ const styles = useMemo(() => StyleSheet.create({
   // Professional Invoice/Receipt Screen States
   const [lastReceipt, setLastReceipt] = useState<POSCheckoutResponse | null>(null);
   const [receiptVisible, setReceiptVisible] = useState(false);
+
+  // Manual Add States
+  const [manualAddVisible, setManualAddVisible] = useState(false);
+  const [inventoryItems, setInventoryItems] = useState<MarketItemDashboardResponse[]>([]);
+  const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [manualSearchQuery, setManualSearchQuery] = useState('');
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -1037,6 +1203,78 @@ const styles = useMemo(() => StyleSheet.create({
     return `${API_BASE_URL}${url}`;
   };
 
+  const openManualAdd = async () => {
+    setManualAddVisible(true);
+    setManualSearchQuery('');
+    setInventoryLoading(true);
+    try {
+      const items = await getMarketItems();
+      setInventoryItems(items.filter(i => i.in_stock));
+    } catch (err) {
+      console.warn('Failed to load inventory for manual add:', err);
+    } finally {
+      setInventoryLoading(false);
+    }
+  };
+
+  const getItemCartQty = (marketItemId: string): number => {
+    const item = cartItems.find(c => c.market_item_id === marketItemId);
+    return item ? item.quantity : 0;
+  };
+
+  const handleIncrementManualItem = (item: MarketItemDashboardResponse) => {
+    Vibration.vibrate(25);
+    setCartItems(prev => {
+      const existing = prev.find(c => c.market_item_id === item.id);
+      if (existing) {
+        return prev.map(c =>
+          c.market_item_id === item.id
+            ? { ...c, quantity: c.quantity + 1 }
+            : c
+        );
+      } else {
+        return [...prev, {
+          global_item_id: item.global_item_id || item.id,
+          market_item_id: item.id,
+          name: item.name,
+          barcode: '',
+          price: item.price || 0,
+          quantity: 1,
+          image_url: item.image_url,
+        }];
+      }
+    });
+
+    setHudMessage(`+1 ${isAr ? (item.name_ar || item.name) : (item.name_en || item.name)} (${formatPrice(item.price)})`);
+    setTimeout(() => setHudMessage(null), 1800);
+  };
+
+  const handleDecrementManualItem = (marketItemId: string) => {
+    Vibration.vibrate(25);
+    setCartItems(prev => {
+      const existing = prev.find(c => c.market_item_id === marketItemId);
+      if (!existing) return prev;
+      if (existing.quantity <= 1) {
+        return prev.filter(c => c.market_item_id !== marketItemId);
+      }
+      return prev.map(c =>
+        c.market_item_id === marketItemId
+          ? { ...c, quantity: c.quantity - 1 }
+          : c
+      );
+    });
+  };
+
+  const filteredInventory = useMemo(() => {
+    if (!manualSearchQuery.trim()) return inventoryItems;
+    const q = manualSearchQuery.toLowerCase();
+    return inventoryItems.filter(i =>
+      i.name.toLowerCase().includes(q) ||
+      (i.name_ar && i.name_ar.includes(manualSearchQuery.trim())) ||
+      (i.name_en && i.name_en.toLowerCase().includes(q))
+    );
+  }, [inventoryItems, manualSearchQuery]);
+
   if (!permission) {
     return (
       <View style={styles.loadingContainer}>
@@ -1165,6 +1403,19 @@ const styles = useMemo(() => StyleSheet.create({
               ? t('scanner.scan_pos_instruction', 'Scan items continuously to add to invoice')
               : t('scanner.scan_inventory_instruction', 'Align barcode inside viewfinder to update stock')}
           </Text>
+
+          {scannerMode === 'cashier' && (
+            <TouchableOpacity
+              style={styles.manualAddBtn}
+              onPress={openManualAdd}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="search-outline" size={18} color="#FFF" />
+              <Text style={styles.manualAddBtnText}>
+                {t('scanner.add_manually', 'إضافة يدوياً')}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -1559,6 +1810,130 @@ const styles = useMemo(() => StyleSheet.create({
               </Text>
             </TouchableOpacity>
           </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Manual Add Search Modal */}
+      <Modal
+        visible={manualAddVisible}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setManualAddVisible(false)}
+      >
+        <SafeAreaView style={styles.manualAddContainer} edges={['top', 'bottom']}>
+          {/* Header */}
+          <View style={styles.manualAddHeader}>
+            <Text style={styles.manualAddTitle}>
+              {t('scanner.add_manually', 'إضافة يدوياً')}
+            </Text>
+            <TouchableOpacity onPress={() => setManualAddVisible(false)}>
+              <Ionicons name="close" size={24} color={Colors.textPrimary} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Search Bar */}
+          <View style={styles.manualAddSearchBar}>
+            <Ionicons name="search-outline" size={18} color={Colors.textMuted} />
+            <TextInput
+              style={styles.manualAddSearchInput}
+              placeholder={t('scanner.search_products', 'ابحث عن منتج...')}
+              placeholderTextColor={Colors.textMuted}
+              value={manualSearchQuery}
+              onChangeText={setManualSearchQuery}
+              autoFocus
+            />
+            {manualSearchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setManualSearchQuery('')}>
+                <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Product List */}
+          {inventoryLoading ? (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <ActivityIndicator size="large" color={Colors.primary} />
+            </View>
+          ) : (
+            <FlatList
+              data={filteredInventory}
+              keyExtractor={item => item.id}
+              contentContainerStyle={{ paddingBottom: Spacing.xl }}
+              renderItem={({ item }) => {
+                const qty = getItemCartQty(item.id);
+                const isSelected = qty > 0;
+                return (
+                  <View style={[styles.manualAddItem, isSelected && styles.manualAddItemActive]}>
+                    <View style={{ flex: 1, marginRight: Spacing.sm }}>
+                      <Text style={styles.manualAddItemName} numberOfLines={1}>
+                        {isAr ? (item.name_ar || item.name) : (item.name_en || item.name)}
+                      </Text>
+                      <Text style={styles.manualAddItemSub}>
+                        {formatPrice(item.price)} · {t('dashboard.stock_label', 'المخزون')}: {item.stock_count}
+                      </Text>
+                    </View>
+
+                    {qty === 0 ? (
+                      <TouchableOpacity
+                        style={styles.manualAddPlusBtn}
+                        onPress={() => handleIncrementManualItem(item)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="add-circle-outline" size={28} color={Colors.primary} />
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={styles.manualItemStepper}>
+                        <TouchableOpacity
+                          style={styles.manualStepperBtn}
+                          onPress={() => handleDecrementManualItem(item.id)}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="remove-circle-outline" size={24} color={Colors.textSecondary} />
+                        </TouchableOpacity>
+                        <Text style={styles.manualStepperQty}>{qty}</Text>
+                        <TouchableOpacity
+                          style={styles.manualStepperBtn}
+                          onPress={() => handleIncrementManualItem(item)}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="add-circle" size={24} color={Colors.primary} />
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                );
+              }}
+              ListEmptyComponent={
+                <View style={{ alignItems: 'center', paddingVertical: Spacing.xxxl }}>
+                  <Text style={{ color: Colors.textMuted, fontSize: 14 }}>
+                    {t('common.no_results', 'لا توجد نتائج')}
+                  </Text>
+                </View>
+              }
+            />
+          )}
+
+          {/* Sticky Bottom Cart Bar */}
+          {cartItems.length > 0 && (
+            <View style={styles.manualAddBottomBar}>
+              <View style={styles.manualAddCartInfo}>
+                <View style={styles.manualAddCartBadge}>
+                  <Text style={styles.manualAddCartBadgeText}>
+                    {cartItems.reduce((a, b) => a + b.quantity, 0)}
+                  </Text>
+                </View>
+                <Text style={styles.manualAddTotalText}>{formatPrice(calculateTotal())}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.manualAddDoneBtn}
+                onPress={() => setManualAddVisible(false)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="checkmark-circle" size={18} color="#FFF" />
+                <Text style={styles.manualAddDoneBtnText}>{t('common.done', 'تم')}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </SafeAreaView>
       </Modal>
     </View>

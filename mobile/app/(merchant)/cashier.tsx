@@ -48,13 +48,13 @@ export default function CashierScreen() {
     gap: Spacing.lg,
   },
   actionCard: {
-    backgroundColor: Colors.surfaceGlass,
+    backgroundColor: Colors.surface,
     borderRadius: BorderRadius.xl,
     borderWidth: 1,
     borderColor: Colors.border,
     minHeight: 96,
     overflow: 'hidden',
-    ...Shadows.medium,
+    ...Shadows.small,
   },
   cardInner: {
     padding: Spacing.lg,
@@ -148,27 +148,6 @@ export default function CashierScreen() {
           </View>
         </TouchableOpacity>
 
-        {/* Card 3: Quick Sale */}
-        <TouchableOpacity
-          style={styles.actionCard}
-          onPress={() => router.push('/(merchant)/quick-sale')}
-          activeOpacity={0.8}
-          accessibilityRole="button"
-          accessibilityLabel={t('merchant.quick_sale', 'بيع سريع')}
-        >
-          <View style={[styles.cardInner, { flexDirection: 'row' }]}>
-            <View style={[styles.iconWrapper, styles.secondaryIconBg]}>
-              <Ionicons name="cash-outline" size={26} color="#00D68F" />
-            </View>
-            <View style={styles.textWrapper}>
-              <Text style={styles.cardTitle}>{t('merchant.quick_sale', 'بيع سريع')}</Text>
-              <Text style={styles.cardDescription}>
-                {t('merchant.quick_sale_desc', 'إدخال السعر يدوياً لإنشاء فاتورة بيع فورية دون الحاجة للمسح.')}
-              </Text>
-            </View>
-            <Ionicons name={isAr ? "chevron-back" : "chevron-forward"} size={20} color={Colors.textMuted} />
-          </View>
-        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );

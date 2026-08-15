@@ -136,6 +136,7 @@ export default function ReceiptHistoryScreen() {
     backgroundColor: Colors.background,
   },
   header: {
+    flexDirection: 'row',
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.lg,
     alignItems: 'center',
@@ -161,12 +162,11 @@ export default function ReceiptHistoryScreen() {
     gap: Spacing.sm,
   },
   mainMetricCard: {
-    backgroundColor: 'rgba(108, 99, 255, 0.08)',
+    backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(108, 99, 255, 0.2)',
+    borderColor: Colors.border,
     borderRadius: BorderRadius.md,
     padding: Spacing.md,
-    ...Shadows.small,
   },
   metricLabel: {
     ...Typography.caption,
@@ -186,6 +186,7 @@ export default function ReceiptHistoryScreen() {
     fontWeight: '700',
   },
   subMetricsRow: {
+    flexDirection: 'row',
     gap: Spacing.sm,
   },
   subMetricCard: {
@@ -223,6 +224,7 @@ export default function ReceiptHistoryScreen() {
     ...Shadows.small,
   },
   receiptHeaderRow: {
+    flexDirection: 'row',
     padding: Spacing.md,
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -231,6 +233,7 @@ export default function ReceiptHistoryScreen() {
     flex: 1,
   },
   receiptIdRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
@@ -264,6 +267,7 @@ export default function ReceiptHistoryScreen() {
     color: Colors.secondary,
   },
   itemCountRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     marginTop: 2,
   },
@@ -289,6 +293,7 @@ export default function ReceiptHistoryScreen() {
     marginBottom: Spacing.xs,
   },
   itemDetailRow: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: Spacing.sm,

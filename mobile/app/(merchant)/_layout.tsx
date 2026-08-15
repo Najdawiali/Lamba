@@ -113,12 +113,6 @@ export default function MerchantLayout() {
             href: null,
           }}
         />
-        <Tabs.Screen
-          name="quick-sale"
-          options={{
-            href: null, // Hidden from tab bar — navigated from Cashier
-          }}
-        />
       </Tabs>
     </View>
   );
