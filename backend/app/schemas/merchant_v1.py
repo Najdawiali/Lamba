@@ -23,13 +23,24 @@ class MarketResponse(BaseModel):
     id: uuid.UUID
     merchant_id: uuid.UUID
     name: str
+    name_ar: Optional[str] = None
     address: str
+    address_ar: Optional[str] = None
     latitude: float
     longitude: float
     business_nature: Optional[str] = None
     operating_hours: Optional[dict] = None
     employee_directory: Optional[list] = None
     phone: Optional[str] = None
+    contact_phone: Optional[str] = None
+    contact_email: Optional[str] = None
+    employees: List[str] = []
+    profile_edited_at: Optional[datetime] = None
+    name_edited_at: Optional[datetime] = None
+    address_edited_at: Optional[datetime] = None
+    is_name_locked: bool = False
+    is_address_locked: bool = False
+    is_profile_locked: bool = False
     is_currently_open: bool
     is_manual_override: bool
     override_set_at: Optional[datetime] = None
@@ -37,6 +48,7 @@ class MarketResponse(BaseModel):
     access_token: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
 
 
 class MarketStatusUpdateRequest(BaseModel):

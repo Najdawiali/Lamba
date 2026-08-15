@@ -7,9 +7,10 @@ import uuid
 from datetime import datetime, timezone
 
 from geoalchemy2 import Geometry
-from sqlalchemy import String, DateTime, ForeignKey, Text, JSON
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import String, DateTime, ForeignKey, Text, JSON, Column
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.sql import text
 
 from app.database import Base
 
@@ -43,6 +44,13 @@ class Market(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+    profile_edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    name_edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    address_edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    contact_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    employees: Mapped[list] = mapped_column(JSONB, server_default=text("'[]'::jsonb"), nullable=False, default=list)
 
     # Relationships
     merchant = relationship("User", back_populates="markets")

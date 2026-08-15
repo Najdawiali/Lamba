@@ -231,6 +231,8 @@ export async function signIn(emailOrPhone: string, password: string): Promise<Si
   return data;
 }
 
+export const apiClient = api;
+
 // ── V1 Merchant Types ───────────────────────────────────────────
 export interface MarketResponse {
   id: string;
@@ -245,11 +247,46 @@ export interface MarketResponse {
   operating_hours?: Record<string, string> | null;
   employee_directory?: string[] | null;
   phone?: string | null;
+  contact_phone?: string | null;
+  contact_email?: string | null;
+  employees?: string[];
+  profile_edited_at?: string | null;
+  name_edited_at?: string | null;
+  address_edited_at?: string | null;
+  is_name_locked?: boolean;
+  is_address_locked?: boolean;
+  is_profile_locked?: boolean;
   is_currently_open: boolean;
   is_manual_override: boolean;
   override_set_at: string | null;
   created_at: string;
   access_token?: string | null;
+}
+
+// ── Market Profile ──
+export interface MarketProfileResponse {
+  name?: string;
+  name_ar?: string;
+  address?: string;
+  address_ar?: string;
+  contact_phone?: string;
+  contact_email?: string;
+  employees: string[];
+  profile_edited_at?: string;
+  name_edited_at?: string;
+  address_edited_at?: string;
+  is_name_locked: boolean;
+  is_address_locked: boolean;
+  is_profile_locked: boolean;
+}
+
+export interface MarketProfileUpdatePayload {
+  name?: string;
+  name_ar?: string;
+  address?: string;
+  address_ar?: string;
+  contact_phone?: string;
+  contact_email?: string;
 }
 
 export interface CatalogItemMatch {
@@ -367,6 +404,21 @@ export async function updateMarketStatus(isOpen: boolean | null, isManual: boole
     is_currently_open: isOpen,
     is_manual_override: isManual,
   });
+  return data;
+}
+
+export async function getMarketProfile(): Promise<MarketProfileResponse> {
+  const { data } = await api.get<MarketProfileResponse>('/api/v1/merchant/market/profile');
+  return data;
+}
+
+export async function updateMarketProfile(payload: MarketProfileUpdatePayload): Promise<MarketProfileResponse> {
+  const { data } = await api.patch<MarketProfileResponse>('/api/v1/merchant/market/profile', payload);
+  return data;
+}
+
+export async function updateEmployees(employees: string[]): Promise<MarketProfileResponse> {
+  const { data } = await api.put<MarketProfileResponse>('/api/v1/merchant/market/employees', { employees });
   return data;
 }
 

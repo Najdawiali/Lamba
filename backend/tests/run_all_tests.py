@@ -52,6 +52,8 @@ from tests.test_customer_auth import TestCustomerAuth
 from tests.test_synonym_table import TestSynonymTable
 from tests.test_offer_model_and_schemas import TestOfferModelAndSchemas
 from tests.test_merchant_offers_api import TestMerchantOffersAPI
+from tests.test_market_profile_model_and_schemas import TestMarketProfileModelAndSchemas
+from tests.test_merchant_market_profile_api import TestMerchantMarketProfileAPI
 
 
 class TestArabicNorm(unittest.TestCase):

@@ -1102,15 +1102,11 @@ const styles = useMemo(() => StyleSheet.create({
           price: priceVal,
         });
         Vibration.vibrate(50);
-        Alert.alert(t('common.success', 'Success'), t('scanner.stock_updated_success', 'Product stock details updated successfully.'), [
-          { text: t('common.ok', 'OK'), onPress: () => handleCloseDrawer() }
-        ]);
+        handleCloseDrawer();
       } else if (scanResult && !scanResult.exists_in_branch) {
         await linkBarcodeToMarket(scanResult.global_item_id, priceVal, stockVal);
         Vibration.vibrate(50);
-        Alert.alert(t('scanner.linked_success', 'Linked Successfully'), t('scanner.linked_success_desc', 'Product linked to your market successfully.'), [
-          { text: t('common.ok', 'OK'), onPress: () => handleCloseDrawer() }
-        ]);
+        handleCloseDrawer();
       }
     } catch (err) {
       Alert.alert(t('common.error'), t('scanner.failed_save', 'Failed to save product adjustments.'));

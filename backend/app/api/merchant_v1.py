@@ -53,6 +53,7 @@ from app.schemas.special_offer import (
     SpecialOfferResponse
 )
 from app.schemas.offer import OfferCreate, OfferUpdate, OfferResponse
+from app.schemas.market_profile import MarketProfileUpdate, EmployeesUpdate, MarketProfileResponse
 from app.services.embedding import embedding_service
 from app.services.indexer import IndexerService
 from app.services.alert_service import check_and_trigger_stock_alerts
@@ -122,13 +123,24 @@ async def get_market(
         id=market.id,
         merchant_id=market.merchant_id,
         name=market.name,
+        name_ar=getattr(market, 'name_ar', None),
         address=market.address,
+        address_ar=getattr(market, 'address_ar', None),
         latitude=float(lat),
         longitude=float(lng),
         business_nature=market.business_nature,
         operating_hours=market.operating_hours,
         employee_directory=market.employee_directory,
         phone=market.phone,
+        contact_phone=market.contact_phone,
+        contact_email=market.contact_email,
+        employees=market.employees or [],
+        profile_edited_at=market.profile_edited_at,
+        name_edited_at=market.name_edited_at,
+        address_edited_at=market.address_edited_at,
+        is_name_locked=market.name_edited_at is not None,
+        is_address_locked=market.address_edited_at is not None,
+        is_profile_locked=(market.name_edited_at is not None and market.address_edited_at is not None),
         is_currently_open=market.is_currently_open,
         is_manual_override=market.is_manual_override,
         override_set_at=market.override_set_at,
@@ -186,13 +198,24 @@ async def create_market(
         id=market.id,
         merchant_id=market.merchant_id,
         name=market.name,
+        name_ar=getattr(market, 'name_ar', None),
         address=market.address,
+        address_ar=getattr(market, 'address_ar', None),
         latitude=data.latitude,
         longitude=data.longitude,
         business_nature=market.business_nature,
         operating_hours=market.operating_hours,
         employee_directory=market.employee_directory,
         phone=market.phone,
+        contact_phone=market.contact_phone,
+        contact_email=market.contact_email,
+        employees=market.employees or [],
+        profile_edited_at=market.profile_edited_at,
+        name_edited_at=market.name_edited_at,
+        address_edited_at=market.address_edited_at,
+        is_name_locked=market.name_edited_at is not None,
+        is_address_locked=market.address_edited_at is not None,
+        is_profile_locked=(market.name_edited_at is not None and market.address_edited_at is not None),
         is_currently_open=market.is_currently_open,
         is_manual_override=market.is_manual_override,
         override_set_at=market.override_set_at,
@@ -235,6 +258,7 @@ async def update_market_status(
         market.is_currently_open = calculate_is_open_by_schedule(market.operating_hours, now_jordan)
         
     await db.commit()
+    await db.refresh(market)
     
     # Re-fetch with Lat/Lng coordinates
     result = await db.execute(
@@ -251,16 +275,146 @@ async def update_market_status(
         id=market.id,
         merchant_id=market.merchant_id,
         name=market.name,
+        name_ar=getattr(market, 'name_ar', None),
         address=market.address,
+        address_ar=getattr(market, 'address_ar', None),
         latitude=float(lat),
         longitude=float(lng),
         business_nature=market.business_nature,
         operating_hours=market.operating_hours,
         employee_directory=market.employee_directory,
+        phone=market.phone,
+        contact_phone=market.contact_phone,
+        contact_email=market.contact_email,
+        employees=market.employees or [],
+        profile_edited_at=market.profile_edited_at,
+        name_edited_at=market.name_edited_at,
+        address_edited_at=market.address_edited_at,
+        is_name_locked=market.name_edited_at is not None,
+        is_address_locked=market.address_edited_at is not None,
+        is_profile_locked=(market.name_edited_at is not None and market.address_edited_at is not None),
         is_currently_open=market.is_currently_open,
         is_manual_override=market.is_manual_override,
         override_set_at=market.override_set_at,
         created_at=market.created_at,
+    )
+
+
+# ── Market Profile & Employee Management ─────────────────────────
+@router.patch("/market/profile", response_model=MarketProfileResponse)
+async def update_market_profile(
+    payload: MarketProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    market = await get_user_market(current_user, db)
+    update_data = payload.model_dump(exclude_unset=True)
+
+    # Separate name fields, address fields, and contact fields
+    name_fields = {'name', 'name_ar'}
+    address_fields = {'address', 'address_ar'}
+    has_name_changes = bool(name_fields & set(update_data.keys()))
+    has_address_changes = bool(address_fields & set(update_data.keys()))
+
+    # Check independent locks
+    if has_name_changes and market.name_edited_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Store name can only be edited once. Contact support for further changes."
+        )
+
+    if has_address_changes and market.address_edited_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Store address can only be edited once. Contact support for further changes."
+        )
+
+    # Apply all updates
+    for field, value in update_data.items():
+        if hasattr(market, field):
+            setattr(market, field, value)
+
+    # Lock name if changed
+    if has_name_changes:
+        market.name_edited_at = datetime.now(timezone.utc)
+
+    # Lock address if changed
+    if has_address_changes:
+        market.address_edited_at = datetime.now(timezone.utc)
+
+    # Keep profile_edited_at updated if any identity field changed
+    if has_name_changes or has_address_changes:
+        market.profile_edited_at = datetime.now(timezone.utc)
+
+    await db.commit()
+    await db.refresh(market)
+
+    return MarketProfileResponse(
+        name=market.name,
+        name_ar=getattr(market, 'name_ar', None),
+        address=market.address,
+        address_ar=getattr(market, 'address_ar', None),
+        contact_phone=market.contact_phone,
+        contact_email=market.contact_email,
+        employees=market.employees or [],
+        profile_edited_at=market.profile_edited_at,
+        name_edited_at=market.name_edited_at,
+        address_edited_at=market.address_edited_at,
+        is_name_locked=market.name_edited_at is not None,
+        is_address_locked=market.address_edited_at is not None,
+        is_profile_locked=(market.name_edited_at is not None and market.address_edited_at is not None),
+    )
+
+
+@router.put("/market/employees", response_model=MarketProfileResponse)
+async def update_employees(
+    payload: EmployeesUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    market = await get_user_market(current_user, db)
+    market.employees = payload.employees
+    await db.commit()
+    await db.refresh(market)
+
+    return MarketProfileResponse(
+        name=market.name,
+        name_ar=getattr(market, 'name_ar', None),
+        address=market.address,
+        address_ar=getattr(market, 'address_ar', None),
+        contact_phone=market.contact_phone,
+        contact_email=market.contact_email,
+        employees=market.employees or [],
+        profile_edited_at=market.profile_edited_at,
+        name_edited_at=market.name_edited_at,
+        address_edited_at=market.address_edited_at,
+        is_name_locked=market.name_edited_at is not None,
+        is_address_locked=market.address_edited_at is not None,
+        is_profile_locked=(market.name_edited_at is not None and market.address_edited_at is not None),
+    )
+
+
+@router.get("/market/profile", response_model=MarketProfileResponse)
+async def get_market_profile(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    market = await get_user_market(current_user, db)
+
+    return MarketProfileResponse(
+        name=market.name,
+        name_ar=getattr(market, 'name_ar', None),
+        address=market.address,
+        address_ar=getattr(market, 'address_ar', None),
+        contact_phone=market.contact_phone,
+        contact_email=market.contact_email,
+        employees=market.employees or [],
+        profile_edited_at=market.profile_edited_at,
+        name_edited_at=market.name_edited_at,
+        address_edited_at=market.address_edited_at,
+        is_name_locked=market.name_edited_at is not None,
+        is_address_locked=market.address_edited_at is not None,
+        is_profile_locked=(market.name_edited_at is not None and market.address_edited_at is not None),
     )
 
 

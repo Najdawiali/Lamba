@@ -243,14 +243,26 @@ export default function DashboardScreen() {
 
   const handleToggleStock = async (itemId: string, currentStatus: boolean) => {
     try {
-      await toggleItemStock(itemId, !currentStatus);
-      
-      // Update local array
-      setProducts(prev => prev.map(p =>
-        p.id === itemId ? { ...p, in_stock: !currentStatus } : p
-      ));
+      const newStatus = !currentStatus;
 
-      // Refresh inventory valuation
+      if (!newStatus) {
+        // Toggling OFF → set stock to 0
+        await toggleItemStock(itemId, false);
+        await updateMarketItem(itemId, { stock_count: 0 });
+
+        setProducts(prev => prev.map(p =>
+          p.id === itemId ? { ...p, in_stock: false, stock_count: 0 } : p
+        ));
+      } else {
+        // Toggling ON → open edit modal so merchant enters real stock count
+        Keyboard.dismiss();
+        const product = products.find(p => p.id === itemId);
+        if (product) {
+          setTimeout(() => handleOpenEdit(product), 300);
+        }
+        return; // Don't toggle yet — let the modal save handle it
+      }
+
       try {
         const valResp = await getInventoryValue();
         setTotalAssetsValue(valResp.total_value);
@@ -293,10 +305,14 @@ export default function DashboardScreen() {
         stock_count: stockVal,
         price: priceVal,
       });
+      // If item was out of stock and we're setting a new count, toggle it back on
+      if (!selectedProduct.in_stock && updated.stock_count > 0) {
+        await toggleItemStock(selectedProduct.id, true);
+        updated.in_stock = true;
+      }
       setProducts(prev => prev.map(p => p.id === selectedProduct.id ? updated : p));
       setEditModalVisible(false);
       setSelectedProduct(null);
-      Alert.alert(t('common.success'), isAr ? 'تم تحديث بيانات المنتج بنجاح' : 'Product updated successfully');
 
       // Refresh inventory valuation
       try {
@@ -529,11 +545,9 @@ export default function DashboardScreen() {
 
   // Filter Chips
   filterRow: {
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.lg,
     marginTop: Spacing.xs,
     height: 48,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
     overflow: 'visible',
   },
   filterRowContent: {
@@ -904,8 +918,8 @@ export default function DashboardScreen() {
     borderRadius: BorderRadius.md,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255, 77, 106, 0.35)',
-    backgroundColor: 'rgba(255, 77, 106, 0.06)',
+    borderColor: Colors.errorBorder,
+    backgroundColor: Colors.surface,
     ...Shadows.small,
   },
   lowStockInner: {
@@ -914,10 +928,10 @@ export default function DashboardScreen() {
     gap: Spacing.md,
   },
   lowStockIconWrapper: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 77, 106, 0.15)',
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: Colors.errorBg,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -925,11 +939,9 @@ export default function DashboardScreen() {
     flex: 1,
   },
   lowStockLabel: {
-    ...Typography.caption,
+    fontSize: 13,
     color: Colors.error,
     fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   lowStockValue: {
     ...Typography.body,
@@ -938,9 +950,9 @@ export default function DashboardScreen() {
     marginTop: 2,
   },
   lowStockSubText: {
-    ...Typography.caption,
+    fontSize: 12,
     color: Colors.textSecondary,
-    fontWeight: '500',
+    fontWeight: '400',
   },
   analyticsCard: {
     marginHorizontal: Spacing.lg,
@@ -1208,7 +1220,7 @@ export default function DashboardScreen() {
                   : (item.category_name_en || item.category)) || t('common.general', 'عام')}
               </Text>
               <Text style={styles.priceText}>{formatPrice(item.price)}</Text>
-              <Text style={styles.stockCountText}>{t('dashboard.stock_label', 'المخزون')}: {item.in_stock ? item.stock_count : 0}</Text>
+              <Text style={styles.stockCountText}>{t('dashboard.stock_label', 'المخزون')}: {item.stock_count}</Text>
             </View>
 
             {/* In-Stock Status Control */}
@@ -1268,7 +1280,12 @@ export default function DashboardScreen() {
             <View style={styles.modalBackdropDismiss} />
           </TouchableWithoutFeedback>
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <View style={styles.modalContent}>
+            <ScrollView
+              style={styles.modalContent}
+              contentContainerStyle={{ paddingBottom: 40 }}
+              bounces={false}
+              keyboardShouldPersistTaps="handled"
+            >
               {/* Modal Header */}
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>{t('dashboard.edit_product', 'تعديل تفاصيل المنتج')}</Text>
@@ -1353,7 +1370,7 @@ export default function DashboardScreen() {
                   )}
                 </TouchableOpacity>
               </View>
-            </View>
+            </ScrollView>
           </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
       </Modal>

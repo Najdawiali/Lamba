@@ -16,6 +16,31 @@ import { resolveImageUrl } from '../../services/utils';
 
 type StockFilterMode = 'all' | 'out_of_stock' | 'critical' | 'low';
 
+const CATEGORY_AR_FALLBACK: Record<string, string> = {
+  'Food & Beverages': 'الأغذية والمشروبات',
+  'Home & Personal Care': 'العناية المنزلية والشخصية',
+  'Electronics & Tech': 'الإلكترونيات والتقنية',
+  'Home & Kitchen': 'المنزل والمطبخ',
+  'Services': 'الخدمات',
+  'Fruits & Vegetables': 'الخضار والفواكه',
+  'Cooking Essentials': 'مستلزمات الطبخ',
+  'Dairy & Eggs': 'الألبان والبيض',
+  'Meat & Poultry': 'اللحوم والدواجن',
+  'Beverages': 'المشروبات',
+  'Snacks': 'المأكولات الخفيفة',
+  'Bakery': 'المخبوزات',
+  'Frozen Food': 'الأطعمة المجمدة',
+  'Cleaning & Detergents': 'التنظيف المنزلي',
+  'Beauty & Personal Care': 'العناية الشخصية',
+  'Electronics': 'الإلكترونيات',
+  'Mobiles & Tech': 'الهواتف والتقنية',
+  'Cookware & Kitchenware': 'أدوات المطبخ',
+  'Beauty & Personal Care Services': 'خدمات التجميل والعناية الشخصية',
+  'Vehicle Maintenance & Care': 'صيانة وتغسيل السيارات',
+  'Home & Maintenance Services': 'خدمات وصيانة المنازل',
+  'Education & Tutoring': 'التعليم والدروس الخصوصية',
+};
+
 export default function LowStockScreen() {
   const router = useRouter();
   const Colors = useThemeColors();
@@ -113,11 +138,6 @@ export default function LowStockScreen() {
       setReplenishModalVisible(false);
       setSelectedProduct(null);
       Vibration.vibrate(50);
-      
-      Alert.alert(
-        t('common.done', 'Stock Replenished'),
-        `${updated.name}: ${newStockTotal}`
-      );
     } catch (err) {
       Alert.alert(
         t('common.error', 'Replenish Failed'),
@@ -135,24 +155,30 @@ export default function LowStockScreen() {
   };
 
   const { lowStockItems, categoryGroups } = useMemo(() => {
-    // 1. Filter low stock items (stock count <= 10)
-    const lowStock = products.filter(p => p.stock_count <= 10);
+    // 1. Filter low stock items (stock count <= 10 or toggled off)
+    const lowStock = products.filter(p => p.stock_count <= 10 || !p.in_stock);
 
     // 2. Further filter based on segmented filter modes
     const filteredItems = lowStock.filter(p => {
-      if (filterMode === 'out_of_stock') return p.stock_count === 0;
-      if (filterMode === 'critical') return p.stock_count >= 1 && p.stock_count <= 5;
-      if (filterMode === 'low') return p.stock_count >= 6 && p.stock_count <= 10;
-      return true; // 'all'
+      if (filterMode === 'out_of_stock') return p.stock_count === 0 || !p.in_stock;
+      if (filterMode === 'critical') return p.in_stock && p.stock_count >= 1 && p.stock_count <= 5;
+      if (filterMode === 'low') return p.in_stock && p.stock_count >= 6 && p.stock_count <= 10;
+      return true;
     });
 
     // 3. Sort items by priority (stock ascending: 0 first, then 1, 2, 3...)
-    const sortedItems = [...filteredItems].sort((a, b) => a.stock_count - b.stock_count);
+    const sortedItems = [...filteredItems].sort((a, b) => {
+      const stockA = a.in_stock ? a.stock_count : 0;
+      const stockB = b.in_stock ? b.stock_count : 0;
+      return stockA - stockB;
+    });
 
     // 4. Group sorted items by category
     const categoriesMap: Record<string, MarketItemDashboardResponse[]> = {};
     sortedItems.forEach(item => {
-      const cat = (i18n.locale?.startsWith('ar') ? (item.category_name_ar || item.category) : (item.category_name_en || item.category)) || t('market.all_items', 'General');
+      const cat = (i18n.locale?.startsWith('ar')
+        ? (item.category_name_ar || CATEGORY_AR_FALLBACK[item.category || ''] || item.category)
+        : (item.category_name_en || item.category)) || t('market.all_items', 'عام');
       if (!categoriesMap[cat]) {
         categoriesMap[cat] = [];
       }
@@ -167,14 +193,14 @@ export default function LowStockScreen() {
     return { lowStockItems: lowStock, categoryGroups: groups };
   }, [products, filterMode]);
 
-  const getPriorityColor = (stock: number) => {
-    if (stock === 0) return Colors.error;
+  const getPriorityColor = (stock: number, inStock: boolean) => {
+    if (!inStock || stock === 0) return Colors.error;
     if (stock <= 5) return Colors.critical; // #FF6B35 — critical orange
     return Colors.warning; // #FFA726 — low stock amber
   };
 
-  const getPriorityText = (stock: number) => {
-    if (stock === 0) return t('lowStock.out_of_stock', 'نفد المخزون');
+  const getPriorityText = (stock: number, inStock: boolean) => {
+    if (!inStock || stock === 0) return t('lowStock.out_of_stock', 'نفد المخزون');
     if (stock <= 5) return t('lowStock.critical', 'حرج');
     return t('lowStock.low', 'مخزون منخفض');
   };
@@ -269,7 +295,6 @@ export default function LowStockScreen() {
     color: Colors.primary,
     fontWeight: '800',
     letterSpacing: 0.5,
-    textTransform: 'uppercase',
   },
   categoryHeaderLine: {
     flex: 1,
@@ -587,7 +612,7 @@ export default function LowStockScreen() {
           >
             <View style={[styles.tabBadge, { backgroundColor: Colors.error }]} />
             <Text style={[styles.filterTabText, filterMode === 'out_of_stock' && styles.filterTabTextActive]}>
-              {t('lowStock.out_of_stock', 'نفد المخزون')} ({lowStockItems.filter(p => p.stock_count === 0).length})
+              {t('lowStock.out_of_stock', 'نفد المخزون')} ({lowStockItems.filter(p => p.stock_count === 0 || !p.in_stock).length})
             </Text>
           </TouchableOpacity>
 
@@ -597,7 +622,7 @@ export default function LowStockScreen() {
           >
             <View style={[styles.tabBadge, { backgroundColor: '#FF9500' }]} />
             <Text style={[styles.filterTabText, filterMode === 'critical' && styles.filterTabTextActive]}>
-              {t('lowStock.critical', 'حرج')} ({lowStockItems.filter(p => p.stock_count >= 1 && p.stock_count <= 5).length})
+              {t('lowStock.critical', 'حرج')} ({lowStockItems.filter(p => p.in_stock && p.stock_count >= 1 && p.stock_count <= 5).length})
             </Text>
           </TouchableOpacity>
 
@@ -607,7 +632,7 @@ export default function LowStockScreen() {
           >
             <View style={[styles.tabBadge, { backgroundColor: '#FFCC00' }]} />
             <Text style={[styles.filterTabText, filterMode === 'low' && styles.filterTabTextActive]}>
-              {t('lowStock.low', 'منخفض')} ({lowStockItems.filter(p => p.stock_count >= 6 && p.stock_count <= 10).length})
+              {t('lowStock.low', 'منخفض')} ({lowStockItems.filter(p => p.in_stock && p.stock_count >= 6 && p.stock_count <= 10).length})
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -658,13 +683,13 @@ export default function LowStockScreen() {
                   
                   <View style={styles.badgeRow}>
                     {/* Priority Alert Badge */}
-                    <View style={[styles.priorityBadge, { borderColor: getPriorityColor(item.stock_count) }]}>
-                      <Text style={[styles.priorityBadgeText, { color: getPriorityColor(item.stock_count) }]}>
-                        {getPriorityText(item.stock_count)}
+                    <View style={[styles.priorityBadge, { borderColor: getPriorityColor(item.stock_count, item.in_stock) }]}>
+                      <Text style={[styles.priorityBadgeText, { color: getPriorityColor(item.stock_count, item.in_stock) }]}>
+                        {getPriorityText(item.stock_count, item.in_stock)}
                       </Text>
                     </View>
                     <Text style={styles.stockCountLabel}>
-                      {item.stock_count}
+                      {item.in_stock ? item.stock_count : 0}
                     </Text>
                   </View>
                 </View>
@@ -747,7 +772,7 @@ export default function LowStockScreen() {
                       <View style={styles.modalTextWrapper}>
                         <Text style={styles.modalItemName} numberOfLines={1}>{selectedProduct.name}</Text>
                         <Text style={styles.modalItemSub}>
-                          {t('dashboard.stock_label', 'المخزون')}: {selectedProduct.stock_count}
+                          {t('dashboard.stock_label', 'المخزون')}: {selectedProduct.in_stock ? selectedProduct.stock_count : 0}
                         </Text>
                       </View>
                     </View>
