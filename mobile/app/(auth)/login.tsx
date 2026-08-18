@@ -51,7 +51,7 @@ export default function LoginScreen() {
   // Determine input icon dynamically
   const getUsernameIcon = (): any => {
     const val = emailOrPhone.trim();
-    if (!val) return 'mail-outline';
+    if (!val) return 'phone-portrait-outline';
     if (val.includes('@')) return 'mail-outline';
     if (/^\+?\d+$/.test(val.replace(/[\s\-()]/g, ''))) return 'phone-portrait-outline';
     return 'person-outline';
@@ -378,7 +378,7 @@ export default function LoginScreen() {
               setEmailOrPhone(val);
               if (errorMessage) setErrorMessage(null);
             }}
-            keyboardType="email-address"
+            keyboardType="default"
             autoCapitalize="none"
             autoComplete="username"
           />

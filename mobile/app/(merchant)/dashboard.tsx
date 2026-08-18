@@ -434,7 +434,7 @@ export default function DashboardScreen() {
 
   const totalProducts = products.length;
   const inStockCount = useMemo(() => products.filter(p => p.in_stock).length, [products]);
-  const lowStockCount = useMemo(() => products.filter(p => p.stock_count <= 10 && p.stock_count > 0).length, [products]);
+  const lowStockCount = useMemo(() => products.filter(p => p.stock_count <= 10 || !p.in_stock).length, [products]);
 
   // Extract unique categories for filter chips
   const categories = useMemo(() => {
