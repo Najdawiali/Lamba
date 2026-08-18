@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Any, Dict
 from pydantic import BaseModel, Field
 
 
@@ -43,11 +43,14 @@ class CustomerSpecialOfferResponse(BaseModel):
     id: uuid.UUID
     market_item_id: uuid.UUID
     offer_type: str
+    config: Optional[Dict[str, Any]] = None
     discount_percentage: Optional[float] = None
     description: Optional[str] = None
-    power: float
+    offer_summary: Optional[str] = None
+    power: float = 50.0
     is_active: bool
     created_at: datetime
+    expires_at: Optional[datetime] = None
 
     # Product Catalog details
     product_id: uuid.UUID  # global item ID
@@ -55,6 +58,8 @@ class CustomerSpecialOfferResponse(BaseModel):
     product_description: Optional[str] = None
     price: Optional[float] = None
     category: Optional[str] = None
+    category_name_ar: Optional[str] = None
+    category_name_en: Optional[str] = None
     image_url: Optional[str] = None
     stock_count: int
     in_stock: bool

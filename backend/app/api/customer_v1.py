@@ -535,57 +535,94 @@ async def get_customer_offers(
     latitude: float = Query(..., ge=-90.0, le=90.0, description="Latitude of user"),
     longitude: float = Query(..., ge=-180.0, le=180.0, description="Longitude of user"),
     query: Optional[str] = Query(None, description="Optional search term matching product/shop name"),
-    offer_type: Optional[str] = Query(None, description="Filter by BOGO or DISCOUNT"),
+    offer_type: Optional[str] = Query(None, description="Filter by offer type"),
     max_distance_km: Optional[float] = Query(None, gt=0.0, description="Optional maximum distance filter in km"),
     category_id: Optional[uuid.UUID] = Query(None, description="Optional category filter ID"),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Retrieve all active special offers across all physical stores, regardless of distance.
-    Sorted by a dynamic proximity + offer power score:
-    Score = Power / (1.0 + Distance_in_km)
-    
-    Includes filters for name/description search, offer type, category, and maximum distance constraint.
+    Retrieve all active, non-expired offers from the offers table.
+    Sorted by a dynamic proximity + offer power score.
     """
-    from app.models.special_offer import SpecialOffer
+    from app.models.offer import Offer
+    from app.models.category import Category
     from sqlalchemy import or_
-    
+
+    def _compute_power(offer_type: str, config: dict) -> float:
+        """Derive a sorting power score from offer config."""
+        if not config:
+            return 50.0
+        if offer_type == 'percentage':
+            return float(config.get('percent', 50))
+        elif offer_type == 'fixed_amount':
+            return min(float(config.get('amount', 1)) * 20, 100.0)
+        elif offer_type == 'buy_x_get_y':
+            buy = float(config.get('buy', 1))
+            get = float(config.get('get', 1))
+            return min((get / buy) * 100, 100.0) if buy > 0 else 50.0
+        elif offer_type == 'quantity_price':
+            return 60.0
+        return 50.0
+
+    def _compute_discount_pct(offer_type: str, config: dict) -> Optional[float]:
+        """Derive discount percentage for backward compat."""
+        if not config:
+            return None
+        if offer_type == 'percentage':
+            return config.get('percent')
+        return None
+
+    def _offer_summary(offer_type: str, config: dict) -> str:
+        """Human-readable offer summary."""
+        if not config:
+            return ''
+        if offer_type == 'percentage':
+            return f"{config.get('percent', 0)}% off"
+        elif offer_type == 'fixed_amount':
+            return f"{config.get('amount', 0)} JOD off"
+        elif offer_type == 'buy_x_get_y':
+            return f"Buy {config.get('buy', 0)} Get {config.get('get', 0)} Free"
+        elif offer_type == 'quantity_price':
+            return f"{config.get('quantity', 0)} for {config.get('price', 0)} JOD"
+        return ''
+
+    # Map customer-facing filter values to actual offer_type values
+    OFFER_TYPE_MAP = {
+        'BOGO': 'buy_x_get_y',
+        'DISCOUNT': 'percentage',
+    }
+
     try:
-        # Create user location WKTElement POINT
         point_wkt = WKTElement(f"POINT({longitude} {latitude})", srid=4326)
-        
-        # Cast shapes to Geography for accurate distance calculations in meters
         geog_location = Market.location.cast(Geography)
         geog_point = func.cast(point_wkt, Geography)
-        
-        # ST_Distance returns distance in meters on geography. Divide by 1000 to get kilometers.
         distance_expression = (func.ST_Distance(geog_location, geog_point) / 1000.0).label("distance_km")
-        
-        # Dynamic score expression: power / (1.0 + distance_km)
-        # Add 1.0 to avoid division by zero if user is exactly on shop location
-        score_expression = (SpecialOffer.power / (1.0 + (func.ST_Distance(geog_location, geog_point) / 1000.0))).label("sorting_score")
-        
-        # Select components
+
         stmt = (
             select(
-                SpecialOffer,
+                Offer,
                 MarketItem,
                 GlobalItem,
                 Market,
+                Category,
                 func.ST_Y(Market.location.cast(Geometry)).label("lat"),
                 func.ST_X(Market.location.cast(Geometry)).label("lng"),
                 distance_expression,
-                score_expression
             )
-            .join(MarketItem, SpecialOffer.market_item_id == MarketItem.id)
+            .join(MarketItem, Offer.market_item_id == MarketItem.id)
             .join(GlobalItem, MarketItem.item_id == GlobalItem.id)
-            .join(Market, MarketItem.market_id == Market.id)
+            .join(Market, Offer.market_id == Market.id)
+            .outerjoin(Category, GlobalItem.category_id == Category.id)
             .where(
-                SpecialOffer.is_active == True,
+                Offer.is_active == True,
                 MarketItem.status == True,
+                or_(
+                    Offer.expires_at.is_(None),
+                    Offer.expires_at > datetime.now(timezone.utc),
+                ),
             )
         )
-        
+
         # Apply filters
         if query and query.strip():
             search_str = f"%{query.strip()}%"
@@ -596,50 +633,55 @@ async def get_customer_offers(
                     Market.name.ilike(search_str)
                 )
             )
-            
+
         if offer_type:
-            stmt = stmt.where(SpecialOffer.offer_type == offer_type.upper())
-            
+            mapped_type = OFFER_TYPE_MAP.get(offer_type.upper(), offer_type)
+            stmt = stmt.where(Offer.offer_type == mapped_type)
+
         if max_distance_km is not None:
-            # max_distance_km in meters
             radius_meters = max_distance_km * 1000.0
             stmt = stmt.where(func.ST_DWithin(geog_location, geog_point, radius_meters))
-            
+
         if category_id:
             stmt = stmt.where(GlobalItem.category_id == category_id)
-            
-        # Order by computed score desc (use the labelled expression, not raw text())
-        stmt = stmt.order_by(score_expression.desc())
 
         result = await db.execute(stmt)
         rows = result.unique().all()
-        
+
         # Run dynamic schedule update to ensure freshness
         unique_markets = list({row[3].id: row[3] for row in rows}.values())
         if unique_markets:
             from app.utils.schedule import check_and_update_markets_schedule
             await check_and_update_markets_schedule(db, unique_markets)
-            
+
         offers_list = []
         for row in rows:
-            so, mi, gi, market = row[0], row[1], row[2], row[3]
-            lat, lng, dist_km, sorting_score = row[4], row[5], row[6], row[7]
-            
+            offer, mi, gi, market, cat = row[0], row[1], row[2], row[3], row[4]
+            lat, lng, dist_km = row[5], row[6], row[7]
+            config = offer.config or {}
+            power = _compute_power(offer.offer_type, config)
+            score = power / (1.0 + float(dist_km))
+
             offers_list.append(
                 CustomerSpecialOfferResponse(
-                    id=so.id,
-                    market_item_id=so.market_item_id,
-                    offer_type=so.offer_type,
-                    discount_percentage=so.discount_percentage,
-                    description=so.description,
-                    power=so.power,
-                    is_active=so.is_active,
-                    created_at=so.created_at,
+                    id=offer.id,
+                    market_item_id=offer.market_item_id,
+                    offer_type=offer.offer_type,
+                    config=config,
+                    discount_percentage=_compute_discount_pct(offer.offer_type, config),
+                    description=offer.description,
+                    offer_summary=_offer_summary(offer.offer_type, config),
+                    power=power,
+                    is_active=offer.is_active,
+                    created_at=offer.created_at,
+                    expires_at=offer.expires_at,
                     product_id=gi.id,
                     product_name=gi.name,
                     product_description=gi.description,
                     price=mi.price,
                     category=gi.category,
+                    category_name_ar=cat.name_ar if cat else None,
+                    category_name_en=cat.name_en if cat else None,
                     image_url=gi.image_url,
                     stock_count=mi.stock_count,
                     in_stock=mi.status,
@@ -650,12 +692,14 @@ async def get_customer_offers(
                     longitude=float(lng),
                     shop_is_open=market.is_currently_open,
                     distance_km=round(float(dist_km), 2),
-                    sorting_score=round(float(sorting_score), 2)
+                    sorting_score=round(score, 2)
                 )
             )
-            
+
+        # Sort by score descending
+        offers_list.sort(key=lambda o: o.sorting_score, reverse=True)
         return offers_list
-        
+
     except Exception as e:
         logger.error(f"Failed to fetch special offers for customer: {e}", exc_info=True)
         raise HTTPException(

@@ -525,10 +525,13 @@ export default function CustomerOffersScreen() {
 
 
   const renderOfferCard = ({ item }: { item: CustomerSpecialOfferResponse }) => {
-    const isBogo = item.offer_type === 'BOGO';
-    const offerBadgeText = isBogo
-      ? t('offers.bogo_badge')
-      : `${item.discount_percentage}% ${t('offers.off')}`;
+    const isBogo = item.offer_type === 'buy_x_get_y';
+    const offerBadgeText = item.offer_summary
+      || (isBogo
+        ? `Buy ${item.config?.buy ?? ''} Get ${item.config?.get ?? ''} Free`
+        : item.discount_percentage != null
+          ? `${item.discount_percentage}% ${t('offers.off')}`
+          : item.offer_type);
 
     return (
       <TouchableOpacity
@@ -724,14 +727,19 @@ export default function CustomerOffersScreen() {
           {/* Offer Type Selector */}
           <Text style={styles.trayLabel}>{t('offers.offer_type')}</Text>
           <View style={styles.trayPillsRow}>
-            {['All', 'BOGO', 'DISCOUNT'].map((type) => (
+            {['All', 'buy_x_get_y', 'percentage', 'fixed_amount', 'quantity_price'].map((type) => (
               <TouchableOpacity
                 key={type}
                 style={[styles.trayPill, selectedOfferType === type && styles.trayPillActive]}
                 onPress={() => setSelectedOfferType(type)}
               >
                 <Text style={[styles.trayPillText, selectedOfferType === type && styles.trayPillTextActive]}>
-                  {type === 'All' ? t('common.all') : type}
+                  {type === 'All' ? t('common.all')
+                    : type === 'buy_x_get_y' ? (i18n.locale?.startsWith('ar') ? 'اشتر واحصل' : 'Buy X Get Y')
+                    : type === 'percentage' ? (i18n.locale?.startsWith('ar') ? 'نسبة تخفيض' : '% Discount')
+                    : type === 'fixed_amount' ? (i18n.locale?.startsWith('ar') ? 'تخفيض ثابت' : 'Fixed')
+                    : type === 'quantity_price' ? (i18n.locale?.startsWith('ar') ? 'سعر الكمية' : 'Bundle')
+                    : type}
                 </Text>
               </TouchableOpacity>
             ))}

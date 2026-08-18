@@ -953,11 +953,14 @@ export interface CustomerSpecialOfferResponse {
   id: string;
   market_item_id: string;
   offer_type: string;
+  config?: Record<string, any> | null;
   discount_percentage: number | null;
   description: string | null;
+  offer_summary?: string | null;
   power: number;
   is_active: boolean;
   created_at: string;
+  expires_at?: string | null;
   product_id: string;
   product_name: string;
   product_name_ar?: string | null;
