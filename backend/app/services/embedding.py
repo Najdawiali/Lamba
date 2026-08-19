@@ -16,7 +16,7 @@ import numpy as np
 from app.config import settings
 from app.services.arabic_norm import normalize_query
 from app.services.local_embedding import local_embedding_provider
-from app.services.http_pool import get_client
+from app.services.http_pool import get_client, deepinfra_breaker
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +127,12 @@ class EmbeddingService:
                 raise RuntimeError(msg)
             return np.zeros(settings.text_embedding_dim, dtype=np.float32)
 
+        if deepinfra_breaker.should_skip():
+            logger.warning("DeepInfra circuit breaker is OPEN. Skipping embedding API call.")
+            if getattr(settings, "embedding_strict_mode", False):
+                raise RuntimeError("DeepInfra circuit breaker is OPEN.")
+            return np.zeros(settings.text_embedding_dim, dtype=np.float32)
+
         client = get_client()
 
         url = f"{settings.deepinfra_api_base}{settings.embedding_api_path}"
@@ -144,9 +150,13 @@ class EmbeddingService:
         last_error = None
         max_retries = settings.embedding_max_retries
         for attempt in range(max_retries):
+            if deepinfra_breaker.should_skip():
+                logger.warning("DeepInfra circuit breaker tripped during retries. Aborting embedding.")
+                break
             try:
                 resp = await client.post(url, headers=headers, json=payload)
                 if resp.status_code in (429, 500, 502, 503, 504):
+                    deepinfra_breaker.record_failure()
                     raise Exception(f"Retryable HTTP {resp.status_code}")
                 resp.raise_for_status()
                 data = resp.json()
@@ -154,10 +164,13 @@ class EmbeddingService:
                 norm = np.linalg.norm(vec)
                 if norm > 0:
                     vec = vec / norm
+                deepinfra_breaker.record_success()
                 return vec
             except Exception as e:
                 last_error = e
-                if attempt < max_retries - 1:
+                if "Retryable HTTP" not in str(e):
+                    deepinfra_breaker.record_failure()
+                if attempt < max_retries - 1 and not deepinfra_breaker.should_skip():
                     backoff = 0.5 * (2 ** attempt)
                     logger.warning(
                         f"Embedding API attempt {attempt + 1}/{max_retries} failed: {e}. "
@@ -259,6 +272,13 @@ class EmbeddingService:
                     )
                     continue
 
+                if deepinfra_breaker.should_skip():
+                    logger.warning("DeepInfra circuit breaker is OPEN. Skipping batch embedding call.")
+                    all_results.extend(
+                        [np.zeros(settings.text_embedding_dim, dtype=np.float32).tolist()] * len(batch)
+                    )
+                    continue
+
                 client = get_client()
 
                 url = f"{settings.deepinfra_api_base}{settings.embedding_api_path}"
@@ -276,9 +296,13 @@ class EmbeddingService:
                 last_error = None
                 max_retries = settings.embedding_max_retries
                 for attempt in range(max_retries):
+                    if deepinfra_breaker.should_skip():
+                        logger.warning("DeepInfra circuit breaker tripped during batch retries. Aborting.")
+                        break
                     try:
                         resp = await client.post(url, headers=headers, json=payload)
                         if resp.status_code in (429, 500, 502, 503, 504):
+                            deepinfra_breaker.record_failure()
                             raise Exception(f"Retryable HTTP {resp.status_code}")
                         resp.raise_for_status()
                         data = resp.json()
@@ -290,11 +314,14 @@ class EmbeddingService:
                                 v = v / n
                             normed_vecs.append(v.tolist())
                         all_results.extend(normed_vecs)
+                        deepinfra_breaker.record_success()
                         last_error = None
                         break
                     except Exception as e:
                         last_error = e
-                        if attempt < max_retries - 1:
+                        if "Retryable HTTP" not in str(e):
+                            deepinfra_breaker.record_failure()
+                        if attempt < max_retries - 1 and not deepinfra_breaker.should_skip():
                             backoff = 0.5 * (2 ** attempt)
                             logger.warning(
                                 f"Batch embedding attempt {attempt + 1}/{max_retries} failed: {e}. "

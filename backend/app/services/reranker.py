@@ -12,7 +12,7 @@ from typing import Optional, List, Dict, Any
 
 from app.config import settings
 from app.services.local_reranker import local_reranker_provider
-from app.services.http_pool import get_client
+from app.services.http_pool import get_client, deepinfra_breaker
 
 logger = logging.getLogger(__name__)
 
@@ -73,13 +73,21 @@ class RerankerService:
                 di, len(doc), doc[:200],
             )
 
+        if deepinfra_breaker.should_skip():
+            logger.warning("DeepInfra circuit breaker is OPEN. Skipping reranker API call.")
+            raise RuntimeError("DeepInfra circuit breaker is OPEN.")
+
         max_retries = getattr(settings, "embedding_max_retries", 3)
         client = get_client()
         last_error = None
         for attempt in range(max_retries):
+            if deepinfra_breaker.should_skip():
+                logger.warning("DeepInfra circuit breaker tripped during reranker retries. Aborting.")
+                break
             try:
                 resp = await client.post(url, headers=headers, json=payload)
                 if resp.status_code in (429, 500, 502, 503, 504):
+                    deepinfra_breaker.record_failure()
                     raise Exception(f"Retryable HTTP {resp.status_code}")
                 resp.raise_for_status()
                 data = resp.json()
@@ -90,10 +98,13 @@ class RerankerService:
                     "[RERANKER API] Raw scores from DeepInfra: %s",
                     [round(s, 6) for s in raw_scores],
                 )
+                deepinfra_breaker.record_success()
                 return raw_scores
             except Exception as e:
                 last_error = e
-                if attempt < max_retries - 1:
+                if "Retryable HTTP" not in str(e):
+                    deepinfra_breaker.record_failure()
+                if attempt < max_retries - 1 and not deepinfra_breaker.should_skip():
                     backoff = 0.5 * (2 ** attempt)
                     logger.warning(
                         f"Reranker API attempt {attempt + 1}/{max_retries} failed: {e}. "

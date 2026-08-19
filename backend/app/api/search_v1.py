@@ -1,28 +1,48 @@
-"""
-Search V1 API — RRF hybrid retrieval + LLM multi-query expansion
+"""Search V1 API — RRF hybrid retrieval + LLM multi-query expansion
 + always-on Qwen3 cross-encoder reranking + language-aware ordering.
 
-Quality-first / latency-tolerant / serverless-cost-optimized pipeline:
+LLM Prompt Architecture
+=======================
+9 prompts across the pipeline, each with a specific role:
 
-  1. Normalize the query (Arabic NFKC + alef/hamza unification + Arabizi → Arabic).
-  2. Expand the query with a small DeepInfra-hosted LLM into up to N variants
-     (English translation, Arabic synonym, category phrase). Failures degrade
-     silently to the original query only.
-  3. Embed original + variants via Qwen3-Embedding-0.6B (cache-first, 1024-d).
-  4. Ranked retrieval branches in Postgres (top-K each):
-       - one semantic branch per query vector  (pgvector cosine over HNSW)
-       - one lexical branch                    (arabic+simple tsvector, ts_rank, GIN)
-  5. Reciprocal Rank Fusion (k = settings.rrf_k) across all branches.
-  6. Qwen3-Reranker cross-encoder over the fused top-K (always on).
-       relevance = w·rerank + (1-w)·prior
-       prior     = 0.7·semantic + 0.3·proximity   (global)
-                 = 1.0·semantic                   (in-shop)
-  7. Language-aware ordering: identical result SET for شاي / \"tea\", with a
-     small tie-break boost for items whose name script matches the query script.
-  8. Single-pass tiering on the fused relevance score:
-       exact (≥ exact_tier_threshold) → recommendations
-       (≥ recommendation_tier_threshold) → SearchAlert cache.
-  9. Top-5 cap unless ≥5 results score ≥ 0.80.
+REAL-TIME (per query, Qwen3.6-35B-A3B via DeepInfra):
+  1. Query Understanding (_QU_SYSTEM_PROMPT in query_understanding.py)
+     - Fires when needs_llm() returns True
+     - Extracts: intent, query_clean, structured attributes
+     - Attributes become hard JSONB filters (type, color, dietary, brand)
+     - Occasions (فطور, هدية) are NOT attributes — stay in query_clean
+
+  2. Query Expansion (EXPANSION_SYSTEM_PROMPT in query_expansion.py)
+     - Fires when needs_expansion() returns True (currently DISABLED)
+     - Input: primary_text (query_clean, NOT raw query) to avoid
+       conflicting with attribute filters
+     - Output: list of cross-lingual variant strings
+
+OFFLINE (batch scripts, Gemma 4 31B via DeepInfra):
+  3. Search Term Enrichment (ENRICHMENT_PROMPT in enrich_search_terms.py)
+     - Generates dialect, Arabizi, English search terms per product
+  4. Attribute Extraction (ATTRIBUTE_EXTRACTION_PROMPT in extract_product_attributes.py)
+     - Extracts structured JSONB attributes per product
+  5. Category Classification (inline in merchant_v1.py _classify_category)
+     - Classifies new products into OFFICIAL_CATEGORIES
+
+INFRASTRUCTURE (non-generative models):
+  6. Embedding Instruction (config.embedding_query_instruction)
+     - Steers asymmetric query embedding for Qwen3-Embedding
+  7. Reranker Instruction (config.reranker_instruction)
+     - Guides Qwen3-Reranker cross-encoder scoring (currently DISABLED)
+
+Pipeline Steps
+==============
+  1. Normalize (Arabic NFKC + alef/hamza + Arabizi → Arabic).
+  2. Synonym table lookup (O(1) Redis).
+  3. Query Understanding → query_clean + attribute filters.
+  4. Query Expansion (parallel with embedding) → cross-lingual variants.
+  5. Embed original + variants via Qwen3-Embedding (cache-first, 1024-d).
+  6. Ranked retrieval in Postgres (pgvector cosine + tsvector lexical).
+  7. Reciprocal Rank Fusion (k = settings.rrf_k) across all branches.
+  8. Qwen3-Reranker cross-encoder over fused top-K.
+  9. Language-aware ordering + score tiering + top-K cap.
 
 Image search endpoint (/image) remains hidden — returns 410 Gone until
 settings.enable_image_search is flipped on.
@@ -747,8 +767,11 @@ async def _run_search(
     should_expand = getattr(settings, "enable_query_expansion", True) and needs_expansion(query_text, query_script, has_synonym=has_synonym)
 
     if should_expand:
+        # Use primary_text (query_clean from understanding) so expansion
+        # generates variants for the core product term, not the raw query
+        # with attribute modifiers that would conflict with JSONB filters.
         expansion_task = asyncio.create_task(
-            query_expansion_service.expand_async(query_text)
+            query_expansion_service.expand_async(primary_text)
         )
         original_embed_task = asyncio.create_task(
             embedding_service.encode_text_async(primary_text, text_type="query")
