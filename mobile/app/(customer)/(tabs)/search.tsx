@@ -392,13 +392,25 @@ export default function SearchScreen() {
       color: Colors.textPrimary,
     },
     avatarButton: {
-      width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-end'
+      width: 40,
+      height: 40,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderRadius: 20,
+      backgroundColor: 'transparent',
+      overflow: 'hidden',
     },
     avatarGradient: {
-      width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center'
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     avatarText: {
-      fontSize: 14, fontWeight: '700', color: Colors.textOnPrimary
+      fontSize: 14,
+      fontWeight: '700',
+      color: Colors.textOnPrimary,
     },
     searchWrapper: {
       paddingHorizontal: Spacing.lg,
@@ -1008,7 +1020,7 @@ export default function SearchScreen() {
     <View style={styles.header}>
       <View style={{ width: 40 }} />
       <Text style={styles.headerTitle}>{t('welcome.title', 'Lamba')}</Text>
-      <TouchableOpacity style={styles.avatarButton} onPress={() => router.push('/(customer)/profile')}>
+      <TouchableOpacity style={styles.avatarButton} onPress={() => router.push('/(customer)/profile')} activeOpacity={0.7}>
         <LinearGradient
           colors={[Colors.primary, '#8B83FF']}
           style={styles.avatarGradient}
