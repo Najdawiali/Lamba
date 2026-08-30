@@ -1,4 +1,4 @@
-# 🦅 Eagle Vision — Hyper-Local Retail Discovery Platform (Lamba)
+Hyper-Local Retail Discovery Platform (Lamba)
 
 > Connect consumers with physical inventory in nearby shops using **semantic text search**, **visual image search**, and **geospatial proximity ranking**.
 
