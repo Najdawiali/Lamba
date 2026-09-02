@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
-  Alert, TextInput, Animated, Vibration, Platform, Dimensions, Image, FlatList, ScrollView, Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, Modal
+  Alert, TextInput, Animated, Vibration, Platform, Dimensions, Image, FlatList, ScrollView, Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -20,9 +20,12 @@ import {
   POSCheckoutItem,
   POSCheckoutResponse,
   MarketItemDashboardResponse,
-  logout
+  logout,
 } from '../../services/api';
 import { formatPrice } from '../../services/currency';
+import { resolveImageUrl } from '../../services/utils';
+import ReceiptModal from '../../components/ReceiptModal';
+import ManualAddModal from '../../components/ManualAddModal';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const VIEWFINDER_SIZE = SCREEN_WIDTH * 0.7;
@@ -589,124 +592,6 @@ const styles = useMemo(() => StyleSheet.create({
     fontWeight: '700',
     color: Colors.primary,
   },
-  receiptScreenContainer: {
-    flex: 1,
-    backgroundColor: '#0a0a1a',
-    padding: Spacing.lg,
-  },
-  receiptScreenHeader: {
-    alignItems: 'center',
-    paddingVertical: Spacing.xl,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  receiptSuccessIconWrapper: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(0, 217, 126, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-  },
-  receiptScreenTitle: {
-    ...Typography.h2,
-    color: '#FFF',
-    fontWeight: '800',
-  },
-  receiptScreenSubtitle: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 6,
-    paddingHorizontal: Spacing.xl,
-  },
-  receiptScreenDate: {
-    ...Typography.caption,
-    color: Colors.textMuted,
-    marginTop: Spacing.sm,
-  },
-  receiptScreenBody: {
-    flex: 1,
-    marginVertical: Spacing.lg,
-  },
-  receiptBodySectionTitle: {
-    ...Typography.caption,
-    color: Colors.textSecondary,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: Spacing.sm,
-  },
-  receiptScreenDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    marginVertical: Spacing.xs,
-  },
-  receiptItemDetailsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.03)',
-  },
-  receiptItemDetailsName: {
-    ...Typography.bodySmall,
-    color: '#FFF',
-    fontWeight: '700',
-  },
-  receiptItemDetailsSub: {
-    ...Typography.caption,
-    color: Colors.textMuted,
-    marginTop: 2,
-  },
-  receiptItemDetailsSubtotal: {
-    ...Typography.body,
-    color: '#FFF',
-    fontWeight: '700',
-  },
-  receiptScreenFooter: {
-    paddingBottom: Spacing.xl,
-  },
-  receiptScreenTotalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: Spacing.md,
-  },
-  receiptScreenTotalLabel: {
-    ...Typography.body,
-    color: Colors.textSecondary,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  receiptScreenTotalValue: {
-    ...Typography.h1,
-    color: Colors.secondary,
-    fontWeight: '800',
-  },
-  receiptScreenThanksText: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    fontStyle: 'italic',
-    marginVertical: Spacing.lg,
-  },
-  receiptScreenCloseBtn: {
-    height: 52,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.primary,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...Shadows.medium,
-  },
-  receiptScreenCloseBtnText: {
-    ...Typography.button,
-    color: '#FFF',
-    fontWeight: '700',
-  },
   manualAddBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -723,139 +608,6 @@ const styles = useMemo(() => StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#FFF',
-  },
-  manualAddContainer: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  manualAddHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  manualAddTitle: {
-    ...Typography.h3,
-    color: Colors.textPrimary,
-  },
-  manualAddSearchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surfaceElevated,
-    marginHorizontal: Spacing.xl,
-    marginVertical: Spacing.md,
-    borderRadius: BorderRadius.md,
-    paddingHorizontal: Spacing.md,
-    height: 44,
-    gap: Spacing.sm,
-  },
-  manualAddSearchInput: {
-    flex: 1,
-    color: Colors.textPrimary,
-    fontSize: 14,
-  },
-  manualAddItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.xl,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  manualAddItemActive: {
-    backgroundColor: 'rgba(108, 99, 255, 0.06)',
-  },
-  manualAddItemName: {
-    ...Typography.body,
-    fontWeight: '600',
-    color: Colors.textPrimary,
-  },
-  manualAddItemSub: {
-    ...Typography.caption,
-    color: Colors.textMuted,
-    marginTop: 2,
-  },
-  manualAddPlusBtn: {
-    padding: 4,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  manualItemStepper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: BorderRadius.full,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(108, 99, 255, 0.3)',
-  },
-  manualStepperBtn: {
-    padding: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  manualStepperQty: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    minWidth: 20,
-    textAlign: 'center',
-  },
-  manualAddBottomBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.md,
-    backgroundColor: Colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    ...Shadows.medium,
-  },
-  manualAddCartInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  manualAddCartBadge: {
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    minWidth: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 6,
-  },
-  manualAddCartBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FFF',
-  },
-  manualAddTotalText: {
-    ...Typography.h3,
-    color: Colors.textPrimary,
-    fontWeight: '700',
-  },
-  manualAddDoneBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: Colors.primary,
-    paddingVertical: 10,
-    paddingHorizontal: Spacing.xl,
-    borderRadius: BorderRadius.md,
-    ...Shadows.small,
-  },
-  manualAddDoneBtnText: {
-    ...Typography.button,
-    color: '#FFF',
-    fontWeight: '700',
   },
 }), [Colors]);
 
@@ -896,7 +648,6 @@ const styles = useMemo(() => StyleSheet.create({
   const [manualAddVisible, setManualAddVisible] = useState(false);
   const [inventoryItems, setInventoryItems] = useState<MarketItemDashboardResponse[]>([]);
   const [inventoryLoading, setInventoryLoading] = useState(false);
-  const [manualSearchQuery, setManualSearchQuery] = useState('');
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -1193,15 +944,8 @@ const styles = useMemo(() => StyleSheet.create({
     }
   };
 
-  const resolveImageUrl = (url: string | null): string | undefined => {
-    if (!url) return undefined;
-    if (url.startsWith('http')) return url;
-    return `${API_BASE_URL}${url}`;
-  };
-
   const openManualAdd = async () => {
     setManualAddVisible(true);
-    setManualSearchQuery('');
     setInventoryLoading(true);
     try {
       const items = await getMarketItems();
@@ -1230,7 +974,7 @@ const styles = useMemo(() => StyleSheet.create({
         );
       } else {
         return [...prev, {
-          global_item_id: item.global_item_id || item.id,
+          global_item_id: item.item_id || item.id,
           market_item_id: item.id,
           name: item.name,
           barcode: '',
@@ -1260,16 +1004,6 @@ const styles = useMemo(() => StyleSheet.create({
       );
     });
   };
-
-  const filteredInventory = useMemo(() => {
-    if (!manualSearchQuery.trim()) return inventoryItems;
-    const q = manualSearchQuery.toLowerCase();
-    return inventoryItems.filter(i =>
-      i.name.toLowerCase().includes(q) ||
-      (i.name_ar && i.name_ar.includes(manualSearchQuery.trim())) ||
-      (i.name_en && i.name_en.toLowerCase().includes(q))
-    );
-  }, [inventoryItems, manualSearchQuery]);
 
   if (!permission) {
     return (
@@ -1720,218 +1454,36 @@ const styles = useMemo(() => StyleSheet.create({
       </Animated.View>
 
       {/* ── DRAWER C: Full Screen Professional Invoice Receipt Modal ── */}
-      <Modal
+      <ReceiptModal
         visible={receiptVisible}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => {
+        receipt={lastReceipt}
+        onClose={() => {
           setReceiptVisible(false);
           setLastReceipt(null);
           setScanned(false);
           isScanningRef.current = false;
         }}
-      >
-        <SafeAreaView style={styles.receiptScreenContainer} edges={['top', 'bottom']}>
-          {/* Header */}
-          <View style={styles.receiptScreenHeader}>
-            <View style={styles.receiptSuccessIconWrapper}>
-              <Ionicons name="checkmark-circle" size={48} color={Colors.success} />
-            </View>
-            <Text style={styles.receiptScreenTitle}>
-              {t('scanner.transaction_success', 'Transaction Success')}
-            </Text>
-            <Text style={styles.receiptScreenSubtitle}>
-              {t('scanner.transaction_success_desc', 'Invoice registered & inventory levels adjusted')}
-            </Text>
-            <Text style={styles.receiptScreenDate}>
-              {new Date().toLocaleString()}
-            </Text>
-          </View>
-
-          {/* Purchased Items List */}
-          <View style={styles.receiptScreenBody}>
-            <Text style={styles.receiptBodySectionTitle}>
-              {t('scanner.receipt_summary', 'Receipt Summary')}
-            </Text>
-            <View style={styles.receiptScreenDivider} />
-            
-            <FlatList
-              data={lastReceipt?.items || []}
-              keyExtractor={(item, index) => `${item.name}-${index}`}
-              contentContainerStyle={{ paddingVertical: Spacing.sm }}
-              renderItem={({ item }) => (
-                <View style={styles.receiptItemDetailsRow}>
-                  <View style={{ flex: 2 }}>
-                    <Text style={styles.receiptItemDetailsName}>{item.name}</Text>
-                    <Text style={styles.receiptItemDetailsSub}>
-                      {formatPrice(item.unit_price)} × {item.quantity}
-                    </Text>
-                  </View>
-                  <Text style={styles.receiptItemDetailsSubtotal}>
-                    {formatPrice(item.subtotal)}
-                  </Text>
-                </View>
-              )}
-            />
-          </View>
-
-          {/* Footer - Grand Total and Close button */}
-          <View style={styles.receiptScreenFooter}>
-            <View style={styles.receiptScreenDivider} />
-            <View style={styles.receiptScreenTotalRow}>
-              <Text style={styles.receiptScreenTotalLabel}>{t('scanner.total', 'GRAND TOTAL')}</Text>
-              <Text style={styles.receiptScreenTotalValue}>
-                {formatPrice(lastReceipt?.total_cost || 0)}
-              </Text>
-            </View>
-            <View style={styles.receiptScreenDivider} />
-
-            <Text style={styles.receiptScreenThanksText}>
-              {t('scanner.thanks', 'Thank you for your business!')}
-            </Text>
-
-            <TouchableOpacity
-              style={styles.receiptScreenCloseBtn}
-              onPress={() => {
-                setReceiptVisible(false);
-                setLastReceipt(null);
-                setScanned(false);
-                isScanningRef.current = false;
-              }}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="sparkles-outline" size={18} color={Colors.textOnPrimary} style={{ marginRight: 6 }} />
-              <Text style={styles.receiptScreenCloseBtnText}>
-                {t('scanner.new_transaction', 'New Transaction')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
-      </Modal>
+        onNewTransaction={() => {
+          setReceiptVisible(false);
+          setLastReceipt(null);
+          setCartItems([]);
+          setScanned(false);
+          isScanningRef.current = false;
+        }}
+      />
 
       {/* Manual Add Search Modal */}
-      <Modal
+      <ManualAddModal
         visible={manualAddVisible}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setManualAddVisible(false)}
-      >
-        <SafeAreaView style={styles.manualAddContainer} edges={['top', 'bottom']}>
-          {/* Header */}
-          <View style={styles.manualAddHeader}>
-            <Text style={styles.manualAddTitle}>
-              {t('scanner.add_manually', 'إضافة يدوياً')}
-            </Text>
-            <TouchableOpacity onPress={() => setManualAddVisible(false)}>
-              <Ionicons name="close" size={24} color={Colors.textPrimary} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Search Bar */}
-          <View style={styles.manualAddSearchBar}>
-            <Ionicons name="search-outline" size={18} color={Colors.textMuted} />
-            <TextInput
-              style={styles.manualAddSearchInput}
-              placeholder={t('scanner.search_products', 'ابحث عن منتج...')}
-              placeholderTextColor={Colors.textMuted}
-              value={manualSearchQuery}
-              onChangeText={setManualSearchQuery}
-              autoFocus
-            />
-            {manualSearchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setManualSearchQuery('')}>
-                <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Product List */}
-          {inventoryLoading ? (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-              <ActivityIndicator size="large" color={Colors.primary} />
-            </View>
-          ) : (
-            <FlatList
-              data={filteredInventory}
-              keyExtractor={item => item.id}
-              contentContainerStyle={{ paddingBottom: Spacing.xl }}
-              renderItem={({ item }) => {
-                const qty = getItemCartQty(item.id);
-                const isSelected = qty > 0;
-                return (
-                  <View style={[styles.manualAddItem, isSelected && styles.manualAddItemActive]}>
-                    <View style={{ flex: 1, marginRight: Spacing.sm }}>
-                      <Text style={styles.manualAddItemName} numberOfLines={1}>
-                        {isAr ? (item.name_ar || item.name) : (item.name_en || item.name)}
-                      </Text>
-                      <Text style={styles.manualAddItemSub}>
-                        {formatPrice(item.price)} · {t('dashboard.stock_label', 'المخزون')}: {item.stock_count}
-                      </Text>
-                    </View>
-
-                    {qty === 0 ? (
-                      <TouchableOpacity
-                        style={styles.manualAddPlusBtn}
-                        onPress={() => handleIncrementManualItem(item)}
-                        activeOpacity={0.7}
-                      >
-                        <Ionicons name="add-circle-outline" size={28} color={Colors.primary} />
-                      </TouchableOpacity>
-                    ) : (
-                      <View style={styles.manualItemStepper}>
-                        <TouchableOpacity
-                          style={styles.manualStepperBtn}
-                          onPress={() => handleDecrementManualItem(item.id)}
-                          activeOpacity={0.7}
-                        >
-                          <Ionicons name="remove-circle-outline" size={24} color={Colors.textSecondary} />
-                        </TouchableOpacity>
-                        <Text style={styles.manualStepperQty}>{qty}</Text>
-                        <TouchableOpacity
-                          style={styles.manualStepperBtn}
-                          onPress={() => handleIncrementManualItem(item)}
-                          activeOpacity={0.7}
-                        >
-                          <Ionicons name="add-circle" size={24} color={Colors.primary} />
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </View>
-                );
-              }}
-              ListEmptyComponent={
-                <View style={{ alignItems: 'center', paddingVertical: Spacing.xxxl }}>
-                  <Text style={{ color: Colors.textMuted, fontSize: 14 }}>
-                    {t('common.no_results', 'لا توجد نتائج')}
-                  </Text>
-                </View>
-              }
-            />
-          )}
-
-          {/* Sticky Bottom Cart Bar */}
-          {cartItems.length > 0 && (
-            <View style={styles.manualAddBottomBar}>
-              <View style={styles.manualAddCartInfo}>
-                <View style={styles.manualAddCartBadge}>
-                  <Text style={styles.manualAddCartBadgeText}>
-                    {cartItems.reduce((a, b) => a + b.quantity, 0)}
-                  </Text>
-                </View>
-                <Text style={styles.manualAddTotalText}>{formatPrice(calculateTotal())}</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.manualAddDoneBtn}
-                onPress={() => setManualAddVisible(false)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="checkmark-circle" size={18} color="#FFF" />
-                <Text style={styles.manualAddDoneBtnText}>{t('common.done', 'تم')}</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </SafeAreaView>
-      </Modal>
+        onClose={() => setManualAddVisible(false)}
+        items={inventoryItems}
+        loading={inventoryLoading}
+        getCartQty={getItemCartQty}
+        onIncrement={handleIncrementManualItem}
+        onDecrement={handleDecrementManualItem}
+        cartCount={cartItems.reduce((a, b) => a + b.quantity, 0)}
+        cartTotal={calculateTotal()}
+      />
     </View>
   );
 }

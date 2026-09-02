@@ -273,7 +273,7 @@ export default function RegisterScreen() {
         onPress={() => router.back()}
         activeOpacity={0.7}
       >
-        <Ionicons name="arrow-back" size={22} color={Colors.textSecondary} />
+        <Ionicons name={i18n.locale?.startsWith('ar') ? "arrow-forward" : "arrow-back"} size={22} color={Colors.textSecondary} />
       </TouchableOpacity>
 
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">

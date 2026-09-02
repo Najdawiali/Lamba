@@ -17,12 +17,14 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import {
-  getMyMarket, checkItemName, linkExistingItem, addNewItem,
-  uploadItemsCSV, getCategories, CatalogItemMatch
+  checkItemName, linkExistingItem, addNewItem,
+  uploadItemsCSV, getCategories, CatalogItemMatch, updateMarketItem,
 } from '../../services/api';
+import { useMarket } from '../../hooks/useMerchant';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
+import { resolveImageUrl } from '../../services/utils';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -32,9 +34,9 @@ export default function AddProductScreen() {
   const params = useLocalSearchParams<{ barcode?: string }>();
   const isAr = i18n.locale?.startsWith('ar');
   
-  // Market setup check
-  const [marketId, setMarketId] = useState<string | null>(null);
-  const [loadingMarket, setLoadingMarket] = useState(true);
+  // Market setup via hook
+  const { data: marketData, isLoading: loadingMarket } = useMarket();
+  const marketId = marketData?.id ?? null;
 
   // Full-width segmented control state ("new" is default)
   const [activeTab, setActiveTab] = useState<'new' | 'catalog' | 'bulk'>('new');
@@ -46,6 +48,7 @@ export default function AddProductScreen() {
   const [matches, setMatches] = useState<CatalogItemMatch[]>([]);
   const [selectedMatch, setSelectedMatch] = useState<CatalogItemMatch | null>(null);
   const [stockCount, setStockCount] = useState('10');
+  const [linkPrice, setLinkPrice] = useState('');
   const [barcode, setBarcode] = useState('');
   
   // Product / Service Toggle & Conditional Fields State
@@ -104,35 +107,20 @@ export default function AddProductScreen() {
   }, [categoriesTree, selectedCategory, listingType]);
 
   useEffect(() => {
+    if (marketData) {
+      setShops([marketData]);
+      setSelectedShopId(marketData.id);
+      setLoadingShops(false);
+    }
+  }, [marketData]);
+
+  useEffect(() => {
     (async () => {
       try {
-        const market = await getMyMarket();
-        setMarketId(market.id);
-        
-        // Load categories tree
         const cats = await getCategories();
         setCategoriesTree(cats);
-
-        // Load the merchant's market for CSV upload
-        try {
-          const myMarket = await getMyMarket();
-          const shopList = [myMarket];
-          setShops(shopList);
-          if (shopList.length > 0) {
-            setSelectedShopId(shopList[0].id);
-          }
-        } catch (err) {
-          // Non-blocking catch
-        }
-      } catch (err: any) {
-        Alert.alert(
-          t('addProduct.title', 'Market Required'),
-          t('onboarding.subtitle', 'You need to initialize your market before managing stocks.'),
-          [{ text: t('common.ok', 'OK'), onPress: () => router.replace('/(merchant)/onboarding') }]
-        );
-      } finally {
-        setLoadingMarket(false);
-        setLoadingShops(false);
+      } catch (err) {
+        console.warn('Failed to load categories tree:', err);
       }
     })();
   }, []);
@@ -168,6 +156,14 @@ export default function AddProductScreen() {
     setLoading(true);
     try {
       const resp = await linkExistingItem(selectedMatch.id, marketId, stockNum);
+      const priceNum = parseFloat(linkPrice);
+      if (!isNaN(priceNum) && priceNum > 0 && resp.market_item_id) {
+        try {
+          await updateMarketItem(resp.market_item_id, { price: priceNum });
+        } catch (priceErr) {
+          console.warn('Optional price update skipped or failed:', priceErr);
+        }
+      }
       if (resp.success) {
         Alert.alert(t('common.success', 'Success'), resp.message, [
           { text: t('common.ok', 'OK'), onPress: () => router.replace('/(merchant)/dashboard') }
@@ -318,12 +314,6 @@ export default function AddProductScreen() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const resolveImageUrl = (url: string | null): string | undefined => {
-    if (!url) return undefined;
-    if (url.startsWith('http')) return url;
-    return `${API_BASE_URL}${url}`;
   };
 
   const triggerNewForm = () => {
@@ -841,7 +831,7 @@ export default function AddProductScreen() {
                       <Text style={styles.configLabel}>{t('merchant.stock_status', 'Stock Availability')}</Text>
                       <View style={styles.chipRow}>
                         {[
-                          { key: 'available', label: t('common.available', 'Available') },
+                          { key: 'available', label: t('merchant.available', 'Available') },
                           { key: 'limited', label: t('merchant.limited', 'Limited') },
                           { key: 'out_of_stock', label: t('merchant.out_of_stock', 'Out of Stock') },
                         ].map(st => (
@@ -934,7 +924,7 @@ export default function AddProductScreen() {
 
                 {/* 8. Price (Shared) */}
                 <View style={styles.fieldGroup}>
-                  <Text style={styles.configLabel}>{t('merchant.selling_price_jod', 'Selling Price (JOD) *')}</Text>
+                  <Text style={styles.configLabel}>{t('addProduct.price_jod', 'Price (JOD)')}</Text>
                   <TextInput
                     style={styles.input}
                     keyboardType="decimal-pad"
@@ -1087,12 +1077,24 @@ export default function AddProductScreen() {
                   <Text style={styles.configHeading}>{t('inventory.in_stock', 'Link Stock Parameters')}</Text>
                   
                   <View style={styles.fieldGroup}>
-                    <Text style={styles.configLabel}>{t('inventory.in_stock', 'Initial Stock Count')}</Text>
+                    <Text style={styles.configLabel}>{t('merchant.stock_count', 'Initial Stock Count')}</Text>
                     <TextInput
                       style={styles.input}
                       keyboardType="numeric"
                       value={stockCount}
                       onChangeText={setStockCount}
+                    />
+                  </View>
+
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.configLabel}>{isAr ? 'السعر (دينار) (اختياري)' : 'Price (JOD) (Optional)'}</Text>
+                    <TextInput
+                      style={styles.input}
+                      keyboardType="decimal-pad"
+                      value={linkPrice}
+                      onChangeText={setLinkPrice}
+                      placeholder={isAr ? '0.00 (اختياري)' : '0.00 (Optional)'}
+                      placeholderTextColor={Colors.textMuted}
                     />
                   </View>
 

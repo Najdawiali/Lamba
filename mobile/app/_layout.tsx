@@ -18,20 +18,26 @@ import { setupCurrency } from '../services/currency';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
 import api from '../services/api';
 
-// Configure notification display
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+const isExpoGo = Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
+
+// Configure notification display (guarded for Expo Go)
+if (!isExpoGo || Platform.OS !== 'android') {
+  try {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  } catch {}
+}
 
 async function registerForPushNotifications() {
-  if (!Device.isDevice) {
-    console.log('Push notifications require a physical device');
+  if (isExpoGo || !Device.isDevice) {
+    console.log('Push notifications require a physical device & development build');
     return;
   }
 

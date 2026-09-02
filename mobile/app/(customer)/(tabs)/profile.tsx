@@ -15,178 +15,12 @@ import { getUser, saveUser, logout, getCustomerAlerts, AlertResponse, getMyStore
 import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
 import { useTheme, useThemeColors, ThemeMode } from '../../../context/ThemeContext';
 import { t, i18n, toggleLanguage, changeLanguage } from '../../../services/i18n';
+import { PRIVACY_POLICY_EN, PRIVACY_POLICY_AR, TERMS_OF_SERVICE_EN, TERMS_OF_SERVICE_AR } from '../../../constants/legal';
+import SectionHeader from '../../../components/SectionHeader';
+import Divider from '../../../components/Divider';
 import Constants from 'expo-constants';
 
-// ── Privacy Policy & Terms Content ────────────────────────────
-const PRIVACY_POLICY_EN = `Privacy Policy — Lamba App
-
-Last updated: August 2026
-
-1. Information We Collect
-We collect the following information when you use the Lamba app:
-- Account information: name, phone number, email
-- Location: to show nearby stores and products
-- Search history: to improve results and provide better suggestions
-- Messages: conversations between you and stores
-
-2. How We Use Your Information
-- Display products and services near your location
-- Improve search results based on your preferences
-- Send notifications when products you requested become available
-- Enable communication between buyers and sellers
-
-3. Information Sharing
-We do not sell your personal information to third parties. We may share:
-- Your approximate location with stores to calculate distance
-- Your contact information with stores you communicate with
-
-4. Data Protection
-We use SSL/TLS encryption to protect your data during transit and store passwords in encrypted form.
-
-5. Your Rights
-At any time, you can:
-- Request deletion of your account and data
-- Edit your personal information
-- Disable availability notifications
-
-6. Contact Us
-For privacy inquiries: privacy@lamba.app`;
-
-const PRIVACY_POLICY_AR = `سياسة الخصوصية - تطبيق لمبة
-
-آخر تحديث: أغسطس ٢٠٢٦
-
-١. المعلومات التي نجمعها
-نجمع المعلومات التالية عند استخدامك لتطبيق لمبة:
-- معلومات الحساب: الاسم، رقم الهاتف، البريد الإلكتروني
-- الموقع الجغرافي: لعرض المتاجر والمنتجات القريبة منك
-- سجل البحث: لتحسين نتائج البحث وتقديم اقتراحات أفضل
-- الرسائل: المحادثات بينك وبين المتاجر
-
-٢. كيف نستخدم معلوماتك
-- عرض المنتجات والخدمات القريبة من موقعك
-- تحسين نتائج البحث بناءً على تفضيلاتك
-- إرسال إشعارات عند توفر منتجات طلبتها
-- تمكين التواصل بين المشترين والبائعين
-
-٣. مشاركة المعلومات
-لا نبيع معلوماتك الشخصية لأطراف ثالثة. قد نشارك:
-- موقعك التقريبي مع المتاجر لحساب المسافة
-- معلومات الاتصال مع المتاجر التي تتواصل معها
-
-٤. حماية البيانات
-نستخدم تشفير SSL/TLS لحماية بياناتك أثناء النقل وتخزين كلمات المرور بشكل مشفر.
-
-٥. حقوقك
-يمكنك في أي وقت:
-- طلب حذف حسابك وبياناتك
-- تعديل معلوماتك الشخصية
-- إيقاف إشعارات التوفر
-
-٦. التواصل معنا
-للاستفسارات حول الخصوصية: privacy@lamba.app`;
-
-const TERMS_OF_SERVICE_EN = `Terms of Service — Lamba App
-
-Last updated: August 2026
-
-1. Acceptance of Terms
-By using the Lamba app, you agree to these terms.
-
-2. Service Description
-Lamba is a platform that connects buyers with local stores and service providers. We do not sell products directly — we provide a search and communication tool.
-
-3. User Accounts
-- Information provided must be accurate
-- You are responsible for maintaining the confidentiality of your account
-- You must be 16 years or older
-
-4. Seller Responsibilities
-- Product information and prices displayed are the seller's responsibility
-- Products and services offered must be legal
-- Lamba is not responsible for the quality of products or services
-
-5. Acceptable Use
-Prohibited:
-- Posting offensive or illegal content
-- Using the app for fraud
-- Collecting other users' data
-
-6. Disclaimer
-Lamba is an intermediary platform. We do not guarantee the accuracy of information provided by sellers and are not liable for any transactions between buyers and sellers.
-
-7. Modifications
-We reserve the right to modify these terms. You will be notified of any material changes.
-
-8. Contact
-support@lamba.app`;
-
-const TERMS_OF_SERVICE_AR = `شروط الخدمة - تطبيق لمبة
-
-آخر تحديث: أغسطس ٢٠٢٦
-
-١. القبول بالشروط
-باستخدامك لتطبيق لمبة، فإنك توافق على هذه الشروط.
-
-٢. وصف الخدمة
-لمبة منصة تربط المشترين بالمتاجر ومقدمي الخدمات المحلية. نحن لا نبيع منتجات مباشرة — نحن نوفر أداة البحث والتواصل.
-
-٣. حسابات المستخدمين
-- يجب أن تكون المعلومات المقدمة صحيحة
-- أنت مسؤول عن الحفاظ على سرية حسابك
-- يجب أن يكون عمرك ١٦ سنة أو أكثر
-
-٤. مسؤوليات البائعين
-- المعلومات والأسعار المعروضة هي مسؤولية البائع
-- يجب أن تكون المنتجات والخدمات المعروضة قانونية
-- لمبة غير مسؤولة عن جودة المنتجات أو الخدمات
-
-٥. الاستخدام المقبول
-يُحظر:
-- نشر محتوى مسيء أو غير قانوني
-- استخدام التطبيق للاحتيال
-- جمع بيانات المستخدمين الآخرين
-
-٦. إخلاء المسؤولية
-لمبة منصة وسيطة. لا نضمن دقة المعلومات المقدمة من البائعين ولا نتحمل مسؤولية أي معاملات بين المشترين والبائعين.
-
-٧. التعديلات
-نحتفظ بحق تعديل هذه الشروط. سيتم إشعارك بأي تغييرات جوهرية.
-
-٨. التواصل
-support@lamba.app`;
-
 // ── Sub-components for Grouped Layout ─────────────────────────
-const SectionHeader = ({ title }: { title: string }) => {
-  const Colors = useThemeColors();
-  return (
-    <Text style={{
-      color: Colors.textMuted,
-      fontSize: 12,
-      fontWeight: '600',
-      textAlign: 'right',
-      paddingHorizontal: 36,
-      paddingTop: 24,
-      paddingBottom: 8,
-      letterSpacing: 0.5,
-      textTransform: 'uppercase',
-    }}>
-      {title}
-    </Text>
-  );
-};
-
-const Divider = () => {
-  const Colors = useThemeColors();
-  return (
-    <View style={{
-      height: 0.5,
-      backgroundColor: Colors.border,
-      marginHorizontal: 20,
-    }} />
-  );
-};
-
 const MenuRow = ({
   icon,
   label,
@@ -280,6 +114,8 @@ export default function CustomerProfileScreen() {
   // Edit Profile state
   const [editProfileVisible, setEditProfileVisible] = useState(false);
   const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPhone, setEditPhone] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
 
   // Merchant Store detection state
@@ -351,21 +187,31 @@ export default function CustomerProfileScreen() {
   // ── Edit Profile ──────────────────────────────────────────────
   const handleOpenEditProfile = () => {
     setEditName(user?.full_name || '');
+    setEditEmail(user?.email || '');
+    setEditPhone(user?.phone_number || user?.phone || '');
     setEditProfileVisible(true);
   };
 
   const handleSaveProfile = async () => {
     const trimmedName = editName.trim();
+    const trimmedPhone = editPhone.trim();
     if (!trimmedName) {
-      Alert.alert(t('common.error', 'Error'), t('profile.edit_name_placeholder'));
+      Alert.alert(t('common.error', 'Error'), t('profile.edit_name_placeholder', 'يرجى إدخال اسمك'));
       return;
     }
     setSavingProfile(true);
     try {
       // Persist to backend server
-      await updateProfile({ full_name: trimmedName });
+      await updateProfile({
+        full_name: trimmedName,
+        phone_number: trimmedPhone || undefined,
+      });
       // Update local cache
-      const updatedUser = { ...user, full_name: trimmedName };
+      const updatedUser = {
+        ...user,
+        full_name: trimmedName,
+        phone_number: trimmedPhone || user?.phone_number,
+      };
       await saveUser(updatedUser);
       setUser(updatedUser);
       setEditProfileVisible(false);
@@ -375,7 +221,7 @@ export default function CustomerProfileScreen() {
       );
     } catch (err) {
       console.error('Failed to save profile:', err);
-      Alert.alert(t('common.error', 'Error'), t('profile.profile_update_failed'));
+      Alert.alert(t('common.error', 'Error'), t('profile.profile_update_failed', 'فشل حفظ التعديلات'));
     } finally {
       setSavingProfile(false);
     }
@@ -521,7 +367,7 @@ export default function CustomerProfileScreen() {
       color: Colors.textPrimary,
       borderWidth: 1,
       borderColor: Colors.border,
-      marginBottom: Spacing.xl,
+      marginBottom: Spacing.lg,
     },
     saveButton: {
       backgroundColor: Colors.primary,
@@ -529,6 +375,7 @@ export default function CustomerProfileScreen() {
       paddingVertical: Spacing.md,
       alignItems: 'center',
       justifyContent: 'center',
+      marginTop: Spacing.sm,
     },
     saveButtonText: {
       ...Typography.button,
@@ -681,7 +528,7 @@ export default function CustomerProfileScreen() {
         )}
 
         {/* === Section: الحساب (Account) === */}
-        <SectionHeader title="الحساب" />
+        <SectionHeader title={t('profile.section_account', 'Account')} />
         <View style={{
           backgroundColor: Colors.surface,
           marginHorizontal: 16,
@@ -705,7 +552,7 @@ export default function CustomerProfileScreen() {
         </View>
 
         {/* === Section: التطبيق (App Settings) === */}
-        <SectionHeader title="التطبيق" />
+        <SectionHeader title={t('profile.section_app', 'App')} />
         <View style={{
           backgroundColor: Colors.surface,
           marginHorizontal: 16,
@@ -724,13 +571,13 @@ export default function CustomerProfileScreen() {
           <MenuRow
             icon="color-palette-outline"
             label={t('profile.theme', 'المظهر')}
-            value={themeMode === 'dark' ? 'داكن' : themeMode === 'light' ? 'فاتح' : 'تلقائي'}
+            value={themeMode === 'dark' ? t('profile.theme_dark', 'Dark') : themeMode === 'light' ? t('profile.theme_light', 'Light') : t('profile.theme_system', 'System')}
             onPress={() => setThemeModalVisible(true)}
           />
         </View>
 
         {/* === Section: معلومات (Info) === */}
-        <SectionHeader title="معلومات" />
+        <SectionHeader title={t('profile.section_info', 'Info')} />
         <View style={{
           backgroundColor: Colors.surface,
           marginHorizontal: 16,
@@ -792,14 +639,14 @@ export default function CustomerProfileScreen() {
           marginBottom: 30,
           opacity: 0.8,
         }}>
-          لمبة v{Constants.expoConfig?.version || '1.0.0'} · محلي وآمن
+          {`Lamba v${Constants.expoConfig?.version || '1.0.0'} · ${t('profile.footer_tagline', 'Local & Secure')}`}
         </Text>
       </ScrollView>
 
       {/* ════════ MODAL: Edit Profile ════════ */}
       <Modal visible={editProfileVisible} animationType="slide" transparent onRequestClose={() => setEditProfileVisible(false)}>
         <View style={styles.modalOverlay}>
-          <SafeAreaView style={[styles.modalContainer, { height: '45%' }]}>
+          <SafeAreaView style={[styles.modalContainer, { height: '65%' }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{t('profile.edit_profile', 'تعديل الملف الشخصي')}</Text>
               <TouchableOpacity onPress={() => setEditProfileVisible(false)} style={styles.closeBtn}>
@@ -807,7 +654,8 @@ export default function CustomerProfileScreen() {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.editProfileBody}>
+            <ScrollView contentContainerStyle={styles.editProfileBody} keyboardShouldPersistTaps="handled">
+              {/* Full Name */}
               <Text style={styles.inputLabel}>{t('profile.edit_name', 'الاسم الكامل')}</Text>
               <TextInput
                 style={styles.textInput}
@@ -818,6 +666,30 @@ export default function CustomerProfileScreen() {
                 autoCapitalize="words"
                 autoCorrect={false}
                 maxLength={60}
+              />
+
+              {/* Email */}
+              <Text style={styles.inputLabel}>{t('common.email', 'البريد الإلكتروني')}</Text>
+              <TextInput
+                style={[styles.textInput, { opacity: 0.7 }]}
+                value={editEmail}
+                editable={false}
+                placeholder={t('auth.email_placeholder', 'example@domain.com')}
+                placeholderTextColor={Colors.textMuted}
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+
+              {/* Phone */}
+              <Text style={styles.inputLabel}>{t('profile.phone', 'رقم الهاتف')}</Text>
+              <TextInput
+                style={styles.textInput}
+                value={editPhone}
+                onChangeText={setEditPhone}
+                placeholder={t('profile.phone_placeholder', '07XXXXXXXX')}
+                placeholderTextColor={Colors.textMuted}
+                keyboardType="phone-pad"
+                maxLength={20}
               />
 
               <TouchableOpacity
@@ -832,7 +704,7 @@ export default function CustomerProfileScreen() {
                   <Text style={styles.saveButtonText}>{t('profile.save', 'حفظ')}</Text>
                 )}
               </TouchableOpacity>
-            </View>
+            </ScrollView>
           </SafeAreaView>
         </View>
       </Modal>
@@ -901,9 +773,9 @@ export default function CustomerProfileScreen() {
               {(['system', 'light', 'dark'] as ThemeMode[]).map((modeOption) => {
                 const isSelected = themeMode === modeOption;
                 const labels: Record<ThemeMode, string> = {
-                  system: 'تلقائي (حسب النظام)',
-                  light: 'فاتح',
-                  dark: 'داكن',
+                  system: t('profile.theme_system', 'System'),
+                  light: t('profile.theme_light', 'Light'),
+                  dark: t('profile.theme_dark', 'Dark'),
                 };
                 return (
                   <TouchableOpacity

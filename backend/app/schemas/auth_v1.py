@@ -44,6 +44,14 @@ class VerifyResponse(BaseModel):
     message: str
 
 
+class UnverifiedAccountResponse(BaseModel):
+    detail: str
+    user_id: uuid.UUID
+    channel: str
+    contact: str
+    user_type: str
+
+
 class SignInRequest(BaseModel):
     email_or_phone: str = Field(..., min_length=3)
     password: str

@@ -3,7 +3,7 @@
  * Complete CRUD management for store offers and promotions.
  */
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -24,15 +24,18 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  getOffers,
-  createOffer,
-  updateOffer,
-  deleteOffer,
-  getMarketItems,
   OfferResponse,
   OfferCreatePayload,
   MarketItemDashboardResponse,
 } from '../../services/api';
+import {
+  useMarketItems,
+  useOffers,
+  useCreateOffer,
+  useUpdateOffer,
+  useDeleteOffer,
+} from '../../hooks/useMerchant';
+import { useQueryClient } from '@tanstack/react-query';
 import { formatPrice } from '../../services/currency';
 import { t, i18n } from '../../services/i18n';
 import { useThemeColors } from '../../context/ThemeContext';
@@ -67,7 +70,7 @@ const OFFER_TYPES_CONFIG: Record<OfferTypeKey, OfferTypeMeta> = {
     key: 'fixed_amount',
     labelAr: 'تخفيض ثابت',
     labelEn: 'Fixed Discount',
-    subtitleAr: 'مثال: خصم 0.50 د.أ',
+    subtitleAr: 'مثال: خصم 0.50 دينار',
     subtitleEn: 'e.g. 0.50 JOD off',
     icon: 'cash-outline',
     color: '#6C63FF',
@@ -87,7 +90,7 @@ const OFFER_TYPES_CONFIG: Record<OfferTypeKey, OfferTypeMeta> = {
     key: 'quantity_price',
     labelAr: 'سعر الكمية',
     labelEn: 'Quantity Bundle',
-    subtitleAr: 'مثال: 3 بـ 5 د.أ',
+    subtitleAr: 'مثال: 3 بـ 5 دينار',
     subtitleEn: 'e.g. 3 for 5 JOD',
     icon: 'layers-outline',
     color: '#FF9800',
@@ -99,11 +102,16 @@ export default function MerchantOffersScreen() {
   const Colors = useThemeColors();
   const isAr = i18n.locale?.startsWith('ar');
 
-  // Main state
-  const [offers, setOffers] = useState<OfferResponse[]>([]);
-  const [products, setProducts] = useState<MarketItemDashboardResponse[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Query & Mutation hooks
+  const queryClient = useQueryClient();
+  const { data: offers = [], isLoading: offersLoading } = useOffers();
+  const { data: products = [], isLoading: productsLoading } = useMarketItems();
+  const loading = offersLoading || productsLoading;
   const [refreshing, setRefreshing] = useState(false);
+
+  const createOfferMutation = useCreateOffer();
+  const updateOfferMutation = useUpdateOffer();
+  const deleteOfferMutation = useDeleteOffer();
 
   // Create Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -123,42 +131,12 @@ export default function MerchantOffersScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [actionInProgressId, setActionInProgressId] = useState<string | null>(null);
 
-  // ── Load Offers ───────────────────────────────────────────────
-  const loadOffers = useCallback(async () => {
-    try {
-      const data = await getOffers();
-      setOffers(data || []);
-    } catch (err: any) {
-      console.error('Failed to load offers:', err);
-    }
-  }, []);
-
-  // ── Load Products (for offer creation) ────────────────────────
-  const loadProducts = useCallback(async () => {
-    try {
-      const items = await getMarketItems();
-      setProducts(items || []);
-    } catch (err: any) {
-      console.error('Failed to load market items:', err);
-    }
-  }, []);
-
-  // ── Initial Fetch ─────────────────────────────────────────────
-  useEffect(() => {
-    const init = async () => {
-      setLoading(true);
-      await Promise.all([loadOffers(), loadProducts()]);
-      setLoading(false);
-    };
-    init();
-  }, [loadOffers, loadProducts]);
-
   // ── Pull to Refresh ───────────────────────────────────────────
-  const onRefresh = useCallback(async () => {
+  const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadOffers(), loadProducts()]);
+    await queryClient.invalidateQueries({ queryKey: ['merchant'] });
     setRefreshing(false);
-  }, [loadOffers, loadProducts]);
+  };
 
   // ── Reset Create Form ─────────────────────────────────────────
   const resetCreateForm = () => {
@@ -179,9 +157,6 @@ export default function MerchantOffersScreen() {
   const openCreateModal = () => {
     resetCreateForm();
     setModalVisible(true);
-    if (products.length === 0) {
-      loadProducts();
-    }
   };
 
   const closeCreateModal = () => {
@@ -192,18 +167,13 @@ export default function MerchantOffersScreen() {
   // ── Toggle Active / Inactive ──────────────────────────────────
   const handleToggleActive = async (offer: OfferResponse) => {
     const newActive = !offer.is_active;
-    // Optimistic UI update
-    setOffers((prev) =>
-      prev.map((o) => (o.id === offer.id ? { ...o, is_active: newActive } : o))
-    );
     setActionInProgressId(offer.id);
     try {
-      await updateOffer(offer.id, { is_active: newActive });
+      await updateOfferMutation.mutateAsync({
+        offerId: offer.id,
+        payload: { is_active: newActive },
+      });
     } catch (err: any) {
-      // Revert on error
-      setOffers((prev) =>
-        prev.map((o) => (o.id === offer.id ? { ...o, is_active: !newActive } : o))
-      );
       Alert.alert(
         isAr ? 'خطأ' : 'Error',
         err?.response?.data?.detail ||
@@ -229,8 +199,7 @@ export default function MerchantOffersScreen() {
         onPress: async () => {
           setActionInProgressId(offer.id);
           try {
-            await deleteOffer(offer.id);
-            setOffers((prev) => prev.filter((o) => o.id !== offer.id));
+            await deleteOfferMutation.mutateAsync(offer.id);
           } catch (err: any) {
             Alert.alert(
               isAr ? 'خطأ' : 'Error',
@@ -337,9 +306,8 @@ export default function MerchantOffersScreen() {
 
     setSubmitting(true);
     try {
-      await createOffer(payload);
+      await createOfferMutation.mutateAsync(payload);
       closeCreateModal();
-      await loadOffers();
       Alert.alert(
         isAr ? 'تم بنجاح' : 'Success',
         isAr
@@ -368,7 +336,7 @@ export default function MerchantOffersScreen() {
           : `${offer.config?.percent ?? 0}% off`;
       case 'fixed_amount':
         return isAr
-          ? `خصم ${offer.config?.amount ?? 0} د.أ`
+          ? `خصم ${offer.config?.amount ?? 0} دينار`
           : `${offer.config?.amount ?? 0} JOD off`;
       case 'buy_x_get_y':
         return isAr
@@ -376,7 +344,7 @@ export default function MerchantOffersScreen() {
           : `Buy ${offer.config?.buy ?? 0} Get ${offer.config?.get ?? 0} Free`;
       case 'quantity_price':
         return isAr
-          ? `${offer.config?.quantity ?? 0} بـ ${offer.config?.price ?? 0} د.أ`
+          ? `${offer.config?.quantity ?? 0} بـ ${offer.config?.price ?? 0} دينار`
           : `${offer.config?.quantity ?? 0} for ${offer.config?.price ?? 0} JOD`;
       default:
         return '';
@@ -1006,7 +974,7 @@ export default function MerchantOffersScreen() {
                         { color: Colors.textPrimary, textAlign: isAr ? 'right' : 'left' },
                       ]}
                     >
-                      {isAr ? 'مبلغ الخصم (د.أ) *' : 'Discount Amount (JOD) *'}
+                      {isAr ? 'مبلغ الخصم (دينار) *' : 'Discount Amount (JOD) *'}
                     </Text>
                     <TextInput
                       style={[
@@ -1153,7 +1121,7 @@ export default function MerchantOffersScreen() {
                             { color: Colors.textPrimary, textAlign: isAr ? 'right' : 'left' },
                           ]}
                         >
-                          {isAr ? 'السعر الإجمالي (د.أ) *' : 'Total Bundle Price (JOD) *'}
+                          {isAr ? 'السعر الإجمالي (دينار) *' : 'Total Bundle Price (JOD) *'}
                         </Text>
                         <TextInput
                           style={[
@@ -1179,7 +1147,7 @@ export default function MerchantOffersScreen() {
                       <View style={[styles.previewBox, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
                         <Text style={[styles.previewValue, { color: OFFER_TYPES_CONFIG.quantity_price.color }]}>
                           {isAr
-                            ? `${quantityInput} قطع بـ ${priceInput} د.أ`
+                            ? `${quantityInput} قطع بـ ${priceInput} دينار`
                             : `${quantityInput} for ${priceInput} JOD`}
                         </Text>
                       </View>

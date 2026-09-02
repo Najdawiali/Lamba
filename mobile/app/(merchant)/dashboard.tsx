@@ -15,50 +15,54 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  getMyMarket, getMarketItems, toggleItemStock, updateMarketItem, updateMarketStatus,
-  getInventoryValue, getCheckoutHistory, logout, MarketResponse, MarketItemDashboardResponse,
-  HistoricalReceipt
+  toggleItemStock, updateMarketItem, logout,
+  MarketItemDashboardResponse,
 } from '../../services/api';
+import {
+  useMarket, useMarketItems, useInventoryValue, useCheckoutHistory,
+  useToggleStock, useUpdateItem, merchantKeys,
+} from '../../hooks/useMerchant';
+import { useQueryClient } from '@tanstack/react-query';
 import { Spacing, BorderRadius, Typography, Shadows, TAB_BAR_OVERFLOW } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
 import { t, toggleLanguage, i18n } from '../../services/i18n';
 import { resolveImageUrl } from '../../services/utils';
 import { formatPrice, getCurrencyCode } from '../../services/currency';
-
-const CATEGORY_AR_FALLBACK: Record<string, string> = {
-  'Food & Beverages': 'الأغذية والمشروبات',
-  'Home & Personal Care': 'العناية المنزلية والشخصية',
-  'Electronics & Tech': 'الإلكترونيات والتقنية',
-  'Home & Kitchen': 'المنزل والمطبخ',
-  'Services': 'الخدمات',
-  'Fruits & Vegetables': 'الخضار والفواكه',
-  'Cooking Essentials': 'مستلزمات الطبخ',
-  'Dairy & Eggs': 'الألبان والبيض',
-  'Meat & Poultry': 'اللحوم والدواجن',
-  'Beverages': 'المشروبات',
-  'Snacks': 'المأكولات الخفيفة',
-  'Bakery': 'المخبوزات',
-  'Frozen Food': 'الأطعمة المجمدة',
-  'Cleaning & Detergents': 'التنظيف المنزلي',
-  'Beauty & Personal Care': 'العناية الشخصية',
-  'Electronics': 'الإلكترونيات',
-  'Mobiles & Tech': 'الهواتف والتقنية',
-  'Cookware & Kitchenware': 'أدوات المطبخ',
-  'Beauty & Personal Care Services': 'خدمات التجميل والعناية الشخصية',
-  'Vehicle Maintenance & Care': 'صيانة وتغسيل السيارات',
-  'Home & Maintenance Services': 'خدمات وصيانة المنازل',
-  'Education & Tutoring': 'التعليم والدروس الخصوصية',
-};
+import { CATEGORY_AR_FALLBACK } from '../../constants/categories';
 
 export default function DashboardScreen() {
   const router = useRouter();
   const Colors = useThemeColors();
-  const [market, setMarket] = useState<MarketResponse | null>(null);
-  const [products, setProducts] = useState<MarketItemDashboardResponse[]>([]);
-  const [historyReceipts, setHistoryReceipts] = useState<HistoricalReceipt[]>([]);
-  const [totalAssetsValue, setTotalAssetsValue] = useState<number>(0);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+
+  // ── Server State (replaces manual useState + useEffect + loadData) ──
+  const {
+    data: market,
+    isLoading: marketLoading,
+    error: marketError,
+  } = useMarket({ refetchInterval: 15000 }); // replaces the 15s setInterval
+
+  const { data: products = [], isLoading: itemsLoading } = useMarketItems();
+  const { data: inventoryData } = useInventoryValue();
+  const { data: historyReceipts = [] } = useCheckoutHistory();
+
+  const totalAssetsValue = inventoryData?.total_value ?? 0;
+  const loading = marketLoading || itemsLoading;
   const [refreshing, setRefreshing] = useState(false);
+
+  const toggleStockMutation = useToggleStock();
+  const updateItemMutation = useUpdateItem();
+
+  // Navigate away on auth/setup errors
+  useEffect(() => {
+    if (!marketError) return;
+    const status = (marketError as any)?.response?.status;
+    if (status === 401 || status === 403) {
+      logout().then(() => router.replace('/(auth)/login'));
+    } else if (status === 404) {
+      router.replace('/(merchant)/onboarding');
+    }
+  }, [marketError, router]);
 
   // Edit Product Modal States
   const [selectedProduct, setSelectedProduct] = useState<MarketItemDashboardResponse | null>(null);
@@ -72,9 +76,6 @@ export default function DashboardScreen() {
   // Search & Filter States
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
-
-  const lastOpenState = React.useRef<boolean | null>(null);
-  const lastOverrideState = React.useRef<boolean | null>(null);
 
   const isAr = i18n.locale?.startsWith('ar');
 
@@ -149,126 +150,45 @@ export default function DashboardScreen() {
     };
   }, []);
 
+  // Track store status changes for toast notifications
+  const lastOpenState = React.useRef<boolean | null>(null);
+  const lastOverrideState = React.useRef<boolean | null>(null);
+
   useEffect(() => {
-    if (market) {
-      if (lastOpenState.current === null) {
-        lastOpenState.current = market.is_currently_open;
-        lastOverrideState.current = market.is_manual_override;
-      }
+    if (!market) return;
+    if (lastOpenState.current === null) {
+      // First load — just record state, don't notify
+      lastOpenState.current = market.is_currently_open;
+      lastOverrideState.current = market.is_manual_override;
+      return;
     }
-  }, [market]);
-
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        const freshMarket = await getMyMarket();
-        if (
-          lastOpenState.current !== null &&
-          freshMarket.is_currently_open !== lastOpenState.current &&
-          !freshMarket.is_manual_override &&
-          !lastOverrideState.current
-        ) {
-          const statusText = freshMarket.is_currently_open ? t('common.open') : t('common.closed');
-          showNotification(
-            'success',
-            t('common.store_status'),
-            `${t('common.status_updated_auto')} (${statusText})`
-          );
-        }
-        
-        lastOpenState.current = freshMarket.is_currently_open;
-        lastOverrideState.current = freshMarket.is_manual_override;
-        setMarket(freshMarket);
-      } catch (err) {
-        // Log background failures as a warning to avoid throwing full-screen developer crash overlays in Expo Go
-        console.warn('Background status check failed:', err);
-      }
-    }, 15000);
-    
-    return () => clearInterval(interval);
-  }, [showNotification]);
-
-  const loadData = useCallback(async () => {
-    try {
-      // 1. Fetch Market profile (Ticket 2.1)
-      const marketProfile = await getMyMarket();
-      setMarket(marketProfile);
-      
-      // 2. Fetch market products (Ticket 2.2)
-      const items = await getMarketItems();
-      setProducts(items);
-
-      // 3. Fetch inventory total assets value
-      try {
-        const valResp = await getInventoryValue();
-        setTotalAssetsValue(valResp.total_value);
-      } catch (valErr) {
-        console.warn('Failed to load inventory valuation:', valErr);
-      }
-
-      // 4. Fetch checkout history for sales analytics
-      try {
-        const historyData = await getCheckoutHistory();
-        setHistoryReceipts(historyData);
-      } catch (histErr) {
-        console.warn('Failed to load transaction history for stats:', histErr);
-      }
-    } catch (err: any) {
-      // If user is not authenticated or not a merchant, redirect to login
-      if (err?.response?.status === 401 || err?.response?.status === 403) {
-        await logout();
-        router.replace('/(auth)/login');
-        return;
-      }
-      
-      console.warn('Failed to load merchant data:', err);
-      // Redirection Hook: if 404 is received, merchant lacks store parameters!
-      if (err?.response?.status === 404) {
-        router.replace('/(merchant)/onboarding');
-      } else {
-        Alert.alert(
-          t('common.error', 'خطأ في الاتصال'),
-          isAr ? 'تعذر المزامنة مع الخادم المحلي. اسحب للأسفل للتحديث.' : 'Could not sync with local server. Swipe down to refresh.'
-        );
-      }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+    if (
+      market.is_currently_open !== lastOpenState.current &&
+      !market.is_manual_override &&
+      !lastOverrideState.current
+    ) {
+      const statusText = market.is_currently_open ? t('common.open') : t('common.closed');
+      showNotification('success', t('common.store_status'), `${t('common.status_updated_auto')} (${statusText})`);
     }
-  }, [isAr, router]);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+    lastOpenState.current = market.is_currently_open;
+    lastOverrideState.current = market.is_manual_override;
+  }, [market, showNotification]);
 
   const handleToggleStock = async (itemId: string, currentStatus: boolean) => {
+    const newStatus = !currentStatus;
+    if (newStatus) {
+      // Toggling ON → open edit modal so merchant enters real stock count
+      Keyboard.dismiss();
+      const product = products.find(p => p.id === itemId);
+      if (product) {
+        setTimeout(() => handleOpenEdit(product), 300);
+      }
+      return;
+    }
+    // Toggling OFF → set stock to 0
     try {
-      const newStatus = !currentStatus;
-
-      if (!newStatus) {
-        // Toggling OFF → set stock to 0
-        await toggleItemStock(itemId, false);
-        await updateMarketItem(itemId, { stock_count: 0 });
-
-        setProducts(prev => prev.map(p =>
-          p.id === itemId ? { ...p, in_stock: false, stock_count: 0 } : p
-        ));
-      } else {
-        // Toggling ON → open edit modal so merchant enters real stock count
-        Keyboard.dismiss();
-        const product = products.find(p => p.id === itemId);
-        if (product) {
-          setTimeout(() => handleOpenEdit(product), 300);
-        }
-        return; // Don't toggle yet — let the modal save handle it
-      }
-
-      try {
-        const valResp = await getInventoryValue();
-        setTotalAssetsValue(valResp.total_value);
-      } catch (valErr) {
-        console.warn('Failed to refresh inventory value:', valErr);
-      }
+      await toggleStockMutation.mutateAsync({ itemId, inStock: false });
+      await updateItemMutation.mutateAsync({ itemId, updates: { stock_count: 0 } });
     } catch (err) {
       Alert.alert(t('common.error'), isAr ? 'فشل تغيير حالة توفر المنتج بالمخزون.' : 'Failed to toggle product stock status.');
     }
@@ -300,33 +220,21 @@ export default function DashboardScreen() {
     }
     setSavingEdit(true);
     try {
-      const updated = await updateMarketItem(selectedProduct.id, {
-        name: editName.trim(),
-        stock_count: stockVal,
-        price: priceVal,
+      const updated = await updateItemMutation.mutateAsync({
+        itemId: selectedProduct.id,
+        updates: { name: editName.trim(), stock_count: stockVal, price: priceVal },
       });
       // If item was out of stock and we're setting a new count, toggle it back on
-      if (!selectedProduct.in_stock && updated.stock_count > 0) {
-        await toggleItemStock(selectedProduct.id, true);
-        updated.in_stock = true;
+      if (!selectedProduct.in_stock && stockVal > 0) {
+        await toggleStockMutation.mutateAsync({ itemId: selectedProduct.id, inStock: true });
       }
-      setProducts(prev => prev.map(p => p.id === selectedProduct.id ? updated : p));
       setEditModalVisible(false);
       setSelectedProduct(null);
-
-      // Refresh inventory valuation
-      try {
-        const valResp = await getInventoryValue();
-        setTotalAssetsValue(valResp.total_value);
-      } catch (valErr) {
-        console.warn('Failed to refresh inventory value:', valErr);
-      }
     } catch (err: any) {
-      console.error('Failed to update item details:', err?.response?.data || err);
       const detailMsg = err?.response?.data?.detail;
       Alert.alert(
         t('common.error'),
-        detailMsg || (isAr ? 'تعذر حفظ تعديلات المنتج. يرجى التحقق من الاتصال والمحاولة مجدداً.' : 'Could not update item details. Please check connection and try again.')
+        detailMsg || (isAr ? 'تعذر حفظ تعديلات المنتج.' : 'Could not update item details.')
       );
     } finally {
       setSavingEdit(false);
@@ -552,7 +460,7 @@ export default function DashboardScreen() {
   },
   filterRowContent: {
     paddingHorizontal: Spacing.xl,
-    paddingRight: Spacing.xxxl,
+    paddingEnd: Spacing.xxxl,
     gap: 0,
     alignItems: 'stretch',
   },
@@ -589,11 +497,11 @@ export default function DashboardScreen() {
     borderRadius: BorderRadius.sm,
     backgroundColor: '#1E2040',
     overflow: 'hidden',
-    marginRight: Spacing.lg,
+    marginEnd: Spacing.lg,
   },
   productImage: { width: '100%', height: '100%' },
   placeholderIconWrapper: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  productInfo: { flex: 1, marginRight: Spacing.md },
+  productInfo: { flex: 1, marginEnd: Spacing.md },
   productName: { fontSize: 17, fontWeight: '600', color: Colors.textPrimary },
   categoryLabel: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
   stockCountText: { fontSize: 13, color: Colors.textSecondary, marginTop: 2 },
@@ -832,7 +740,7 @@ export default function DashboardScreen() {
     marginTop: 2,
   },
   toastCloseBtn: {
-    marginLeft: Spacing.xs,
+    marginStart: Spacing.xs,
     padding: Spacing.xs,
   },
   scannerIconButton: {
@@ -1181,7 +1089,11 @@ export default function DashboardScreen() {
         refreshControl={
           <RefreshControl 
             refreshing={refreshing} 
-            onRefresh={() => { setRefreshing(true); loadData(); }}
+            onRefresh={async () => {
+              setRefreshing(true);
+              await queryClient.invalidateQueries({ queryKey: ['merchant'] });
+              setRefreshing(false);
+            }}
             tintColor={Colors.secondary} 
           />
         }
@@ -1334,11 +1246,11 @@ export default function DashboardScreen() {
                 </View>
 
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.inputLabel}>{t('dashboard.price_cost', isAr ? 'السعر/التكلفة (د.أ)' : 'Price/Cost (JOD)')}</Text>
+                  <Text style={styles.inputLabel}>{t('dashboard.price_cost', isAr ? 'السعر/التكلفة (دينار)' : 'Price/Cost (JOD)')}</Text>
                   <View style={styles.modalInputWrapper}>
                     <TextInput
                       style={styles.modalInput}
-                      placeholder={t('dashboard.price_cost', isAr ? 'السعر/التكلفة (د.أ)' : 'Price/Cost (JOD)')}
+                      placeholder={t('dashboard.price_cost', isAr ? 'السعر/التكلفة (دينار)' : 'Price/Cost (JOD)')}
                       placeholderTextColor={Colors.textMuted}
                       value={editPrice}
                       onChangeText={setEditPrice}

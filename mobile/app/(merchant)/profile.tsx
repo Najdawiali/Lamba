@@ -15,189 +15,28 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import {
-  getUser, getMyMarket, logout, MarketResponse,
-  getInventoryValue, getCheckoutHistory, getMarketItems, updateMarketStatus,
-  HistoricalReceipt,
+  getUser, logout,
   getMarketProfile, updateMarketProfile, updateEmployees,
-  MarketProfileResponse, MarketProfileUpdatePayload
+  MarketProfileResponse, MarketProfileUpdatePayload,
 } from '../../services/api';
+import {
+  useMarket, useMarketItems, useInventoryValue, useCheckoutHistory,
+  useUpdateMarketStatus, merchantKeys,
+} from '../../hooks/useMerchant';
+import { useQueryClient } from '@tanstack/react-query';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useTheme, useThemeColors, ThemeMode } from '../../context/ThemeContext';
 import { t, i18n, changeLanguage } from '../../services/i18n';
 import { formatPrice } from '../../services/currency';
+import { PRIVACY_POLICY_EN, PRIVACY_POLICY_AR, TERMS_OF_SERVICE_EN, TERMS_OF_SERVICE_AR } from '../../constants/legal';
+import SectionHeader from '../../components/SectionHeader';
+import Divider from '../../components/Divider';
+import LegalModal from '../../components/LegalModal';
+import PickerModal from '../../components/PickerModal';
+import EmployeesModal from '../../components/EmployeesModal';
 import Constants from 'expo-constants';
 
-// ── Privacy Policy & Terms Content ────────────────────────────
-const PRIVACY_POLICY_EN = `Privacy Policy — Lamba App
-
-Last updated: August 2026
-
-1. Information We Collect
-We collect the following information when you use the Lamba app:
-- Account information: name, phone number, email
-- Location: to show nearby stores and products
-- Search history: to improve results and provide better suggestions
-- Messages: conversations between you and stores
-
-2. How We Use Your Information
-- Display products and services near your location
-- Improve search results based on your preferences
-- Send notifications when products you requested become available
-- Enable communication between buyers and sellers
-
-3. Information Sharing
-We do not sell your personal information to third parties. We may share:
-- Your approximate location with stores to calculate distance
-- Your contact information with stores you communicate with
-
-4. Data Protection
-We use SSL/TLS encryption to protect your data during transit and store passwords in encrypted form.
-
-5. Your Rights
-At any time, you can:
-- Request deletion of your account and data
-- Edit your personal information
-- Disable availability notifications
-
-6. Contact Us
-For privacy inquiries: privacy@lamba.app`;
-
-const PRIVACY_POLICY_AR = `سياسة الخصوصية - تطبيق لمبة
-
-آخر تحديث: أغسطس ٢٠٢٦
-
-١. المعلومات التي نجمعها
-نجمع المعلومات التالية عند استخدامك لتطبيق لمبة:
-- معلومات الحساب: الاسم، رقم الهاتف، البريد الإلكتروني
-- الموقع الجغرافي: لعرض المتاجر والمنتجات القريبة منك
-- سجل البحث: لتحسين نتائج البحث وتقديم اقتراحات أفضل
-- الرسائل: المحادثات بينك وبين المتاجر
-
-٢. كيف نستخدم معلوماتك
-- عرض المنتجات والخدمات القريبة من موقعك
-- تحسين نتائج البحث بناءً على تفضيلاتك
-- إرسال إشعارات عند توفر منتجات طلبتها
-- تمكين التواصل بين المشترين والبائعين
-
-٣. مشاركة المعلومات
-لا نبيع معلوماتك الشخصية لأطراف ثالثة. قد نشارك:
-- موقعك التقريبي مع المتاجر لحساب المسافة
-- معلومات الاتصال مع المتاجر التي تتواصل معها
-
-٤. حماية البيانات
-نستخدم تشفير SSL/TLS لحماية بياناتك أثناء النقل وتخزين كلمات المرور بشكل مشفر.
-
-٥. حقوقك
-يمكنك في أي وقت:
-- طلب حذف حسابك وبياناتك
-- تعديل معلوماتك الشخصية
-- إيقاف إشعارات التوفر
-
-٦. التواصل معنا
-للاستفسارات حول الخصوصية: privacy@lamba.app`;
-
-const TERMS_OF_SERVICE_EN = `Terms of Service — Lamba App
-
-Last updated: August 2026
-
-1. Acceptance of Terms
-By using the Lamba app, you agree to these terms.
-
-2. Service Description
-Lamba is a platform that connects buyers with local stores and service providers. We do not sell products directly — we provide a search and communication tool.
-
-3. User Accounts
-- Information provided must be accurate
-- You are responsible for maintaining the confidentiality of your account
-- You must be 16 years or older
-
-4. Seller Responsibilities
-- Product information and prices displayed are the seller's responsibility
-- Products and services offered must be legal
-- Lamba is not responsible for the quality of products or services
-
-5. Acceptable Use
-Prohibited:
-- Posting offensive or illegal content
-- Using the app for fraud
-- Collecting other users' data
-
-6. Disclaimer
-Lamba is an intermediary platform. We do not guarantee the accuracy of information provided by sellers and are not liable for any transactions between buyers and sellers.
-
-7. Modifications
-We reserve the right to modify these terms. You will be notified of any material changes.
-
-8. Contact
-support@lamba.app`;
-
-const TERMS_OF_SERVICE_AR = `شروط الخدمة - تطبيق لمبة
-
-آخر تحديث: أغسطس ٢٠٢٦
-
-١. القبول بالشروط
-باستخدامك لتطبيق لمبة، فإنك توافق على هذه الشروط.
-
-٢. وصف الخدمة
-لمبة منصة تربط المشترين بالمتاجر ومقدمي الخدمات المحلية. نحن لا نبيع منتجات مباشرة — نحن نوفر أداة البحث والتواصل.
-
-٣. حسابات المستخدمين
-- يجب أن تكون المعلومات المقدمة صحيحة
-- أنت مسؤول عن الحفاظ على سرية حسابك
-- يجب أن يكون عمرك ١٦ سنة أو أكثر
-
-٤. مسؤوليات البائعين
-- المعلومات والأسعار المعروضة هي مسؤولية البائع
-- يجب أن تكون المنتجات والخدمات المعروضة قانونية
-- لمبة غير مسؤولة عن جودة المنتجات أو الخدمات
-
-٥. الاستخدام المقبول
-يُحظر:
-- نشر محتوى مسيء أو غير قانوني
-- استخدام التطبيق للاحتيال
-- جمع بيانات المستخدمين الآخرين
-
-٦. إخلاء المسؤولية
-لمبة منصة وسيطة. لا نضمن دقة المعلومات المقدمة من البائعين ولا نتحمل مسؤولية أي معاملات بين المشترين والبائعين.
-
-٧. التعديلات
-نحتفظ بحق تعديل هذه الشروط. سيتم إشعارك بأي تغييرات جوهرية.
-
-٨. التواصل
-support@lamba.app`;
-
 // ── Sub-components for Grouped Layout ─────────────────────────
-const SectionHeader = ({ title }: { title: string }) => {
-  const Colors = useThemeColors();
-  const isAr = i18n.locale.includes('ar');
-  return (
-    <Text style={{
-      color: Colors.textMuted,
-      fontSize: 12,
-      fontWeight: '600',
-      textAlign: isAr ? 'right' : 'left',
-      paddingHorizontal: 20,
-      paddingTop: 24,
-      paddingBottom: 8,
-      letterSpacing: 0.5,
-      textTransform: 'uppercase',
-    }}>
-      {title}
-    </Text>
-  );
-};
-
-const Divider = () => {
-  const Colors = useThemeColors();
-  return (
-    <View style={{
-      height: 0.5,
-      backgroundColor: Colors.border,
-      marginHorizontal: 20,
-    }} />
-  );
-};
-
 const MenuRow = ({
   icon,
   label,
@@ -313,9 +152,19 @@ export default function MerchantProfileScreen() {
   const Colors = useThemeColors();
   const { mode: themeMode, setMode } = useTheme();
   const [user, setUser] = useState<any>(null);
-  const [market, setMarket] = useState<MarketResponse | null>(null);
-  const [loadingMarket, setLoadingMarket] = useState(true);
   const isAr = i18n.locale.includes('ar');
+
+  // React Query merchant hooks
+  const queryClient = useQueryClient();
+  const { data: market, isLoading: loadingMarket } = useMarket();
+  const { data: products = [] } = useMarketItems();
+  const { data: inventoryData } = useInventoryValue();
+  const { data: historyReceipts = [] } = useCheckoutHistory();
+  const updateStatusMutation = useUpdateMarketStatus();
+
+  const totalAssetsValue = inventoryData?.total_value ?? 0;
+  const totalProducts = products.length;
+  const inStockCount = products.filter(p => p.in_stock).length;
 
   // Market Profile & Lock States
   const [profileData, setProfileData] = useState<MarketProfileResponse | null>(null);
@@ -329,16 +178,10 @@ export default function MerchantProfileScreen() {
 
   // Employees states
   const [employeeList, setEmployeeList] = useState<string[]>([]);
-  const [newEmployeeName, setNewEmployeeName] = useState('');
   const [savingEmployees, setSavingEmployees] = useState(false);
 
   // Relocated Analytics & Status States
   const [analyticsVisible, setAnalyticsVisible] = useState(false);
-  const [totalAssetsValue, setTotalAssetsValue] = useState<number>(0);
-  const [historyReceipts, setHistoryReceipts] = useState<HistoricalReceipt[]>([]);
-  const [totalProducts, setTotalProducts] = useState<number>(0);
-  const [inStockCount, setInStockCount] = useState<number>(0);
-  const [loadingStats, setLoadingStats] = useState(false);
   const [refreshingStats, setRefreshingStats] = useState(false);
 
   // Modals state
@@ -356,47 +199,6 @@ export default function MerchantProfileScreen() {
       console.warn('Failed to load market profile:', err);
     }
   }, []);
-
-  const loadAnalyticsData = useCallback(async () => {
-    try {
-      setLoadingStats(true);
-      const freshMarket = await getMyMarket();
-      setMarket(freshMarket);
-
-      try {
-        const valResp = await getInventoryValue();
-        setTotalAssetsValue(valResp.total_value);
-      } catch (valErr) {
-        console.warn('Failed to load inventory valuation in profile:', valErr);
-      }
-
-      try {
-        const historyData = await getCheckoutHistory();
-        setHistoryReceipts(historyData);
-      } catch (histErr) {
-        console.warn('Failed to load transaction history in profile:', histErr);
-      }
-
-      try {
-        const items = await getMarketItems();
-        setTotalProducts(items.length);
-        setInStockCount(items.filter((p: any) => p.in_stock).length);
-      } catch (itemsErr) {
-        console.warn('Failed to load products list count in profile:', itemsErr);
-      }
-    } catch (err) {
-      console.warn('Failed to load analytics in profile:', err);
-    } finally {
-      setLoadingStats(false);
-      setRefreshingStats(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (analyticsVisible) {
-      loadAnalyticsData();
-    }
-  }, [analyticsVisible, loadAnalyticsData]);
 
   const stats = useMemo(() => {
     const todayStr = new Date().toISOString().substring(0, 10);
@@ -504,15 +306,6 @@ export default function MerchantProfileScreen() {
         console.error('Failed to get user data:', err);
       }
 
-      try {
-        const marketData = await getMyMarket();
-        setMarket(marketData);
-      } catch {
-        // No market set up yet
-      } finally {
-        setLoadingMarket(false);
-      }
-
       await loadProfileData();
     })();
   }, [loadProfileData]);
@@ -590,8 +383,7 @@ export default function MerchantProfileScreen() {
       setProfileData(updated);
 
       // Also refresh market state for the header display
-      const freshMarket = await getMyMarket();
-      setMarket(freshMarket);
+      await queryClient.invalidateQueries({ queryKey: merchantKeys.market });
 
       setEditField(null);
     } catch (err: any) {
@@ -644,35 +436,6 @@ export default function MerchantProfileScreen() {
     }
   };
 
-  // Employee Add Handler
-  const handleAddEmployee = async () => {
-    const trimmed = newEmployeeName.trim();
-    if (!trimmed) {
-      Alert.alert(
-        isAr ? 'تنبيه' : 'Alert',
-        isAr ? 'يرجى إدخال اسم الموظف' : 'Please enter employee name'
-      );
-      return;
-    }
-    const updated = [...employeeList, trimmed];
-    setEmployeeList(updated);
-    setNewEmployeeName('');
-    setSavingEmployees(true);
-    try {
-      const res = await updateEmployees(updated);
-      setProfileData(res);
-      setEmployeeList(res.employees || updated);
-    } catch (err: any) {
-      Alert.alert(
-        t('common.error', 'خطأ'),
-        isAr ? 'فشل إضافة الموظف' : 'Failed to add employee'
-      );
-      setEmployeeList(profileData?.employees || []);
-    } finally {
-      setSavingEmployees(false);
-    }
-  };
-
   // Employee Delete Handler
   const handleDeleteEmployee = async (index: number) => {
     if (employeeList.length <= 1) {
@@ -690,6 +453,7 @@ export default function MerchantProfileScreen() {
       const res = await updateEmployees(updated);
       setProfileData(res);
       setEmployeeList(res.employees || updated);
+      await queryClient.invalidateQueries({ queryKey: merchantKeys.market });
     } catch (err: any) {
       Alert.alert(
         t('common.error', 'خطأ'),
@@ -727,65 +491,6 @@ export default function MerchantProfileScreen() {
     container: {
       flex: 1,
       backgroundColor: Colors.background,
-    },
-    // Modals styling (shared)
-    modalOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(10, 10, 26, 0.65)',
-      justifyContent: 'flex-end',
-    },
-    modalContainer: {
-      height: '75%',
-      backgroundColor: Colors.background,
-      borderTopLeftRadius: BorderRadius.xl,
-      borderTopRightRadius: BorderRadius.xl,
-      borderWidth: 1,
-      borderColor: Colors.border,
-    },
-    fullScreenModalContainer: {
-      flex: 1,
-      backgroundColor: Colors.background,
-    },
-    modalHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      padding: Spacing.xl,
-      borderBottomWidth: 1,
-      borderColor: Colors.border,
-    },
-    modalTitle: {
-      ...Typography.h2,
-      color: Colors.textPrimary,
-    },
-    closeBtn: {
-      padding: Spacing.xs,
-    },
-    legalBody: {
-      padding: Spacing.xl,
-      paddingBottom: Spacing.xxxl,
-    },
-    legalText: {
-      ...Typography.body,
-      color: Colors.textSecondary,
-      lineHeight: 22,
-    },
-    themeOption: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingVertical: Spacing.md,
-      paddingHorizontal: Spacing.xl,
-      borderRadius: BorderRadius.lg,
-      backgroundColor: Colors.surfaceElevated,
-      marginBottom: Spacing.md,
-      borderWidth: 1,
-      borderColor: Colors.border,
-    },
-    themeOptionText: {
-      ...Typography.body,
-      color: Colors.textPrimary,
-      fontWeight: '600',
     },
 
     // Inline Edit Bottom Sheet styles
@@ -896,88 +601,6 @@ export default function MerchantProfileScreen() {
       fontWeight: '500',
     },
 
-    // Employees modal styles
-    employeeAddRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Spacing.sm,
-      padding: Spacing.xl,
-      borderBottomWidth: 1,
-      borderColor: Colors.border,
-    },
-    employeeInput: {
-      flex: 1,
-      backgroundColor: Colors.surfaceElevated,
-      borderRadius: BorderRadius.lg,
-      paddingHorizontal: Spacing.lg,
-      paddingVertical: 12,
-      color: Colors.textPrimary,
-      fontSize: 15,
-      borderWidth: 1,
-      borderColor: Colors.border,
-      textAlign: isAr ? 'right' : 'left',
-    },
-    employeeAddBtn: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      backgroundColor: Colors.secondary,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    employeeList: {
-      padding: Spacing.xl,
-    },
-    employeeItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      backgroundColor: Colors.surface,
-      borderRadius: BorderRadius.lg,
-      paddingVertical: Spacing.md,
-      paddingHorizontal: Spacing.lg,
-      marginBottom: Spacing.sm,
-      borderWidth: 1,
-      borderColor: Colors.border,
-    },
-    employeeItemInner: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Spacing.md,
-      flex: 1,
-    },
-    employeeAvatarBox: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      backgroundColor: 'rgba(0, 217, 166, 0.12)',
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    employeeNameText: {
-      ...Typography.body,
-      color: Colors.textPrimary,
-      fontWeight: '600',
-    },
-    employeeDeleteBtn: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      backgroundColor: 'rgba(255, 77, 106, 0.1)',
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    emptyEmployees: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 60,
-      gap: Spacing.sm,
-    },
-    emptyEmployeesText: {
-      ...Typography.body,
-      color: Colors.textMuted,
-    },
-
     // Analytics Modal Specific
     analyticsModalContainer: {
       flex: 1,
@@ -1024,14 +647,6 @@ export default function MerchantProfileScreen() {
       borderColor: Colors.border,
       ...Shadows.small,
     },
-    statusCardHeader: {
-      marginBottom: Spacing.md,
-    },
-    statusCardTitleRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Spacing.sm,
-    },
     statusCardTitle: {
       ...Typography.body,
       color: Colors.textPrimary,
@@ -1044,49 +659,6 @@ export default function MerchantProfileScreen() {
       ...Typography.caption,
       color: Colors.textMuted,
       marginTop: 2,
-    },
-    segmentedContainer: {
-      flexDirection: 'row',
-      backgroundColor: Colors.surfaceElevated,
-      borderRadius: BorderRadius.md,
-      padding: 3,
-      gap: 3,
-    },
-    segmentBtn: {
-      flex: 1,
-      paddingVertical: Spacing.sm + 2,
-      paddingHorizontal: Spacing.sm,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderRadius: BorderRadius.md - 3,
-    },
-    segmentBtnActive: {
-      backgroundColor: Colors.surface,
-      ...Shadows.small,
-    },
-    segmentText: {
-      fontSize: 12,
-      lineHeight: 16,
-      color: Colors.textSecondary,
-      fontWeight: '600',
-      textAlign: 'center',
-    },
-    segmentTextActive: {
-      color: Colors.primary,
-      fontWeight: '700',
-    },
-    manualSwitchRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginTop: Spacing.md,
-      paddingTop: Spacing.sm,
-      borderTopWidth: 1,
-      borderColor: Colors.border,
-    },
-    manualSwitchLabel: {
-      ...Typography.caption,
-      color: Colors.textSecondary,
     },
     statusDot: {
       width: 10,
@@ -1131,169 +703,6 @@ export default function MerchantProfileScreen() {
       ...Typography.h2,
       color: Colors.textPrimary,
       fontWeight: '800',
-      marginTop: 2,
-    },
-    lowStockWarningCard: {
-      marginHorizontal: Spacing.lg,
-      marginBottom: Spacing.md,
-      borderRadius: BorderRadius.xl,
-      overflow: 'hidden',
-      borderWidth: 1,
-      borderColor: Colors.errorBorder,
-      backgroundColor: Colors.surface,
-      ...Shadows.small,
-    },
-    lowStockInner: {
-      flexDirection: 'row',
-      padding: Spacing.lg,
-      alignItems: 'center',
-      gap: Spacing.md,
-    },
-    lowStockIconWrapper: {
-      width: 40,
-      height: 40,
-      borderRadius: 12,
-      backgroundColor: Colors.errorBg,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    lowStockTextWrapper: {
-      flex: 1,
-    },
-    lowStockLabel: {
-      fontSize: 14,
-      color: Colors.error,
-      fontWeight: '700',
-    },
-    lowStockSubText: {
-      fontSize: 12,
-      color: Colors.textSecondary,
-      fontWeight: '400',
-      marginTop: 2,
-    },
-    analyticsCard: {
-      marginHorizontal: Spacing.lg,
-      marginBottom: Spacing.md,
-      borderRadius: BorderRadius.xl,
-      borderWidth: 1,
-      borderColor: Colors.border,
-      backgroundColor: Colors.surface,
-      padding: Spacing.lg,
-      ...Shadows.small,
-    },
-    analyticsHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Spacing.sm,
-      marginBottom: Spacing.sm,
-    },
-    analyticsTitle: {
-      ...Typography.body,
-      fontWeight: '700',
-      color: Colors.textPrimary,
-    },
-    analyticsDivider: {
-      height: 1,
-      backgroundColor: Colors.border,
-      marginBottom: Spacing.md,
-    },
-    trendRows: {
-      gap: Spacing.sm,
-      marginBottom: Spacing.md,
-    },
-    trendRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-    },
-    trendLabelCol: {
-      flex: 1,
-    },
-    trendLabel: {
-      ...Typography.caption,
-      color: Colors.textMuted,
-      fontWeight: '700',
-      letterSpacing: 0.5,
-    },
-    trendVal: {
-      ...Typography.body,
-      fontWeight: '700',
-      color: Colors.textPrimary,
-      marginTop: 2,
-    },
-    trendBadge: {
-      flexDirection: 'row',
-      borderRadius: BorderRadius.sm,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      alignItems: 'center',
-      gap: 4,
-      borderWidth: 1,
-    },
-    trendBadgeUp: {
-      backgroundColor: 'rgba(0, 217, 126, 0.08)',
-      borderColor: 'rgba(0, 217, 126, 0.25)',
-    },
-    trendBadgeDown: {
-      backgroundColor: 'rgba(255, 77, 106, 0.08)',
-      borderColor: 'rgba(255, 77, 106, 0.25)',
-    },
-    trendBadgeText: {
-      fontSize: 11,
-      fontWeight: '700',
-    },
-    trendRowDivider: {
-      height: 1,
-      backgroundColor: 'rgba(255, 255, 255, 0.02)',
-    },
-    insightsBox: {
-      backgroundColor: 'rgba(108, 99, 255, 0.05)',
-      borderRadius: BorderRadius.md,
-      borderWidth: 1,
-      borderColor: 'rgba(108, 99, 255, 0.15)',
-      padding: Spacing.md,
-      marginTop: Spacing.xs,
-    },
-    insightsHeaderRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      marginBottom: 6,
-    },
-    insightsHeaderTitle: {
-      fontSize: 10,
-      fontWeight: '800',
-      color: Colors.primary,
-      letterSpacing: 0.5,
-    },
-    insightsBodyText: {
-      ...Typography.bodySmall,
-      color: Colors.textSecondary,
-      lineHeight: 18,
-    },
-    statsRow: {
-      flexDirection: 'row',
-      paddingHorizontal: Spacing.lg,
-      gap: Spacing.sm,
-      marginBottom: Spacing.md,
-    },
-    statCard: {
-      flex: 1,
-      backgroundColor: Colors.surface,
-      borderRadius: BorderRadius.xl,
-      paddingVertical: Spacing.md,
-      alignItems: 'center',
-      borderWidth: 1,
-      borderColor: Colors.border,
-      ...Shadows.small,
-    },
-    statNumber: {
-      ...Typography.h2,
-      color: Colors.textPrimary,
-    },
-    statLabel: {
-      ...Typography.caption,
-      color: Colors.textMuted,
       marginTop: 2,
     },
     loadingRow: {
@@ -1421,8 +830,8 @@ export default function MerchantProfileScreen() {
           </View>
         </TouchableOpacity>
 
-        {/* === Section: متجري (Store Info) === */}
-        <SectionHeader title={t('merchant.my_store', 'متجري')} />
+        {/* === Section: Store Info === */}
+        <SectionHeader title={t('profile.section_store', 'My Store')} />
         <View style={{
           backgroundColor: Colors.surface,
           marginHorizontal: 16,
@@ -1515,17 +924,6 @@ export default function MerchantProfileScreen() {
                 value={`${profileData?.employees?.length ?? employeeList.length} ${isAr ? 'موظف' : 'staff'}`}
                 onPress={() => setEmployeesModalVisible(true)}
               />
-              <Divider />
-
-              {/* Row 6 — Analytics */}
-              <MenuRow
-                icon="bar-chart-outline"
-                iconColor={Colors.secondary}
-                iconBgColor="rgba(0, 217, 166, 0.12)"
-                label={t('merchant.analytics_status', 'إحصائيات وحالة المتجر')}
-                subtitle={isAr ? 'تتبع المبيعات وقيمة المخزون وحالة المتجر' : 'Track sales, inventory valuation & status'}
-                onPress={() => setAnalyticsVisible(true)}
-              />
             </>
           ) : (
             <TouchableOpacity
@@ -1541,8 +939,29 @@ export default function MerchantProfileScreen() {
           )}
         </View>
 
+        {/* === Section: Analytics === */}
+        <SectionHeader title={t('profile.section_analytics', 'Analytics')} />
+        <View style={{
+          backgroundColor: Colors.surface,
+          marginHorizontal: 16,
+          borderRadius: 14,
+          overflow: 'hidden',
+          borderWidth: 1,
+          borderColor: Colors.border,
+        }}>
+          {/* Row 6 — Analytics */}
+          <MenuRow
+            icon="bar-chart-outline"
+            iconColor={Colors.secondary}
+            iconBgColor="rgba(0, 217, 166, 0.12)"
+            label={t('merchant.analytics_status', 'إحصائيات وحالة المتجر')}
+            subtitle={isAr ? 'تتبع المبيعات وقيمة المخزون وحالة المتجر' : 'Track sales, inventory valuation & status'}
+            onPress={() => setAnalyticsVisible(true)}
+          />
+        </View>
+
         {/* === Section: التطبيق (App Settings) === */}
-        <SectionHeader title={t('profile.app_section', 'التطبيق')} />
+        <SectionHeader title={t('profile.section_app', 'App')} />
         <View style={{
           backgroundColor: Colors.surface,
           marginHorizontal: 16,
@@ -1565,10 +984,10 @@ export default function MerchantProfileScreen() {
             label={t('profile.theme', 'المظهر')}
             value={
               themeMode === 'dark'
-                ? (isAr ? 'داكن' : 'Dark')
+                ? t('profile.theme_dark', 'Dark')
                 : themeMode === 'light'
-                ? (isAr ? 'فاتح' : 'Light')
-                : (isAr ? 'تلقائي' : 'Auto')
+                ? t('profile.theme_light', 'Light')
+                : t('profile.theme_system', 'System')
             }
             onPress={() => setThemeModalVisible(true)}
           />
@@ -1584,7 +1003,7 @@ export default function MerchantProfileScreen() {
         </View>
 
         {/* === Section: معلومات (About & Legal) === */}
-        <SectionHeader title={t('profile.info_section', 'معلومات')} />
+        <SectionHeader title={t('profile.section_info', 'Info')} />
         <View style={{
           backgroundColor: Colors.surface,
           marginHorizontal: 16,
@@ -1649,7 +1068,7 @@ export default function MerchantProfileScreen() {
           marginBottom: 30,
           opacity: 0.8,
         }}>
-          لمبة v{appVersion} · محلي وآمن
+          {`Lamba v${appVersion} · ${t('profile.footer_tagline', 'Local & Secure')}`}
         </Text>
       </ScrollView>
 
@@ -1752,454 +1171,172 @@ export default function MerchantProfileScreen() {
       </Modal>
 
       {/* ════════ MODAL: Employees Management ════════ */}
-      <Modal visible={employeesModalVisible} animationType="slide" onRequestClose={() => setEmployeesModalVisible(false)}>
-        <SafeAreaView style={styles.fullScreenModalContainer} edges={['top']}>
-          {/* Modal Header */}
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>{t('merchant.employees', isAr ? 'الموظفون' : 'Employees')}</Text>
-            <TouchableOpacity onPress={() => setEmployeesModalVisible(false)} style={styles.closeBtn}>
-              <Ionicons name="close" size={24} color={Colors.textPrimary} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Mandatory notice */}
-          <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 10 }}>
-            <Text style={{ color: Colors.textMuted, fontSize: 13, textAlign: isAr ? 'right' : 'left' }}>
-              {isAr ? '⚠️ يجب إضافة موظف واحد على الأقل للمتجر' : '⚠️ At least one employee is required for the store'}
-            </Text>
-          </View>
-
-          {/* Add Employee Input Row */}
-          <View style={styles.employeeAddRow}>
-            <TextInput
-              style={styles.employeeInput}
-              value={newEmployeeName}
-              onChangeText={setNewEmployeeName}
-              placeholder={isAr ? 'أدخل اسم الموظف الجديد' : 'Enter new employee name'}
-              placeholderTextColor={Colors.textMuted}
-              returnKeyType="done"
-              onSubmitEditing={handleAddEmployee}
-            />
-            <TouchableOpacity
-              style={styles.employeeAddBtn}
-              onPress={handleAddEmployee}
-              disabled={savingEmployees || !newEmployeeName.trim()}
-              activeOpacity={0.8}
-            >
-              {savingEmployees ? (
-                <ActivityIndicator size="small" color="#000" />
-              ) : (
-                <Ionicons name="add" size={24} color="#000" />
-              )}
-            </TouchableOpacity>
-          </View>
-
-          {/* Employees List */}
-          <FlatList
-            data={employeeList}
-            keyExtractor={(_, index) => index.toString()}
-            contentContainerStyle={styles.employeeList}
-            renderItem={({ item, index }) => (
-              <View style={styles.employeeItem}>
-                <View style={styles.employeeItemInner}>
-                  <View style={styles.employeeAvatarBox}>
-                    <Ionicons name="person" size={18} color={Colors.secondary} />
-                  </View>
-                  <Text style={styles.employeeNameText}>{item}</Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.employeeDeleteBtn}
-                  onPress={() => handleDeleteEmployee(index)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="trash-outline" size={18} color={Colors.error} />
-                </TouchableOpacity>
-              </View>
-            )}
-            ListEmptyComponent={
-              <View style={styles.emptyEmployees}>
-                <Ionicons name="people-outline" size={48} color={Colors.warning} />
-                <Text style={[styles.emptyEmployeesText, { color: Colors.warning, fontWeight: '700', marginTop: 8 }]}>
-                  {isAr ? 'مطلوب إضافة موظف واحد على الأقل' : 'At least one employee is required'}
-                </Text>
-                <Text style={{ color: Colors.textMuted, fontSize: 12, textAlign: 'center', marginTop: 4, paddingHorizontal: 20 }}>
-                  {isAr ? 'أدخل اسم الموظف في الحقل أعلاه واضغط على زر الإضافة (+)' : 'Enter employee name in the field above and tap (+)'}
-                </Text>
-              </View>
-            }
-          />
-        </SafeAreaView>
-      </Modal>
+      <EmployeesModal
+        visible={employeesModalVisible}
+        onClose={() => setEmployeesModalVisible(false)}
+        employees={employeeList}
+        onAdd={async (name) => {
+          const updated = [...employeeList, name];
+          setSavingEmployees(true);
+          try {
+            const res = await updateEmployees(updated);
+            setProfileData(res);
+            setEmployeeList(res.employees || updated);
+            await queryClient.invalidateQueries({ queryKey: merchantKeys.market });
+          } catch (err: any) {
+            Alert.alert(
+              t('common.error', 'خطأ'),
+              isAr ? 'فشل إضافة الموظف' : 'Failed to add employee'
+            );
+            setEmployeeList(profileData?.employees || []);
+          } finally {
+            setSavingEmployees(false);
+          }
+        }}
+        onDelete={(index) => handleDeleteEmployee(index)}
+        saving={savingEmployees}
+      />
 
       {/* ════════ MODAL: Language Selection ════════ */}
-      <Modal visible={showLanguageModal} animationType="slide" transparent onRequestClose={() => setShowLanguageModal(false)}>
-        <View style={styles.modalOverlay}>
-          <SafeAreaView style={[styles.modalContainer, { height: '42%' }]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('profile.choose_language', 'اختر اللغة')}</Text>
-              <TouchableOpacity onPress={() => setShowLanguageModal(false)} style={styles.closeBtn}>
-                <Ionicons name="close" size={24} color={Colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-            <View style={{ padding: Spacing.xl }}>
-              {[
-                { code: 'ar', label: 'العربية', sublabel: 'Arabic' },
-                { code: 'en', label: 'English', sublabel: 'الإنجليزية' },
-              ].map((lang) => {
-                const isSelected = (isAr && lang.code === 'ar') || (!isAr && lang.code === 'en');
-                return (
-                  <TouchableOpacity
-                    key={lang.code}
-                    style={[styles.themeOption, isSelected && { borderColor: Colors.primary }]}
-                    onPress={async () => {
-                      setShowLanguageModal(false);
-                      if ((lang.code === 'ar' && !isAr) || (lang.code === 'en' && isAr)) {
-                        await changeLanguage(lang.code as 'ar' | 'en');
-                      }
-                    }}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.themeOptionText, isSelected && { color: Colors.primary }]}>
-                        {lang.label}
-                      </Text>
-                      <Text style={{ color: Colors.textMuted, fontSize: 12, marginTop: 2 }}>
-                        {lang.sublabel}
-                      </Text>
-                    </View>
-                    {isSelected && <Ionicons name="checkmark-circle" size={22} color={Colors.primary} />}
-                  </TouchableOpacity>
-                );
-              })}
-              <TouchableOpacity
-                onPress={() => setShowLanguageModal(false)}
-                style={{ paddingVertical: 14, alignItems: 'center', marginTop: 4 }}
-              >
-                <Text style={{ color: Colors.textSecondary, fontSize: 14 }}>{t('common.cancel', 'إلغاء')}</Text>
-              </TouchableOpacity>
-            </View>
-          </SafeAreaView>
-        </View>
-      </Modal>
+      <PickerModal
+        visible={showLanguageModal}
+        onClose={() => setShowLanguageModal(false)}
+        title={t('profile.choose_language', 'اختر اللغة')}
+        options={[
+          { key: 'ar', label: 'العربية', icon: 'language-outline', subtitle: 'Arabic' },
+          { key: 'en', label: 'English', icon: 'language-outline', subtitle: 'الإنجليزية' },
+        ]}
+        selectedKey={i18n.locale?.startsWith('ar') ? 'ar' : 'en'}
+        onSelect={(key) => changeLanguage(key as 'ar' | 'en')}
+      />
 
       {/* ════════ MODAL: Theme Selection ════════ */}
-      <Modal visible={themeModalVisible} animationType="slide" transparent onRequestClose={() => setThemeModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <SafeAreaView style={[styles.modalContainer, { height: '40%' }]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('profile.theme', 'اختيار المظهر')}</Text>
-              <TouchableOpacity onPress={() => setThemeModalVisible(false)} style={styles.closeBtn}>
-                <Ionicons name="close" size={24} color={Colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-            <View style={{ padding: Spacing.xl }}>
-              {(['system', 'light', 'dark'] as ThemeMode[]).map((modeOption) => {
-                const isSelected = themeMode === modeOption;
-                const labels: Record<ThemeMode, string> = {
-                  system: isAr ? 'تلقائي (حسب النظام)' : 'System Default',
-                  light: isAr ? 'فاتح' : 'Light',
-                  dark: isAr ? 'داكن' : 'Dark',
-                };
-                return (
-                  <TouchableOpacity
-                    key={modeOption}
-                    style={[styles.themeOption, isSelected && { borderColor: Colors.primary }]}
-                    onPress={() => {
-                      setMode(modeOption);
-                      setThemeModalVisible(false);
-                    }}
-                  >
-                    <Text style={[styles.themeOptionText, isSelected && { color: Colors.primary }]}>
-                      {labels[modeOption]}
-                    </Text>
-                    {isSelected && <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </SafeAreaView>
-        </View>
-      </Modal>
+      <PickerModal
+        visible={themeModalVisible}
+        onClose={() => setThemeModalVisible(false)}
+        title={t('profile.theme', 'اختيار المظهر')}
+        options={[
+          { key: 'system', label: t('profile.theme_system', 'System'), icon: 'phone-portrait-outline' },
+          { key: 'light', label: t('profile.theme_light', 'Light'), icon: 'sunny-outline' },
+          { key: 'dark', label: t('profile.theme_dark', 'Dark'), icon: 'moon-outline' },
+        ]}
+        selectedKey={themeMode}
+        onSelect={(key) => setMode(key as ThemeMode)}
+        heightPercent="40%"
+      />
 
       {/* ════════ MODAL: Privacy Policy ════════ */}
-      <Modal visible={privacyModalVisible} animationType="slide" transparent onRequestClose={() => setPrivacyModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <SafeAreaView style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('profile.privacy_policy', 'سياسة الخصوصية')}</Text>
-              <TouchableOpacity onPress={() => setPrivacyModalVisible(false)} style={styles.closeBtn}>
-                <Ionicons name="close" size={24} color={Colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView contentContainerStyle={styles.legalBody}>
-              <Text style={styles.legalText}>
-                {isAr ? PRIVACY_POLICY_AR : PRIVACY_POLICY_EN}
-              </Text>
-            </ScrollView>
-          </SafeAreaView>
-        </View>
-      </Modal>
+      <LegalModal
+        visible={privacyModalVisible}
+        onClose={() => setPrivacyModalVisible(false)}
+        title={t('profile.privacy_policy', 'سياسة الخصوصية')}
+        content={isAr ? PRIVACY_POLICY_AR : PRIVACY_POLICY_EN}
+      />
 
       {/* ════════ MODAL: Terms of Service ════════ */}
-      <Modal visible={termsModalVisible} animationType="slide" transparent onRequestClose={() => setTermsModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <SafeAreaView style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('profile.terms_of_service', 'شروط الخدمة')}</Text>
-              <TouchableOpacity onPress={() => setTermsModalVisible(false)} style={styles.closeBtn}>
-                <Ionicons name="close" size={24} color={Colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView contentContainerStyle={styles.legalBody}>
-              <Text style={styles.legalText}>
-                {isAr ? TERMS_OF_SERVICE_AR : TERMS_OF_SERVICE_EN}
-              </Text>
-            </ScrollView>
-          </SafeAreaView>
-        </View>
-      </Modal>
+      <LegalModal
+        visible={termsModalVisible}
+        onClose={() => setTermsModalVisible(false)}
+        title={t('profile.terms_of_service', 'شروط الخدمة')}
+        content={isAr ? TERMS_OF_SERVICE_AR : TERMS_OF_SERVICE_EN}
+      />
 
-      {/* ════════ MODAL: Analytics & Store Status ════════ */}
+      {/* ════════ MODAL: Store Status & Quick Stats ════════ */}
       <Modal
         visible={analyticsVisible}
         animationType="slide"
         onRequestClose={() => setAnalyticsVisible(false)}
       >
         <SafeAreaView style={styles.analyticsModalContainer} edges={['top']}>
-          {/* Modal Header */}
+          {/* Header */}
           <View style={styles.analyticsModalHeader}>
-            <Text style={styles.analyticsModalTitle}>{t('merchant.analytics_status', 'Store Analytics & Status')}</Text>
-            <TouchableOpacity 
-              onPress={() => setAnalyticsVisible(false)}
-              style={styles.modalCloseBtn}
-            >
+            <Text style={styles.analyticsModalTitle}>{t('merchant.store_status', 'Store Status')}</Text>
+            <TouchableOpacity onPress={() => setAnalyticsVisible(false)} style={styles.modalCloseBtn}>
               <Ionicons name="close" size={24} color={Colors.textPrimary} />
             </TouchableOpacity>
           </View>
 
-          {loadingStats && !refreshingStats ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={Colors.secondary} />
-              <Text style={styles.loadingText}>{t('common.loading', 'Loading analytics...')}</Text>
-            </View>
-          ) : (
-            <ScrollView
-              contentContainerStyle={styles.analyticsModalScroll}
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshingStats}
-                  onRefresh={() => {
-                    setRefreshingStats(true);
-                    loadAnalyticsData();
-                  }}
-                  tintColor={Colors.secondary}
-                />
-              }
-            >
-              {/* Store Status Control Card */}
-              {market && (
-                <View style={styles.statusCardContainer}>
-                  <View style={styles.statusCardHeader}>
-                    <View style={styles.statusCardTitleRow}>
-                      <View style={[styles.statusDot, { backgroundColor: market.is_currently_open ? Colors.success : Colors.error }]} />
+          <ScrollView contentContainerStyle={styles.analyticsModalScroll}>
+
+            {/* Card 1: Store Open/Closed */}
+            {market && (
+              <View style={styles.statusCardContainer}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flex: 1 }}>
+                    <View style={[styles.statusDot, { backgroundColor: market.is_currently_open ? Colors.success : Colors.error }]} />
+                    <View>
                       <Text style={styles.statusCardTitle}>
-                        {t('common.store_status')}: <Text style={[styles.statusCardValue, { color: market.is_currently_open ? Colors.success : Colors.error }]}>
-                          {market.is_currently_open ? t('common.open') : t('common.closed')}
-                        </Text>
+                        {market.is_currently_open ? t('common.open') : t('common.closed')}
+                      </Text>
+                      <Text style={styles.statusCardSubtitle}>
+                        {market.is_manual_override
+                          ? t('common.manual_override', 'Manual override')
+                          : t('common.automatic_schedule', 'Automatic (schedule)')}
                       </Text>
                     </View>
-                    <Text style={styles.statusCardSubtitle}>
-                      {market.is_manual_override ? t('common.manual_override') : t('common.automatic_schedule')}
+                  </View>
+                  <Switch
+                    value={market.is_currently_open}
+                    onValueChange={async (value) => {
+                      try {
+                        await updateStatusMutation.mutateAsync({ isOpen: value, isManual: true });
+                      } catch (err) {
+                        Alert.alert(t('common.error'), t('merchant.status_failed', 'Failed to update store status'));
+                      }
+                    }}
+                    trackColor={{ false: '#444466', true: Colors.primaryDark }}
+                    thumbColor={market.is_currently_open ? Colors.success : Colors.textMuted}
+                  />
+                </View>
+                {market.is_manual_override && (
+                  <TouchableOpacity
+                    style={{ marginTop: Spacing.md, paddingTop: Spacing.sm, borderTopWidth: 1, borderColor: Colors.border }}
+                    onPress={async () => {
+                      try {
+                        await updateStatusMutation.mutateAsync({ isOpen: null, isManual: false });
+                      } catch (err) {
+                        Alert.alert(t('common.error'), t('merchant.status_failed', 'Failed to update store status'));
+                      }
+                    }}
+                  >
+                    <Text style={{ ...Typography.caption, color: Colors.primary, textAlign: 'center' }}>
+                      {t('merchant.revert_auto', 'Return to automatic schedule')}
                     </Text>
-                  </View>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
 
-                  {/* Mode Selector Segmented Control */}
-                  <View style={styles.segmentedContainer}>
-                    <TouchableOpacity
-                      style={[styles.segmentBtn, !market.is_manual_override && styles.segmentBtnActive]}
-                      onPress={async () => {
-                        try {
-                          const updated = await updateMarketStatus(null, false);
-                          setMarket(updated);
-                        } catch (err) {
-                          Alert.alert(t('common.error'), isAr ? 'فشل تحويل المتجر إلى الوضع التلقائي' : 'Failed to set store to automatic mode');
-                        }
-                      }}
-                    >
-                      <Text style={[styles.segmentText, !market.is_manual_override && styles.segmentTextActive]}>
-                        {t('common.automatic_schedule')}
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[styles.segmentBtn, market.is_manual_override && styles.segmentBtnActive]}
-                      onPress={async () => {
-                        try {
-                          const updated = await updateMarketStatus(market.is_currently_open, true);
-                          setMarket(updated);
-                        } catch (err) {
-                          Alert.alert(t('common.error'), isAr ? 'فشل تحويل المتجر إلى وضع التجاوز اليدوي' : 'Failed to set store to manual override mode');
-                        }
-                      }}
-                    >
-                      <Text style={[styles.segmentText, market.is_manual_override && styles.segmentTextActive]}>
-                        {t('common.manual_override')}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Manual Switch */}
-                  {market.is_manual_override && (
-                    <View style={styles.manualSwitchRow}>
-                      <Text style={styles.manualSwitchLabel}>{t('common.reverts_at_midnight')}</Text>
-                      <Switch
-                        value={market.is_currently_open}
-                        onValueChange={async (value) => {
-                          try {
-                            const updated = await updateMarketStatus(value, true);
-                            setMarket(updated);
-                          } catch (err) {
-                            Alert.alert(t('common.error'), isAr ? 'فشل تغيير حالة المتجر' : 'Failed to override store status');
-                          }
-                        }}
-                        trackColor={{ false: '#444466', true: Colors.primaryDark }}
-                        thumbColor={market.is_currently_open ? Colors.success : Colors.textMuted}
-                      />
-                    </View>
-                  )}
+            {/* Card 2: Inventory Value */}
+            <View style={styles.assetsGlowCard}>
+              <View style={styles.assetsGlowInner}>
+                <View style={styles.assetsIconWrapper}>
+                  <Ionicons name="cube-outline" size={22} color={Colors.primary} />
                 </View>
-              )}
-
-              {/* Inventory Assets Value Glow Card */}
-              {market && (
-                <View style={styles.assetsGlowCard}>
-                  <View style={styles.assetsGlowInner}>
-                    <View style={styles.assetsIconWrapper}>
-                      <Ionicons name="calculator-outline" size={22} color={Colors.primary} />
-                    </View>
-                    <View style={styles.assetsTextWrapper}>
-                      <Text style={styles.assetsLabel}>{t('dashboard.inventory_value', 'إجمالي قيمة أصول المخزون')}</Text>
-                      <Text style={styles.assetsValue}>
-                        {formatPrice(totalAssetsValue)}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              )}
-
-              {/* Sales Performance Card */}
-              {market && (
-                <View style={styles.analyticsCard}>
-                  <View style={styles.analyticsHeader}>
-                    <Ionicons name="trending-up-outline" size={20} color={Colors.secondary} />
-                    <Text style={styles.analyticsTitle}>
-                      {t('dashboard.sales_performance', 'أداء المبيعات والتحليلات اليومية')}
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.analyticsDivider} />
-
-                  <View style={styles.trendRows}>
-                    {/* Daily Trend */}
-                    <View style={styles.trendRow}>
-                      <View style={styles.trendLabelCol}>
-                        <Text style={styles.trendLabel}>{t('dashboard.todays_sales', 'مبيعات اليوم')}</Text>
-                        <Text style={styles.trendVal}>{formatPrice(stats.todaySales)}</Text>
-                      </View>
-                      
-                      <View style={[styles.trendBadge, stats.todaySales >= stats.yesterdaySales ? styles.trendBadgeUp : styles.trendBadgeDown]}>
-                        <Ionicons 
-                          name={stats.todaySales >= stats.yesterdaySales ? 'trending-up' : 'trending-down'} 
-                          size={14} 
-                          color={stats.todaySales >= stats.yesterdaySales ? Colors.success : Colors.error} 
-                        />
-                        <Text style={[styles.trendBadgeText, { color: stats.todaySales >= stats.yesterdaySales ? Colors.success : Colors.error }]}>
-                          {stats.todaySales >= stats.yesterdaySales ? '+' : ''}{stats.dailyChange.toFixed(1)}%
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.trendRowDivider} />
-
-                    {/* Weekly Trend */}
-                    <View style={styles.trendRow}>
-                      <View style={styles.trendLabelCol}>
-                        <Text style={styles.trendLabel}>{t('dashboard.this_weeks_sales', 'مبيعات هذا الأسبوع')}</Text>
-                        <Text style={styles.trendVal}>{formatPrice(stats.thisWeekSales)}</Text>
-                      </View>
-                      
-                      <View style={[styles.trendBadge, stats.thisWeekSales >= stats.lastWeekSales ? styles.trendBadgeUp : styles.trendBadgeDown]}>
-                        <Ionicons 
-                          name={stats.thisWeekSales >= stats.lastWeekSales ? 'trending-up' : 'trending-down'} 
-                          size={14} 
-                          color={stats.thisWeekSales >= stats.lastWeekSales ? Colors.success : Colors.error} 
-                        />
-                        <Text style={[styles.trendBadgeText, { color: stats.thisWeekSales >= stats.lastWeekSales ? Colors.success : Colors.error }]}>
-                          {stats.thisWeekSales >= stats.lastWeekSales ? '+' : ''}{stats.weeklyChange.toFixed(1)}%
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* Daily Dynamic Analysis Insights box */}
-                  <View style={styles.insightsBox}>
-                    <View style={styles.insightsHeaderRow}>
-                      <Ionicons name="sparkles-outline" size={16} color={Colors.primary} />
-                      <Text style={styles.insightsHeaderTitle}>
-                        {t('dashboard.daily_summary_analysis', 'تحليل الملخص اليومي')}
-                      </Text>
-                    </View>
-                    <Text style={styles.insightsBodyText}>
-                      {stats.summaryAnalysis}
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Stats Summary cards */}
-              <View style={styles.statsRow}>
-                <View style={styles.statCard}>
-                  <Text style={[styles.statNumber, { color: Colors.secondary }]}>{market ? 1 : 0}</Text>
-                  <Text style={styles.statLabel}>{t('dashboard.store_active', 'المتجر نشط')}</Text>
-                </View>
-                
-                <View style={styles.statCard}>
-                  <Text style={styles.statNumber}>{totalProducts}</Text>
-                  <Text style={styles.statLabel}>{t('dashboard.catalog_items', 'عناصر الكتالوج')}</Text>
-                </View>
-                
-                <View style={[styles.statCard, { borderColor: Colors.success }]}>
-                  <Text style={[styles.statNumber, { color: Colors.success }]}>{inStockCount}</Text>
-                  <Text style={styles.statLabel}>{t('dashboard.in_stock', 'متوفر')}</Text>
+                <View style={styles.assetsTextWrapper}>
+                  <Text style={styles.assetsLabel}>{t('merchant.inventory_value', 'Inventory Value')}</Text>
+                  <Text style={styles.assetsValue}>{formatPrice(totalAssetsValue)}</Text>
                 </View>
               </View>
+            </View>
 
-              {/* Deficiencies Warnings (Low Stock Button) */}
-              <TouchableOpacity
-                style={styles.lowStockWarningCard}
-                onPress={() => {
-                  setAnalyticsVisible(false);
-                  router.push('/(merchant)/low-stock');
-                }}
-                activeOpacity={0.8}
-              >
-                <View style={styles.lowStockInner}>
-                  <View style={styles.lowStockIconWrapper}>
-                    <Ionicons name="warning-outline" size={20} color={Colors.error} />
-                  </View>
-                  <View style={styles.lowStockTextWrapper}>
-                    <Text style={styles.lowStockLabel}>
-                      {t('lowStock.title', 'تنبيهات نقص المخزون')}
-                    </Text>
-                    <Text style={styles.lowStockSubText}>
-                      {t('merchant.low_stock_manage', 'اضغط لإدارة المنتجات التي أوشكت على النفاد')}
-                    </Text>
-                  </View>
-                  <Ionicons name={isAr ? "chevron-back" : "chevron-forward"} size={16} color={Colors.textSecondary} />
+            {/* Card 3: Today's Sales */}
+            <View style={styles.assetsGlowCard}>
+              <View style={styles.assetsGlowInner}>
+                <View style={[styles.assetsIconWrapper, { backgroundColor: 'rgba(0, 217, 126, 0.12)' }]}>
+                  <Ionicons name="cash-outline" size={22} color={Colors.success} />
                 </View>
-              </TouchableOpacity>
+                <View style={styles.assetsTextWrapper}>
+                  <Text style={styles.assetsLabel}>{t('merchant.todays_sales', "Today's Sales")}</Text>
+                  <Text style={styles.assetsValue}>{formatPrice(stats.todaySales)}</Text>
+                  <Text style={{ ...Typography.caption, color: Colors.textMuted, marginTop: 2 }}>
+                    {stats.todayTxCount} {t('merchant.transactions', 'transactions')}
+                  </Text>
+                </View>
+              </View>
+            </View>
 
-            </ScrollView>
-          )}
+          </ScrollView>
         </SafeAreaView>
       </Modal>
     </SafeAreaView>

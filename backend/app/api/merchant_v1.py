@@ -21,7 +21,6 @@ import json
 import logging
 from datetime import datetime, timezone
 from typing import Annotated, List, Optional
-import numpy as np
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from geoalchemy2.elements import WKTElement
@@ -55,7 +54,6 @@ from app.schemas.special_offer import (
 from app.schemas.offer import OfferCreate, OfferUpdate, OfferResponse
 from app.schemas.market_profile import MarketProfileUpdate, EmployeesUpdate, MarketProfileResponse
 from app.services.embedding import embedding_service
-from app.services.indexer import IndexerService
 from app.services.alert_service import check_and_trigger_stock_alerts
 
 from app.config import settings
@@ -91,8 +89,7 @@ async def get_user_market(user: User, db: AsyncSession) -> Market:
     return market
 
 
-# ── GET /market & /my-store ──────────────────────────────────────
-@router.get("/my-store", response_model=MarketResponse)
+# ── GET /market ─────────────────────────────────────────────────
 @router.get("/market", response_model=MarketResponse)
 async def get_market(
     user: User = Depends(get_current_user),
@@ -148,8 +145,7 @@ async def get_market(
     )
 
 
-# ── POST /market & /store ────────────────────────────────────────
-@router.post("/store", response_model=MarketResponse, status_code=201)
+# ── POST /market ────────────────────────────────────────────────
 @router.post("/market", response_model=MarketResponse, status_code=201)
 async def create_market(
     data: MarketCreate,
@@ -499,13 +495,6 @@ async def toggle_stock(
     if data.in_stock:
         await check_and_trigger_stock_alerts(db, mi.id)
     
-    # Elasticsearch update
-    try:
-        indexer = IndexerService()
-        await indexer.update_stock(mi.id, data.in_stock)
-    except Exception as e:
-        logger.error(f"Elasticsearch stock toggle sync failed: {e}")
-        
     return MarketItemDashboardResponse(
         id=mi.id,
         item_id=gi.id,
@@ -562,18 +551,16 @@ async def update_market_item(
         mi.price = data.price
 
     # Re-compute embeddings ONLY if name actually changed
-    embedding = None
     if name_changed:
         try:
             combined_text = gi.name
             if gi.description:
                 combined_text = f"{gi.name}. {gi.description}"
-            # Re-generate text vector (MiniLM) and image vector (CLIP)
+            # Re-generate text vector and image vector
             text_vec = (await embedding_service.encode_text_async(combined_text)).tolist()
             image_vec = (await embedding_service.encode_product_async(gi.name, gi.description)).tolist()
             gi.text_embedding = text_vec
             gi.image_embedding = image_vec
-            embedding = np.array(image_vec)
         except Exception as e:
             logger.warning(f"Re-embedding for item {gi.id} skipped due to error: {e}")
 
@@ -585,26 +572,6 @@ async def update_market_item(
             logger.warning(f"Stock alert check failed: {alert_err}")
     await db.commit()
 
-    # Elasticsearch update
-    try:
-        indexer = IndexerService()
-
-        await indexer.index_product(
-            product_id=mi.id,
-            shop_id=market.id,
-            name=gi.name,
-            description=gi.description,
-            price=float(mi.price) if mi.price is not None else None,
-            category=gi.category,
-            image_url=gi.image_url,
-            in_stock=mi.status,
-            latitude=float(lat) if lat is not None else 0.0,
-            longitude=float(lng) if lng is not None else 0.0,
-            embedding=embedding
-        )
-    except Exception as e:
-        logger.error(f"Elasticsearch update item sync failed: {e}")
-        
     return MarketItemDashboardResponse(
         id=mi.id,
         item_id=gi.id,
@@ -704,33 +671,6 @@ async def link_item(
     await db.flush()
     await check_and_trigger_stock_alerts(db, mi.id)
     
-    # Index in Elasticsearch
-    try:
-        indexer = IndexerService()
-        
-        # Format embedding vector
-        embedding = gi.image_embedding if gi.image_embedding is not None else gi.text_embedding
-        if embedding is not None:
-            embedding = np.array(embedding)
-        else:
-            embedding = await embedding_service.encode_product_async(gi.name, gi.description)
-            
-        await indexer.index_product(
-            product_id=mi.id,
-            shop_id=market.id,
-            name=gi.name,
-            description=gi.description,
-            price=None,
-            category=gi.category,
-            image_url=gi.image_url,
-            in_stock=True,
-            latitude=float(lat),
-            longitude=float(lng),
-            embedding=embedding
-        )
-    except Exception as e:
-        logger.error(f"Elasticsearch indexing link failed: {e}")
-        
     return ItemLinkResponse(
         success=True,
         message=message,
@@ -1026,28 +966,6 @@ async def create_new_item(
     except Exception as e:
         logger.warning(f"Auto-enrich/embed failed for item {gi.id}: {e}")
         await db.commit()
-    
-    # Index in Elasticsearch (CLIP ViT-B-32 512-d space)
-    try:
-        indexer = IndexerService()
-        
-        embedding = image_vector if image_vector is not None else await embedding_service.encode_product_async(name, description)
-        
-        await indexer.index_product(
-            product_id=mi.id,
-            shop_id=market.id,
-            name=gi.name,
-            description=gi.description,
-            price=price,
-            category=gi.category,
-            image_url=gi.image_url,
-            in_stock=True,
-            latitude=float(lat),
-            longitude=float(lng),
-            embedding=embedding
-        )
-    except Exception as e:
-        logger.error(f"Elasticsearch indexing new item failed: {e}")
 
     return ItemLinkResponse(
         success=True,
@@ -1207,31 +1125,6 @@ async def upload_items_csv(
 
         if mi.status:
             await check_and_trigger_stock_alerts(db, mi.id)
-
-        # Index in Elasticsearch (best effort)
-        if indexer is not None:
-            try:
-                embed = gi.image_embedding if gi.image_embedding is not None else gi.text_embedding
-                if embed is not None:
-                    embed_arr = np.array(embed)
-                else:
-                    embed_arr = embedding_service.encode_product(row_name, description_val)
-                await indexer.index_product(
-                    product_id=mi.id,
-                    shop_id=market.id,
-                    name=gi.name,
-                    description=gi.description,
-                    price=price_val,
-                    category=gi.category,
-                    image_url=gi.image_url,
-                    in_stock=mi.status,
-                    latitude=float(lat),
-                    longitude=float(lng),
-                    embedding=embed_arr,
-                )
-                es_indexed += 1
-            except Exception as e:
-                logger.error(f"Elasticsearch CSV row {idx} index failed: {e}")
 
     await db.commit()
 
@@ -1462,7 +1355,6 @@ async def pos_checkout(
     receipt_items = []
     total_cost = 0.0
     alerts = []
-    es_updates = []
 
     for item in data.items:
         # Fetch the market item
@@ -1501,8 +1393,6 @@ async def pos_checkout(
             # Proactively trigger customer search alerts if item returns to positive stock
             await check_and_trigger_stock_alerts(db, mi.id)
 
-        es_updates.append((mi.id, mi.status))
-
         subtotal = (mi.price or 0.0) * item.quantity
         total_cost += subtotal
 
@@ -1535,14 +1425,6 @@ async def pos_checkout(
         )
 
     await db.commit()
-
-    # Sync availability states to Elasticsearch index in real-time
-    try:
-        indexer = IndexerService()
-        for mi_id, in_stock in es_updates:
-            await indexer.update_stock(mi_id, in_stock)
-    except Exception as e:
-        logger.error(f"Elasticsearch POS checkout status sync failed: {e}")
 
     return {
         "success": True,

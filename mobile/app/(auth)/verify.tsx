@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { verifyCode } from '../../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
-import { t } from '../../services/i18n';
+import { t, i18n } from '../../services/i18n';
 
 export default function VerifyScreen() {
   const Colors = useThemeColors();
@@ -298,7 +298,7 @@ export default function VerifyScreen() {
 
       {/* Back button to re-register */}
       <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
-        <Ionicons name="arrow-back" size={24} color={Colors.textSecondary} />
+        <Ionicons name={i18n.locale?.startsWith('ar') ? "arrow-forward" : "arrow-back"} size={24} color={Colors.textSecondary} />
       </TouchableOpacity>
 
       <View style={styles.header}>

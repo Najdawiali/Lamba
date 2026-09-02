@@ -5,6 +5,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getMessages, sendMessage } from '../../../services/api';
 import { useThemeColors } from '../../../context/ThemeContext';
+import { i18n } from '../../../services/i18n';
 
 export default function ChatScreen() {
   const Colors = useThemeColors();
@@ -138,7 +139,7 @@ export default function ChatScreen() {
           }}
         >
           <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name="arrow-forward" size={24} color={Colors.textPrimary} />
+            <Ionicons name={i18n.locale?.startsWith('ar') ? "arrow-forward" : "arrow-back"} size={24} color={Colors.textPrimary} />
           </TouchableOpacity>
           <Text style={{ color: Colors.textPrimary, fontSize: 17, fontWeight: '600' }}>
             {decodeURIComponent((marketName as string) || '')}

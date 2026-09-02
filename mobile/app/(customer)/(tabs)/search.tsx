@@ -32,33 +32,9 @@ import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/t
 import { useThemeColors } from '../../../context/ThemeContext';
 import { t, i18n } from '../../../services/i18n';
 import { formatPrice } from '../../../services/currency';
+import { CATEGORY_AR_FALLBACK } from '../../../constants/categories';
 
 const DEFAULT_COORDS = { latitude: 32.0385, longitude: 35.7275 }; // As-Salt center (catalog stores location)
-
-const CATEGORY_AR_FALLBACK: Record<string, string> = {
-  'Food & Beverages': 'الأغذية والمشروبات',
-  'Home & Personal Care': 'العناية المنزلية والشخصية',
-  'Electronics & Tech': 'الإلكترونيات والتقنية',
-  'Home & Kitchen': 'المنزل والمطبخ',
-  'Services': 'الخدمات',
-  'Fruits & Vegetables': 'الخضار والفواكه',
-  'Cooking Essentials': 'مستلزمات الطبخ',
-  'Dairy & Eggs': 'الألبان والبيض',
-  'Meat & Poultry': 'اللحوم والدواجن',
-  'Beverages': 'المشروبات',
-  'Snacks': 'المأكولات الخفيفة',
-  'Bakery': 'المخبوزات',
-  'Frozen Food': 'الأطعمة المجمدة',
-  'Cleaning & Detergents': 'التنظيف المنزلي',
-  'Beauty & Personal Care': 'العناية الشخصية',
-  'Electronics': 'الإلكترونيات',
-  'Mobiles & Tech': 'الهواتف والتقنية',
-  'Cookware & Kitchenware': 'أدوات المطبخ',
-  'Beauty & Personal Care Services': 'خدمات التجميل والعناية الشخصية',
-  'Vehicle Maintenance & Care': 'صيانة وتغسيل السيارات',
-  'Home & Maintenance Services': 'خدمات وصيانة المنازل',
-  'Education & Tutoring': 'التعليم والدروس الخصوصية',
-};
 
 export default function SearchScreen() {
   const Colors = useThemeColors();
@@ -92,8 +68,6 @@ export default function SearchScreen() {
   const [filterDistance, setFilterDistance] = useState<number>(5);
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
   const [filterInStock, setFilterInStock] = useState<boolean>(true);
-  const [filterPriceMin, setFilterPriceMin] = useState<string>('');
-  const [filterPriceMax, setFilterPriceMax] = useState<string>('');
 
   const [categoriesList, setCategoriesList] = useState<any[]>([]);
 
@@ -275,15 +249,10 @@ export default function SearchScreen() {
     }
 
     try {
-      const minP = filterPriceMin ? parseFloat(filterPriceMin) : undefined;
-      const maxP = filterPriceMax ? parseFloat(filterPriceMax) : undefined;
-      
       const parsedFilters: SearchFilters = {
         max_distance_km: filterDistance,
         category_id: filterCategory || undefined,
         in_stock_only: filterInStock,
-        price_min: minP,
-        price_max: maxP,
         listing_type: filterListingType,
       };
 
@@ -354,7 +323,7 @@ export default function SearchScreen() {
 
     if (result.canceled || !result.assets[0]) return;
     executeSearch('', 'image', result.assets[0].uri);
-  }, [userLocation, filterDistance, filterListingType, filterCategory, filterInStock, filterPriceMin, filterPriceMax, userId]);
+  }, [userLocation, filterDistance, filterListingType, filterCategory, filterInStock, userId]);
 
   const handleOpenSettings = () => {
     if (Platform.OS === 'ios') Linking.openURL('app-settings:');
@@ -390,27 +359,6 @@ export default function SearchScreen() {
     headerTitle: {
       ...Typography.h3,
       color: Colors.textPrimary,
-    },
-    avatarButton: {
-      width: 40,
-      height: 40,
-      justifyContent: 'center',
-      alignItems: 'center',
-      borderRadius: 20,
-      backgroundColor: 'transparent',
-      overflow: 'hidden',
-    },
-    avatarGradient: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    avatarText: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: Colors.textOnPrimary,
     },
     searchWrapper: {
       paddingHorizontal: Spacing.lg,
@@ -752,9 +700,6 @@ export default function SearchScreen() {
     filterChipTextActive: { color: Colors.textOnPrimary, fontWeight: '600' },
     checkboxRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.xs },
     checkboxText: { ...Typography.body, color: Colors.textPrimary },
-    priceInputsContainer: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-    priceInput: { flex: 1, backgroundColor: Colors.background, borderRadius: BorderRadius.md, padding: Spacing.md, color: Colors.textPrimary, ...Typography.body, borderWidth: 1, borderColor: Colors.border },
-    priceSeparator: { color: Colors.textMuted, fontSize: 20 },
     textInput: { backgroundColor: Colors.background, borderRadius: BorderRadius.md, padding: Spacing.md, color: Colors.textPrimary, ...Typography.body, borderWidth: 1, borderColor: Colors.border },
     modalFooter: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.lg, paddingBottom: Spacing.xl },
     resetButton: { flex: 1, padding: Spacing.md, borderRadius: BorderRadius.md, backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, alignItems: 'center' },
@@ -1020,14 +965,7 @@ export default function SearchScreen() {
     <View style={styles.header}>
       <View style={{ width: 40 }} />
       <Text style={styles.headerTitle}>{t('welcome.title', 'Lamba')}</Text>
-      <TouchableOpacity style={styles.avatarButton} onPress={() => router.push('/(customer)/profile')} activeOpacity={0.7}>
-        <LinearGradient
-          colors={[Colors.primary, '#8B83FF']}
-          style={styles.avatarGradient}
-        >
-          <Text style={styles.avatarText}>{userEmail ? userEmail.charAt(0).toUpperCase() : 'L'}</Text>
-        </LinearGradient>
-      </TouchableOpacity>
+      <View style={{ width: 40 }} />
     </View>
   );
 
@@ -1598,28 +1536,6 @@ export default function SearchScreen() {
                 <Ionicons name={filterInStock ? "checkbox" : "square-outline"} size={24} color={filterInStock ? Colors.primary : Colors.textMuted} />
                 <Text style={styles.checkboxText}>{t('filter.available_only', 'المتوفر فقط')}</Text>
               </TouchableOpacity>
-
-              {/* Fix 2: Price Range */}
-              <Text style={styles.filterLabel}>{t('filter.price_range', 'نطاق السعر')}</Text>
-              <View style={styles.priceInputsContainer}>
-                <TextInput
-                  style={styles.priceInput}
-                  placeholder={t('filter.price_min', 'الأقل')}
-                  placeholderTextColor={Colors.textMuted}
-                  keyboardType="numeric"
-                  value={filterPriceMin}
-                  onChangeText={setFilterPriceMin}
-                />
-                <Text style={styles.priceSeparator}>-</Text>
-                <TextInput
-                  style={styles.priceInput}
-                  placeholder={t('filter.price_max', 'الأعلى')}
-                  placeholderTextColor={Colors.textMuted}
-                  keyboardType="numeric"
-                  value={filterPriceMax}
-                  onChangeText={setFilterPriceMax}
-                />
-              </View>
               
             </ScrollView>
             <View style={styles.modalFooter}>
@@ -1629,8 +1545,6 @@ export default function SearchScreen() {
                   setFilterListingType(null);
                   setFilterDistance(5);
                   setFilterInStock(true);
-                  setFilterPriceMin('');
-                  setFilterPriceMax('');
                   setFilterCategory(null);
                 }}
               >

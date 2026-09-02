@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://eagle:eagle_secret@localhost:5432/eagle_vision"
 
     # ── JWT ─────────────────────────────────────────────────────
-    jwt_secret: str = "change-me-to-a-real-secret-key"
+    jwt_secret: str = "INSECURE-CHANGE-ME-set-JWT_SECRET-in-env"
     jwt_algorithm: str = "HS256"
     jwt_expiration_minutes: int = 1440  # 24 hours
 
@@ -199,6 +199,17 @@ class Settings(BaseSettings):
                 self.database_url = self.database_url.replace("@postgres:", "@localhost:")
             if self.redis_host == "redis":
                 self.redis_host = "localhost"
+
+        # ── Security: reject insecure JWT secret ──────────────────
+        _insecure_defaults = {"change-me-to-a-real-secret-key", "secret", "changeme", "insecure-change-me-set-jwt_secret-in-env", ""}
+        if self.jwt_secret.lower().strip() in _insecure_defaults or len(self.jwt_secret) < 32:
+            import warnings
+            warnings.warn(
+                "JWT_SECRET is insecure (default or < 32 chars). "
+                "Set a strong JWT_SECRET in your .env file. "
+                "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(64))\"",
+                stacklevel=2,
+            )
 
 
 settings = Settings()

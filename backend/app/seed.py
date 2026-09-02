@@ -22,7 +22,6 @@ from app.models.product_image import ProductImage
 from app.models.market_item import MarketItem
 from app.services.auth import hash_password
 from app.services.embedding import embedding_service
-from app.services.indexer import IndexerService
 from app.config import settings
 
 logging.basicConfig(level=logging.INFO)

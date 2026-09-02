@@ -7,7 +7,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, ActivityIndicator
+  KeyboardAvoidingView, Platform, ActivityIndicator, Alert
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -51,7 +51,7 @@ export default function LoginScreen() {
   // Determine input icon dynamically
   const getUsernameIcon = (): any => {
     const val = emailOrPhone.trim();
-    if (!val) return 'phone-portrait-outline';
+    if (!val) return 'person-outline';
     if (val.includes('@')) return 'mail-outline';
     if (/^\+?\d+$/.test(val.replace(/[\s\-()]/g, ''))) return 'phone-portrait-outline';
     return 'person-outline';
@@ -316,7 +316,7 @@ export default function LoginScreen() {
         onPress={() => router.back()}
         activeOpacity={0.7}
       >
-        <Ionicons name="arrow-back" size={22} color={Colors.textSecondary} />
+        <Ionicons name={i18n.locale?.startsWith('ar') ? "arrow-forward" : "arrow-back"} size={22} color={Colors.textSecondary} />
       </TouchableOpacity>
 
       {/* Header */}
@@ -371,7 +371,7 @@ export default function LoginScreen() {
           />
           <TextInput
             style={styles.input}
-            placeholder={t('auth.phone_placeholder', '07XXXXXXXX')}
+            placeholder={t('auth.email_or_phone', 'البريد الإلكتروني أو رقم الهاتف')}
             placeholderTextColor={Colors.textMuted}
             value={emailOrPhone}
             onChangeText={(val) => {
@@ -405,7 +405,17 @@ export default function LoginScreen() {
         </View>
 
         {/* Forgot Password Link */}
-        <TouchableOpacity style={styles.forgotPassword} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.forgotPassword}
+          activeOpacity={0.7}
+          onPress={() => {
+            Alert.alert(
+              t('auth.forgot_password', 'نسيت كلمة المرور؟'),
+              t('auth.forgot_password_help', 'للمساعدة في استعادة حسابك، يرجى التواصل معنا عبر البريد الإلكتروني: support@lamba.app'),
+              [{ text: t('common.ok', 'حسناً') }]
+            );
+          }}
+        >
           <Text style={styles.forgotPasswordText}>{t('auth.forgot_password', 'Forgot Password?')}</Text>
         </TouchableOpacity>
 

@@ -3,10 +3,25 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getChatSessions, getChatMessages, sendChatMessage, getUser, ChatSession, ChatMessage } from '../../services/api';
+import { getConversations, getMessages, sendMessage, getUser } from '../../services/api';
 import { Spacing, Typography, BorderRadius, Shadows } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
-import { t } from '../../services/i18n';
+import { t, i18n } from '../../services/i18n';
+
+export interface ChatSession {
+  id: string;
+  partner_name?: string;
+  last_message?: string;
+  unread_count?: number;
+  updated_at?: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  sender_id?: string;
+  text: string;
+  created_at?: string;
+}
 
 export default function MerchantInboxScreen() {
   const router = useRouter();
@@ -50,8 +65,8 @@ export default function MerchantInboxScreen() {
 
   const fetchSessions = async () => {
     try {
-      const data = await getChatSessions();
-      setSessions(data);
+      const res = await getConversations();
+      setSessions(res.data || []);
     } catch (err) {
       console.error('Failed to load chat sessions', err);
     } finally {
@@ -63,8 +78,8 @@ export default function MerchantInboxScreen() {
     stopPolling();
     pollingRef.current = setInterval(async () => {
       try {
-        const data = await getChatMessages(sessionId);
-        setMessages(data);
+        const res = await getMessages(sessionId);
+        setMessages(res.data || []);
       } catch (err) {
         console.error('Polling failed:', err);
       }
@@ -83,8 +98,8 @@ export default function MerchantInboxScreen() {
     setLoadingMessages(true);
     stopPolling();
     try {
-      const data = await getChatMessages(session.id);
-      setMessages(data);
+      const res = await getMessages(session.id);
+      setMessages(res.data || []);
       startPolling(session.id);
     } catch (err) {
       console.error('Failed to fetch messages', err);
@@ -107,7 +122,13 @@ export default function MerchantInboxScreen() {
     
     setSending(true);
     try {
-      const newMsg = await sendChatMessage(selectedSession.id, inputText.trim());
+      const res = await sendMessage(selectedSession.id, inputText.trim());
+      const newMsg = res.data || {
+        id: `msg-${Date.now()}`,
+        sender_id: userId,
+        text: inputText.trim(),
+        created_at: new Date().toISOString(),
+      };
       setMessages(prev => [...prev, newMsg]);
       setInputText('');
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
@@ -313,7 +334,7 @@ export default function MerchantInboxScreen() {
         {/* Chat Thread Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBackToInbox} style={styles.backBtn} activeOpacity={0.7}>
-            <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
+            <Ionicons name={i18n.locale?.startsWith('ar') ? "arrow-forward" : "arrow-back"} size={24} color={Colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.title} numberOfLines={1}>{selectedSession.partner_name || t('inbox.chat_with_customer', 'محادثة مع العميل')}</Text>
           <View style={{ width: 40 }} />

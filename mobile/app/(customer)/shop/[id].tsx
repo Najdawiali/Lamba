@@ -10,7 +10,8 @@ import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/t
 import { useThemeColors } from '../../../context/ThemeContext';
 import {
   getMarketCatalog, MarketCatalogResponse, startConversation,
-  getMarketRatings, submitMarketRating, MarketRatingSummaryResponse, getUser
+  getMarketRatings, submitMarketRating, MarketRatingSummaryResponse, getUser,
+  getNearMarkets
 } from '../../../services/api';
 import { t, i18n } from '../../../services/i18n';
 import { formatPrice } from '../../../services/currency';
@@ -28,10 +29,11 @@ export default function ShopCatalogScreen() {
 
   const [catalog, setCatalog] = useState<MarketCatalogResponse | null>(null);
   const [ratings, setRatings] = useState<MarketRatingSummaryResponse | null>(null);
+  const [storeInfo, setStoreInfo] = useState<{ name: string; lat: number; lng: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [activeCategory, setActiveCategory] = useState<string>('');
+  const [activeCategory, setActiveCategory] = useState<string>('All');
   const [reviewsModalVisible, setReviewsModalVisible] = useState(false);
   const [writeReviewModalVisible, setWriteReviewModalVisible] = useState(false);
 
@@ -54,14 +56,18 @@ export default function ShopCatalogScreen() {
 
       if (catalogData) {
         setCatalog(catalogData);
-        const categories = Object.keys(catalogData || {});
-        if (categories.length > 0) {
-          setActiveCategory(categories[0]);
-        }
       }
       if (ratingsData) {
         setRatings(ratingsData);
       }
+
+      try {
+        const markets = await getNearMarkets(32.0385, 35.7275, 50); // wide radius to find the store
+        const thisMarket = markets.find(m => m.id === id);
+        if (thisMarket) {
+          setStoreInfo({ name: thisMarket.name, lat: thisMarket.latitude, lng: thisMarket.longitude });
+        }
+      } catch {}
     } catch (err) {
       console.error('Failed to load shop catalog', err);
       setError(t('common.error', 'Failed to load catalog'));
@@ -121,7 +127,7 @@ export default function ShopCatalogScreen() {
         pathname: '/(customer)/chat/[id]',
         params: {
           id: res.data.conversation_id,
-          marketName: firstItem?.category_name_ar || 'المتجر',
+          marketName: storeInfo?.name || firstItem?.category_name_ar || 'المتجر',
           suggestion: 'مرحباً، أستفسر عن متجركم',
         },
       });
@@ -221,7 +227,9 @@ export default function ShopCatalogScreen() {
   }
 
   const categories = Object.keys(catalog);
-  const activeItems = activeCategory ? catalog[activeCategory] : [];
+  const activeItems = activeCategory === 'All'
+    ? Object.values(catalog).flat()
+    : (catalog[activeCategory] || []);
   const firstItem = activeItems[0] || (categories[0] ? catalog[categories[0]][0] : null);
   const isAr = i18n.locale?.startsWith('ar');
 
@@ -230,12 +238,10 @@ export default function ShopCatalogScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
-          <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
+          <Ionicons name={i18n.locale?.startsWith('ar') ? "arrow-forward" : "arrow-back"} size={22} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('product.view_full_shop', 'دليل المتجر')}</Text>
-        <TouchableOpacity onPress={handleMessageShop} style={styles.headerBtn}>
-          <Ionicons name="chatbubble-outline" size={20} color={Colors.primary} />
-        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{t('product.view_full_shop', 'View Full Shop')}</Text>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -243,7 +249,7 @@ export default function ShopCatalogScreen() {
         <View style={styles.shopCard}>
           <View style={styles.shopTitleRow}>
             <Text style={styles.shopName}>
-              {t('product.view_full_shop', 'كتالوج المتجر')}
+              {storeInfo?.name || t('product.view_full_shop', 'View Full Shop')}
             </Text>
             {ratings && ratings.average_score > 0 ? (
               <TouchableOpacity
@@ -262,10 +268,16 @@ export default function ShopCatalogScreen() {
           <View style={styles.actionButtonsRow}>
             <TouchableOpacity
               style={[styles.actionBtn, styles.actionBtnPrimary]}
-              onPress={() => openMapDirections(31.95, 35.91, 'المتجر')}
+              onPress={() => {
+                if (storeInfo) {
+                  openMapDirections(storeInfo.lat, storeInfo.lng, storeInfo.name);
+                } else {
+                  Alert.alert(t('common.info', 'Info'), t('shop.location_unavailable', 'Store location not available'));
+                }
+              }}
             >
               <Ionicons name="navigate-outline" size={18} color="#FFF" />
-              <Text style={styles.actionBtnTextPrimary}>{t('common.directions', 'الاتجاهات')}</Text>
+              <Text style={styles.actionBtnTextPrimary}>{t('common.directions', 'Directions')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -273,7 +285,7 @@ export default function ShopCatalogScreen() {
               onPress={handleMessageShop}
             >
               <Ionicons name="chatbubble-outline" size={18} color={Colors.primary} />
-              <Text style={styles.actionBtnTextSecondary}>مراسلة</Text>
+              <Text style={styles.actionBtnTextSecondary}>{t('common.message', 'Message')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -281,7 +293,7 @@ export default function ShopCatalogScreen() {
               onPress={() => setReviewsModalVisible(true)}
             >
               <Ionicons name="star-outline" size={18} color={Colors.warning} />
-              <Text style={styles.actionBtnTextSecondary}>التقييمات</Text>
+              <Text style={styles.actionBtnTextSecondary}>{t('common.reviews', 'Reviews')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -291,6 +303,14 @@ export default function ShopCatalogScreen() {
             {/* Category Tabs */}
             <View style={styles.tabsContainer}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScroll}>
+                <TouchableOpacity
+                  style={[styles.tabBtn, activeCategory === 'All' && styles.tabBtnActive]}
+                  onPress={() => setActiveCategory('All')}
+                >
+                  <Text style={[styles.tabText, activeCategory === 'All' && styles.tabTextActive]}>
+                    {t('dashboard.filter_all', 'All')}
+                  </Text>
+                </TouchableOpacity>
                 {categories.map((cat) => {
                   const catFirstItem = catalog[cat]?.[0];
                   const catDisplayName = isAr
@@ -360,7 +380,7 @@ export default function ShopCatalogScreen() {
         <View style={styles.modalOverlay}>
           <SafeAreaView style={styles.modalContainer}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>تقييمات وآراء العملاء ({ratings?.total_reviews_count || 0})</Text>
+              <Text style={styles.modalTitle}>{t('shop.reviews_title', 'Reviews')} ({ratings?.total_reviews_count || 0})</Text>
               <TouchableOpacity onPress={() => setReviewsModalVisible(false)} style={styles.closeBtn}>
                 <Ionicons name="close" size={24} color={Colors.textPrimary} />
               </TouchableOpacity>
@@ -380,7 +400,7 @@ export default function ShopCatalogScreen() {
                   setWriteReviewModalVisible(true);
                 }}
               >
-                <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 14 }}>+ أضف تقييمك للمتجر</Text>
+                <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 14 }}>{t('shop.add_review', '+ Add Your Review')}</Text>
               </TouchableOpacity>
 
               <FlatList
@@ -403,7 +423,7 @@ export default function ShopCatalogScreen() {
                 )}
                 ListEmptyComponent={
                   <Text style={{ textAlign: 'center', color: Colors.textMuted, marginTop: 40 }}>
-                    لا توجد تقييمات سابقة لهذا المتجر
+                    {t('shop.no_reviews', 'No reviews yet for this store')}
                   </Text>
                 }
               />
@@ -417,7 +437,7 @@ export default function ShopCatalogScreen() {
         <View style={styles.modalOverlay}>
           <SafeAreaView style={[styles.modalContainer, { height: '55%' }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>إضافة تقييم جديد</Text>
+              <Text style={styles.modalTitle}>{t('shop.write_review', 'Write a Review')}</Text>
               <TouchableOpacity onPress={() => setWriteReviewModalVisible(false)} style={styles.closeBtn}>
                 <Ionicons name="close" size={24} color={Colors.textPrimary} />
               </TouchableOpacity>
@@ -425,7 +445,7 @@ export default function ShopCatalogScreen() {
 
             <View style={{ padding: Spacing.xl }}>
               <Text style={{ ...Typography.body, color: Colors.textSecondary, marginBottom: Spacing.md, textAlign: 'center' }}>
-                اختر عدد النجوم (يجب التواجد بالقرب من المتجر)
+                {t('shop.select_stars', 'Select your rating (must be near the store)')}
               </Text>
 
               {/* Star selector */}
@@ -453,7 +473,7 @@ export default function ShopCatalogScreen() {
                   textAlignVertical: 'top',
                   marginBottom: Spacing.xl,
                 }}
-                placeholder="اكتب تجربتك أو انطباعك عن المتجر (اختياري)..."
+                placeholder={t('shop.review_placeholder', 'Share your experience (optional)...')}
                 placeholderTextColor={Colors.textMuted}
                 multiline
                 value={reviewText}
@@ -474,7 +494,7 @@ export default function ShopCatalogScreen() {
                 {submittingReview ? (
                   <ActivityIndicator size="small" color="#FFF" />
                 ) : (
-                  <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 15 }}>إرسال التقييم</Text>
+                  <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 15 }}>{t('shop.submit_review', 'Submit Review')}</Text>
                 )}
               </TouchableOpacity>
             </View>

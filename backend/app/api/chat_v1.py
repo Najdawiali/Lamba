@@ -279,15 +279,20 @@ async def send_message(
     )
 
 
+from pydantic import BaseModel, Field
+
+
+class PushTokenRequest(BaseModel):
+    token: str = Field(..., min_length=10, max_length=255)
+
+
 @router.post("/push-token")
 async def register_push_token(
-    body: dict,
+    body: PushTokenRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Register Expo push token for the current user."""
-    token = body.get("token")
-    if token:
-        user.push_token = token
-        await db.commit()
+    user.push_token = body.token
+    await db.commit()
     return {"status": "ok"}

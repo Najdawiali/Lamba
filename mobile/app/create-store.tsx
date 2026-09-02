@@ -24,7 +24,7 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { createStore } from '../services/api';
+import { createMarket } from '../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../constants/theme';
 import { useThemeColors } from '../context/ThemeContext';
 import { t, i18n } from '../services/i18n';
@@ -118,7 +118,7 @@ export default function CreateStoreScreen() {
 
     setLoading(true);
     try {
-      await createStore(
+      await createMarket(
         trimmedName,
         trimmedAddress,
         latVal,
@@ -189,7 +189,7 @@ export default function CreateStoreScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.headerBar}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
+          <Ionicons name={i18n.locale?.startsWith('ar') ? "arrow-forward" : "arrow-back"} size={22} color={Colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('profile.add_store', 'Create New Store')}</Text>
         <View style={{ width: 40 }} />

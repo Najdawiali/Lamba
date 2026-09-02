@@ -5,7 +5,7 @@ User model supporting customer and merchant accounts.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import String, Boolean, DateTime
+from sqlalchemy import String, Boolean, DateTime, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -34,6 +34,12 @@ class User(Base):
     )
     verification_code: Mapped[str | None] = mapped_column(
         String(10), nullable=True
+    )
+    verification_code_created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    verification_attempts: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, server_default="0"
     )
     push_token: Mapped[str | None] = mapped_column(
         String(255), nullable=True

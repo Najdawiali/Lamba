@@ -10,6 +10,7 @@ Endpoints:
 import logging
 import random
 import string
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from app.rate_limit import limiter
@@ -90,6 +91,8 @@ async def signup(request: Request, data: SignUpRequest, db: AsyncSession = Depen
         full_name=data.full_name,
         verified=False,
         verification_code=code,
+        verification_code_created_at=datetime.now(timezone.utc),
+        verification_attempts=0,
     )
     db.add(user)
     await db.flush()
@@ -109,6 +112,11 @@ async def signup(request: Request, data: SignUpRequest, db: AsyncSession = Depen
     )
 
 
+# ── Constants ──────────────────────────────────────────────────
+VERIFICATION_CODE_TTL_MINUTES = 10
+MAX_VERIFICATION_ATTEMPTS = 5
+
+
 # ── POST /verify ───────────────────────────────────────────────
 @router.post("/verify", response_model=VerifyResponse)
 @limiter.limit("10/minute")
@@ -116,8 +124,9 @@ async def verify(request: Request, data: VerifyRequest, db: AsyncSession = Depen
     """
     Verify a user's registration with their 6-digit code.
 
-    On success, sets verified=True and clears the stored code.
-    On failure, returns a 400 error to allow retry (Activity Diagram loop).
+    Security:
+      - Code expires after 10 minutes
+      - Max 5 attempts before code is invalidated (must request new one)
     """
     result = await db.execute(select(User).where(User.id == data.user_id))
     user = result.scalar_one_or_none()
@@ -131,16 +140,62 @@ async def verify(request: Request, data: VerifyRequest, db: AsyncSession = Depen
     if user.verified:
         return VerifyResponse(verified=True, message="Account is already verified")
 
-    if user.verification_code != data.verification_code:
+    if not user.verification_code:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid verification code. Please try again.",
+            detail="No verification code pending. Please request a new one.",
         )
 
-    # Mark as verified
+    # Check attempt limit
+    if user.verification_attempts >= MAX_VERIFICATION_ATTEMPTS:
+        # Invalidate the code — user must request a new one
+        user.verification_code = None
+        user.verification_code_created_at = None
+        user.verification_attempts = 0
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many attempts. Verification code invalidated. Please sign up again or request a new code.",
+        )
+
+    # Check expiry
+    if user.verification_code_created_at:
+        elapsed = datetime.now(timezone.utc) - user.verification_code_created_at
+        if elapsed.total_seconds() > VERIFICATION_CODE_TTL_MINUTES * 60:
+            user.verification_code = None
+            user.verification_code_created_at = None
+            user.verification_attempts = 0
+            await db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_410_GONE,
+                detail="Verification code has expired. Please request a new one.",
+            )
+
+    # Verify code
+    if user.verification_code != data.verification_code:
+        user.verification_attempts += 1
+        if user.verification_attempts >= MAX_VERIFICATION_ATTEMPTS:
+            user.verification_code = None
+            user.verification_code_created_at = None
+            user.verification_attempts = 0
+            await db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many attempts. Verification code invalidated. Please sign up again or request a new code.",
+            )
+        await db.commit()
+        remaining = MAX_VERIFICATION_ATTEMPTS - user.verification_attempts
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid verification code. {remaining} attempts remaining.",
+        )
+
+    # Success — mark verified and clean up
     user.verified = True
     user.verification_code = None
-    await db.flush()
+    user.verification_code_created_at = None
+    user.verification_attempts = 0
+    await db.commit()
 
     return VerifyResponse(verified=True, message="Account verified successfully!")
 
@@ -175,16 +230,15 @@ async def signin(request: Request, data: SignInRequest, db: AsyncSession = Depen
         )
 
     if not user.verified:
-        from fastapi.responses import JSONResponse
-        return JSONResponse(
+        raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            content={
-                "detail": "Unverified Account. Please complete verification first.",
+            detail={
+                "message": "Unverified Account. Please complete verification first.",
                 "user_id": str(user.id),
                 "channel": "sms" if user.phone_number else "email",
                 "contact": user.phone_number or user.email,
                 "user_type": user.user_type,
-            }
+            },
         )
 
     # Generate JWT with user context

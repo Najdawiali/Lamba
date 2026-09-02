@@ -253,7 +253,7 @@ export default function ProductDetailScreen() {
           {/* Top Actions Overlay */}
           <SafeAreaView style={styles.heroActionsOverlay} edges={['top']}>
             <TouchableOpacity onPress={() => router.back()} style={styles.overlayIconBtn}>
-              <Ionicons name="arrow-back" size={20} color={Colors.textPrimary} />
+              <Ionicons name={i18n.locale?.startsWith('ar') ? "arrow-forward" : "arrow-back"} size={20} color={Colors.textPrimary} />
             </TouchableOpacity>
             <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
               <TouchableOpacity onPress={handleToggleFavorite} style={styles.overlayIconBtn}>

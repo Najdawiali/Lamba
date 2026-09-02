@@ -1,9 +1,9 @@
 """
-Eagle Vision API — Main Application Entry Point
+Lamba API — Main Application Entry Point
 
 Initializes FastAPI with:
   - CORS middleware for mobile client access
-  - Lifespan events for CLIP model loading and ES index creation
+  - Lifespan events for embedding model loading
   - All API routers mounted
 """
 
@@ -22,7 +22,6 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import engine, Base
 from app.services.embedding import embedding_service
-from app.services.indexer import IndexerService
 from app.services.reranker import reranker_service
 from app.services.http_pool import close_client
 from app.services.cache import close_redis
@@ -38,13 +37,13 @@ async def lifespan(app: FastAPI):
 
     On startup:
       1. Create PostgreSQL tables (if not exist)
-      2. Load the Qwen3 model into memory
+      2. Load the Qwen3 embedding model
       3. Pre-warm cross-encoder reranker
     """
     # ── Startup ─────────────────────────────────────────────
-    logger.info("Starting Eagle Vision API...")
+    logger.info("Starting Lamba API...")
 
-    # 1. Create database tables and ensure extensions are created
+    # 1. Create database tables and ensure extensions
     async with engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
@@ -54,18 +53,18 @@ async def lifespan(app: FastAPI):
     # 2. Load Qwen3 text encoder
     embedding_service.load_model()
 
-    # 2b. Pre-warm the cross-encoder reranker
+    # 3. Pre-warm the cross-encoder reranker
     if settings.enable_reranker:
         reranker_service.load()
 
     # 4. Ensure upload directory exists
     os.makedirs(settings.upload_dir, exist_ok=True)
 
-    logger.info("Eagle Vision API ready!")
+    logger.info("Lamba API ready!")
     yield
 
     # ── Shutdown ────────────────────────────────────────────
-    logger.info("Shutting down Eagle Vision API...")
+    logger.info("Shutting down Lamba API...")
     await close_redis()
     await close_client()
     await engine.dispose()
@@ -73,8 +72,8 @@ async def lifespan(app: FastAPI):
 
 # ── App Instance ────────────────────────────────────────────────
 app = FastAPI(
-    title="Eagle Vision API",
-    description="Hyper-local retail discovery with semantic & visual search",
+    title="Lamba API",
+    description="Hyper-local retail discovery with semantic search",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -110,9 +109,7 @@ app.include_router(search_v1_router)
 app.include_router(chat_v1_router)
 
 
-
-
 @app.get("/health")
 async def health_check():
     """Health check endpoint for Docker and load balancers."""
-    return {"status": "healthy", "service": "eagle-vision-api"}
+    return {"status": "healthy", "service": "lamba-api"}

@@ -9,7 +9,6 @@ from app.models.search_alert import SearchAlert
 from app.models.search_history import SearchHistory
 from app.models.special_offer import SpecialOffer
 from app.models.offer import Offer
-from app.models.chat import ChatSession, ChatMessage
 from app.models.pos_receipt import POSReceipt, POSReceiptItem
 from app.models.conversation import Conversation, Message
 
@@ -25,8 +24,6 @@ __all__ = [
     "SearchHistory",
     "SpecialOffer",
     "Offer",
-    "ChatSession",
-    "ChatMessage",
     "POSReceipt",
     "POSReceiptItem",
     "Conversation",

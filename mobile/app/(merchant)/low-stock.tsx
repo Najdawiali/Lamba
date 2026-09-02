@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, Alert, RefreshControl, Image,
@@ -8,45 +8,24 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getMarketItems, updateMarketItem, logout, MarketItemDashboardResponse } from '../../services/api';
+import { logout, MarketItemDashboardResponse } from '../../services/api';
+import { useMarketItems, useUpdateItem } from '../../hooks/useMerchant';
+import { useQueryClient } from '@tanstack/react-query';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
 import { resolveImageUrl } from '../../services/utils';
+import { CATEGORY_AR_FALLBACK } from '../../constants/categories';
 
 type StockFilterMode = 'all' | 'out_of_stock' | 'critical' | 'low';
-
-const CATEGORY_AR_FALLBACK: Record<string, string> = {
-  'Food & Beverages': 'الأغذية والمشروبات',
-  'Home & Personal Care': 'العناية المنزلية والشخصية',
-  'Electronics & Tech': 'الإلكترونيات والتقنية',
-  'Home & Kitchen': 'المنزل والمطبخ',
-  'Services': 'الخدمات',
-  'Fruits & Vegetables': 'الخضار والفواكه',
-  'Cooking Essentials': 'مستلزمات الطبخ',
-  'Dairy & Eggs': 'الألبان والبيض',
-  'Meat & Poultry': 'اللحوم والدواجن',
-  'Beverages': 'المشروبات',
-  'Snacks': 'المأكولات الخفيفة',
-  'Bakery': 'المخبوزات',
-  'Frozen Food': 'الأطعمة المجمدة',
-  'Cleaning & Detergents': 'التنظيف المنزلي',
-  'Beauty & Personal Care': 'العناية الشخصية',
-  'Electronics': 'الإلكترونيات',
-  'Mobiles & Tech': 'الهواتف والتقنية',
-  'Cookware & Kitchenware': 'أدوات المطبخ',
-  'Beauty & Personal Care Services': 'خدمات التجميل والعناية الشخصية',
-  'Vehicle Maintenance & Care': 'صيانة وتغسيل السيارات',
-  'Home & Maintenance Services': 'خدمات وصيانة المنازل',
-  'Education & Tutoring': 'التعليم والدروس الخصوصية',
-};
 
 export default function LowStockScreen() {
   const router = useRouter();
   const Colors = useThemeColors();
   const isAr = i18n.locale?.startsWith('ar');
-  const [products, setProducts] = useState<MarketItemDashboardResponse[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const { data: products = [], isLoading: loading } = useMarketItems();
+  const updateItemMutation = useUpdateItem();
   const [refreshing, setRefreshing] = useState(false);
   const [filterMode, setFilterMode] = useState<StockFilterMode>('all');
 
@@ -68,43 +47,6 @@ export default function LowStockScreen() {
       hideSubscription.remove();
     };
   }, []);
-
-  const loadData = useCallback(async (showIndicator = true) => {
-    if (showIndicator) setLoading(true);
-    try {
-      const items = await getMarketItems();
-      setProducts(items);
-    } catch (err: any) {
-      if (err?.response?.status === 401) {
-        console.warn('Failed to load replenishment data due to 401 Unauthorized. Logging out.');
-        try {
-          await logout();
-        } catch (logoutErr) {
-          // ignore
-        }
-        router.replace('/(auth)/gateway');
-        return;
-      }
-      
-      console.warn('Failed to load replenishment items:', err);
-      Alert.alert(
-        t('common.error', 'Connection Error'),
-        t('search.error_subtitle', 'Could not query branch items. Swipe down to refresh.')
-      );
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  const handleRefresh = () => {
-    setRefreshing(true);
-    loadData(false);
-  };
 
   // Open inline replenish modal
   const handleOpenReplenish = (product: MarketItemDashboardResponse) => {
@@ -129,12 +71,11 @@ export default function LowStockScreen() {
     setSavingReplenish(true);
     try {
       const newStockTotal = (selectedProduct.stock_count || 0) + addCount;
-      const updated = await updateMarketItem(selectedProduct.id, {
-        stock_count: newStockTotal,
+      await updateItemMutation.mutateAsync({
+        itemId: selectedProduct.id,
+        updates: { stock_count: newStockTotal },
       });
       
-      // Update local state instantly
-      setProducts(prev => prev.map(p => p.id === selectedProduct.id ? updated : p));
       setReplenishModalVisible(false);
       setSelectedProduct(null);
       Vibration.vibrate(50);
@@ -645,7 +586,11 @@ export default function LowStockScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={handleRefresh}
+            onRefresh={async () => {
+              setRefreshing(true);
+              await queryClient.invalidateQueries({ queryKey: ['merchant', 'items'] });
+              setRefreshing(false);
+            }}
             tintColor={Colors.primary}
           />
         }
