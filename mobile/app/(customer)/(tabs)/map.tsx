@@ -13,6 +13,8 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import * as Linking from 'expo-linking';
 import { Ionicons } from '@expo/vector-icons';
+import { useLocation } from '../../../hooks/useLocation';
+import EnableLocationPrompt from '../../../components/EnableLocationPrompt';
 import { getNearMarkets, NearMarketResponse } from '../../../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
 import { useTheme } from '../../../context/ThemeContext';
@@ -92,65 +94,53 @@ export default function MapScreen() {
   const { width: SCREEN_WIDTH } = useWindowDimensions();
 
   // Location & Markets
-  const [locationStatus, setLocationStatus] = useState<'loading' | 'granted' | 'denied'>('loading');
-  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const { location: userLocation, loading: locationLoading, denied: locationDenied, refresh: refreshLocation } = useLocation();
   const [markets, setMarkets] = useState<NearMarketResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [focusedIndex, setFocusedIndex] = useState(0);
 
-  const initMapData = async () => {
-    try {
+  useEffect(() => {
+    if (!userLocation) return;
+    let isMounted = true;
+    (async () => {
       setLoading(true);
-      setLocationStatus('loading');
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setLocationStatus('denied');
-        setLoading(false);
-        return;
-      }
+      try {
+        const nearbyMarkets = await getNearMarkets(userLocation.latitude, userLocation.longitude, 10);
+        if (!isMounted) return;
+        setMarkets(nearbyMarkets);
 
-      setLocationStatus('granted');
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
-      setUserLocation(coords);
-
-      const nearbyMarkets = await getNearMarkets(coords.latitude, coords.longitude, 10);
-      setMarkets(nearbyMarkets);
-
-      if (mapRef.current && nearbyMarkets.length > 0) {
-        setTimeout(() => {
-          const targetLat = Number(nearbyMarkets[0].latitude);
-          const targetLng = Number(nearbyMarkets[0].longitude);
-          if (!isNaN(targetLat) && !isNaN(targetLng) && targetLat !== 0) {
-            const deltas = regionDeltasForRadius(MAP_RADIUS_KM, targetLat);
+        if (mapRef.current && nearbyMarkets.length > 0) {
+          setTimeout(() => {
+            const targetLat = Number(nearbyMarkets[0].latitude);
+            const targetLng = Number(nearbyMarkets[0].longitude);
+            if (!isNaN(targetLat) && !isNaN(targetLng) && targetLat !== 0) {
+              const deltas = regionDeltasForRadius(MAP_RADIUS_KM, targetLat);
+              mapRef.current?.animateToRegion({
+                latitude: targetLat,
+                longitude: targetLng,
+                latitudeDelta: deltas.latitudeDelta,
+                longitudeDelta: deltas.longitudeDelta,
+              }, 500);
+            }
+          }, 500);
+        } else if (mapRef.current) {
+          setTimeout(() => {
+            const deltas = regionDeltasForRadius(MAP_RADIUS_KM, userLocation.latitude);
             mapRef.current?.animateToRegion({
-              latitude: targetLat,
-              longitude: targetLng,
+              ...userLocation,
               latitudeDelta: deltas.latitudeDelta,
               longitudeDelta: deltas.longitudeDelta,
             }, 500);
-          }
-        }, 500);
-      } else if (mapRef.current) {
-        setTimeout(() => {
-          const deltas = regionDeltasForRadius(MAP_RADIUS_KM, coords.latitude);
-          mapRef.current?.animateToRegion({
-            ...coords,
-            latitudeDelta: deltas.latitudeDelta,
-            longitudeDelta: deltas.longitudeDelta,
           }, 500);
-        }, 500);
+        }
+      } catch (err) {
+        console.error('Map load failed:', err);
+      } finally {
+        if (isMounted) setLoading(false);
       }
-    } catch (err) {
-      console.error('Map load failed:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    initMapData();
-  }, []);
+    })();
+    return () => { isMounted = false; };
+  }, [userLocation]);
 
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = event.nativeEvent.contentOffset.x;
@@ -180,21 +170,11 @@ export default function MapScreen() {
     }
   };
 
-  if (locationStatus === 'denied') {
+  if (locationDenied) {
     return (
-      <View style={styles.deniedContainer}>
-        <Ionicons name="location-outline" size={64} color={Colors.error} />
-        <Text style={styles.deniedTitle}>{t('map.requires_location', 'Location Required')}</Text>
-        <Text style={styles.deniedText}>
-          {t('map.location_desc', 'Please enable location services to find nearby markets.')}
-        </Text>
-        <TouchableOpacity style={styles.settingsBtn} onPress={handleOpenSettings}>
-          <Text style={styles.settingsBtnText}>{t('map.open_settings', 'Open Settings')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.retryBtn} onPress={initMapData}>
-          <Text style={styles.retryBtnText}>{t('common.retry', 'Retry')}</Text>
-        </TouchableOpacity>
-      </View>
+      <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }}>
+        <EnableLocationPrompt onRetry={refreshLocation} />
+      </SafeAreaView>
     );
   }
 
@@ -207,16 +187,11 @@ export default function MapScreen() {
         showsUserLocation
         showsMyLocationButton={false}
         customMapStyle={mapStyle}
-        initialRegion={userLocation ? {
-          latitude: userLocation.latitude,
-          longitude: userLocation.longitude,
+        initialRegion={{
+          latitude: userLocation?.latitude ?? 31.95,
+          longitude: userLocation?.longitude ?? 35.91,
           latitudeDelta: 0.05,
           longitudeDelta: 0.05,
-        } : {
-          latitude: 32.0392,
-          longitude: 35.7272,
-          latitudeDelta: 0.1,
-          longitudeDelta: 0.1,
         }}
         onMapReady={() => {}}
       >

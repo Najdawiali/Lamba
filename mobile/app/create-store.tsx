@@ -23,6 +23,7 @@ import {
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { createMarket } from '../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../constants/theme';
@@ -72,22 +73,44 @@ export default function CreateStoreScreen() {
     return { 'Sat-Thu': '08:00-22:00', 'Fri': '09:00-22:00' };
   };
 
-  // High-fidelity GPS locator simulation / auto-fill
-  const handleGeolocate = () => {
+  const handleGeolocate = async () => {
     setGeolocating(true);
-    setTimeout(() => {
-      // Default coordinates for center in Jordan (Amman / As-Salt)
-      setLatitude('32.0385');
-      setLongitude('35.7275');
-      if (!address.trim()) {
-        setAddress(isAr ? 'السلط - شارع اليرموك قرب المجمع' : 'As-Salt, Yarmouk St. near City Center');
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          isAr ? 'صلاحية الموقع' : 'Location Permission',
+          isAr ? 'يرجى السماح بالوصول إلى موقعك لتحديد إحداثيات المتجر' : 'Please allow location access to detect store coordinates'
+        );
+        return;
       }
-      setGeolocating(false);
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const latStr = position.coords.latitude.toFixed(6);
+      const lngStr = position.coords.longitude.toFixed(6);
+      setLatitude(latStr);
+      setLongitude(lngStr);
+      try {
+        const [geo] = await Location.reverseGeocodeAsync({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+        if (geo && !address.trim()) {
+          const parts = [geo.street, geo.district, geo.city, geo.region].filter(Boolean);
+          if (parts.length > 0) setAddress(parts.join(', '));
+        }
+      } catch {}
       Alert.alert(
         isAr ? 'تم تحديد الموقع بنجاح' : 'Location Acquired',
-        isAr ? 'تم جلب إحداثيات موقع متجرك (32.0385, 35.7275).' : 'Store coordinates successfully set to (32.0385, 35.7275).'
+        isAr ? `تم جلب إحداثيات موقع متجرك (${latStr}, ${lngStr}).` : `Store coordinates successfully set to (${latStr}, ${lngStr}).`
       );
-    }, 1200);
+    } catch {
+      Alert.alert(
+        isAr ? 'خطأ' : 'Error',
+        isAr ? 'فشل تحديد الموقع تلقائياً. يرجى إدخال الإحداثيات يدوياً.' : 'Failed to detect location. Please enter coordinates manually.'
+      );
+    } finally {
+      setGeolocating(false);
+    }
   };
 
   const handleCreateStore = async () => {

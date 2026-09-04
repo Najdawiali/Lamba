@@ -1,4 +1,10 @@
 {
+  "location": {
+    "title": "Location Required",
+    "subtitle": "Lamba needs your location to show nearby stores and products.",
+    "open_settings": "Open Settings",
+    "retry": "Try Again"
+  },
   "login": {
     "welcome_back": "Welcome back",
     "email_placeholder": "Email address or phone",

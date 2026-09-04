@@ -21,6 +21,8 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Linking from 'expo-linking';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useLocation } from '../../../hooks/useLocation';
+import EnableLocationPrompt from '../../../components/EnableLocationPrompt';
 import {
   textSearch, imageSearch, getCategories, getUser,
   getNearMarkets, getCustomerSpecialOffers, getNearbyItems, createSearchAlert,
@@ -33,8 +35,6 @@ import { useThemeColors } from '../../../context/ThemeContext';
 import { t, i18n } from '../../../services/i18n';
 import { formatPrice } from '../../../services/currency';
 import { CATEGORY_AR_FALLBACK } from '../../../constants/categories';
-
-const DEFAULT_COORDS = { latitude: 32.0385, longitude: 35.7275 }; // As-Salt center (catalog stores location)
 
 export default function SearchScreen() {
   const Colors = useThemeColors();
@@ -113,75 +113,18 @@ export default function SearchScreen() {
     }
     return allCats;
   }, [categoriesList, filterListingType]);
-  const [locationStatus, setLocationStatus] = useState<'loading' | 'granted' | 'denied'>('loading');
-  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number }>(DEFAULT_COORDS);
+  const { location: userLocation, loading: locationLoading, denied: locationDenied, refresh: refreshLocation } = useLocation();
 
   const searchInputRef = useRef<TextInput>(null);
 
-  // Explore feed: real nearby markets & hot deals (previously hardcoded
-  // dummy cards with "Supermarket N" / "Special Offer N" / "12.00 SAR").
+  // Explore feed: real nearby markets & hot deals
   const [exploreMarkets, setExploreMarkets] = useState<NearMarketResponse[]>([]);
   const [exploreDeals, setExploreDeals] = useState<CustomerSpecialOfferResponse[]>([]);
   const [nearbyProducts, setNearbyProducts] = useState<NearbyItemResponse[]>([]);
 
-  const initPermissionsAndData = async () => {
-    try {
-      setLocationStatus('loading');
-      setError(null);
-      
-      let coords = DEFAULT_COORDS;
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        try {
-          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-          coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
-        } catch (locErr) {
-          console.warn('getCurrentPositionAsync failed, trying last known:', locErr);
-          try {
-            const lastLoc = await Location.getLastKnownPositionAsync();
-            if (lastLoc) {
-              coords = { latitude: lastLoc.coords.latitude, longitude: lastLoc.coords.longitude };
-            }
-          } catch {
-            console.warn('getLastKnownPositionAsync also failed, using default coordinates');
-          }
-        }
-        setUserLocation(coords);
-        setLocationStatus('granted');
-        
-        try {
-          const address = await Location.reverseGeocodeAsync(coords);
-          if (address && address[0]) {
-            const detectedCity = address[0].city || address[0].region || address[0].subregion || '';
-          }
-        } catch (geoErr) {
-          console.warn('Reverse geocoding failed:', geoErr);
-        }
-
-        // Pull real nearby markets + active special offers + nearby products for the Explore feed.
-        try {
-          const [markets, deals, items] = await Promise.all([
-            getNearMarkets(coords.latitude, coords.longitude, 10).catch(() => [] as NearMarketResponse[]),
-            getCustomerSpecialOffers(coords.latitude, coords.longitude).catch((e) => {
-              console.warn('Explore: getCustomerSpecialOffers failed', e);
-              return [] as CustomerSpecialOfferResponse[];
-            }),
-            getNearbyItems(coords.latitude, coords.longitude, 15, 10).catch((e) => {
-              console.warn('Explore: getNearbyItems failed', e);
-              return [] as NearbyItemResponse[];
-            }),
-          ]);
-          setExploreMarkets(markets || []);
-          setExploreDeals((deals || []).slice(0, 10));
-          setNearbyProducts(items || []);
-        } catch (exploreErr) {
-          console.warn('Explore feed load failed:', exploreErr);
-        }
-      } else {
-        setUserLocation(DEFAULT_COORDS);
-        setLocationStatus('denied');
-      }
-
+  // Load user profile & categories once on mount
+  useEffect(() => {
+    (async () => {
       try {
         const currentUser = await getUser();
         if (currentUser) {
@@ -199,19 +142,36 @@ export default function SearchScreen() {
       } catch (catsErr) {
         console.warn('Failed to fetch categories:', catsErr);
       }
-    } catch (err) {
-      console.error('Failed to initialize search tools:', err);
-      setError('Could not connect to service host. Check network connectivity.');
-      // Only set location status to denied if location request actually failed
-      if (locationStatus === 'loading') {
-        setLocationStatus('denied');
-      }
-    }
-  };
-
-  useEffect(() => {
-    initPermissionsAndData();
+    })();
   }, []);
+
+  // Fetch explore feed whenever userLocation becomes available
+  useEffect(() => {
+    if (!userLocation) return;
+    let isMounted = true;
+    (async () => {
+      try {
+        const [markets, deals, items] = await Promise.all([
+          getNearMarkets(userLocation.latitude, userLocation.longitude, 10).catch(() => [] as NearMarketResponse[]),
+          getCustomerSpecialOffers(userLocation.latitude, userLocation.longitude).catch((e) => {
+            console.warn('Explore: getCustomerSpecialOffers failed', e);
+            return [] as CustomerSpecialOfferResponse[];
+          }),
+          getNearbyItems(userLocation.latitude, userLocation.longitude, 15, 10).catch((e) => {
+            console.warn('Explore: getNearbyItems failed', e);
+            return [] as NearbyItemResponse[];
+          }),
+        ]);
+        if (!isMounted) return;
+        setExploreMarkets(markets || []);
+        setExploreDeals((deals || []).slice(0, 10));
+        setNearbyProducts(items || []);
+      } catch (exploreErr) {
+        console.warn('Explore feed load failed:', exploreErr);
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [userLocation]);
 
   const loadHistory = async (uid: string) => {
     try {
@@ -233,7 +193,8 @@ export default function SearchScreen() {
   };
 
   const executeSearch = async (searchQuery: string, type: 'text' | 'image' = 'text', imageUri?: string) => {
-    const coords = userLocation || DEFAULT_COORDS;
+    if (!userLocation) return;
+    const coords = userLocation;
     Keyboard.dismiss();
     setLoading(true);
     setError(null);
@@ -1267,21 +1228,11 @@ export default function SearchScreen() {
   };
 
   // ── Main Render ──────────────────────────────────────────
-  if (locationStatus === 'denied') {
+  if (locationDenied) {
     return (
-      <View style={styles.deniedContainer}>
-        <View style={styles.deniedIconWrapper}>
-          <Ionicons name="lock-closed" size={32} color={Colors.error} style={styles.deniedLock} />
-          <Ionicons name="location" size={80} color={Colors.error} />
-        </View>
-        <Text style={styles.deniedTitle}>{t('explore.enable_location')}</Text>
-        <Text style={styles.deniedText}>
-          {t('explore.enable_location_desc')}
-        </Text>
-        <TouchableOpacity style={styles.primaryBtn} onPress={handleOpenSettings}>
-          <Text style={styles.primaryBtnText}>{t('explore.enable_location_btn')}</Text>
-        </TouchableOpacity>
-      </View>
+      <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }}>
+        <EnableLocationPrompt onRetry={refreshLocation} />
+      </SafeAreaView>
     );
   }
 

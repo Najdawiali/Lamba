@@ -62,10 +62,14 @@ export default function ShopCatalogScreen() {
       }
 
       try {
-        const markets = await getNearMarkets(32.0385, 35.7275, 50); // wide radius to find the store
-        const thisMarket = markets.find(m => m.id === id);
-        if (thisMarket) {
-          setStoreInfo({ name: thisMarket.name, lat: thisMarket.latitude, lng: thisMarket.longitude });
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const pos = await Location.getCurrentPositionAsync({});
+          const markets = await getNearMarkets(pos.coords.latitude, pos.coords.longitude, 50);
+          const thisMarket = markets.find(m => m.id === id);
+          if (thisMarket) {
+            setStoreInfo({ name: thisMarket.name, lat: thisMarket.latitude, lng: thisMarket.longitude });
+          }
         }
       } catch {}
     } catch (err) {

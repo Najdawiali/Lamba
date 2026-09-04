@@ -11,6 +11,7 @@ import {
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import { createMarket } from '../../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
@@ -38,18 +39,34 @@ export default function OnboardingScreen() {
     return { 'Sat-Thu': '08:00-22:00', Fri: '09:00-22:00' };
   };
 
-  const handleGeolocate = () => {
+  const handleGeolocate = async () => {
     setGeolocating(true);
-    // Simulate high-fidelity GPS lookup in Jordan, As-Salt
-    setTimeout(() => {
-      setLatitude('32.0385');
-      setLongitude('35.7275');
-      setGeolocating(false);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          isAr ? 'صلاحية الموقع' : 'Location Permission',
+          isAr ? 'يرجى السماح بالوصول إلى موقعك لتحديد إحداثيات المتجر' : 'Please allow location access to detect store coordinates'
+        );
+        return;
+      }
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const latStr = position.coords.latitude.toFixed(6);
+      const lngStr = position.coords.longitude.toFixed(6);
+      setLatitude(latStr);
+      setLongitude(lngStr);
       Alert.alert(
-        isAr ? 'تم تحديد الموقع' : 'Location Located',
-        isAr ? 'تم الحصول على إحداثيات المتجر بنجاح! مدينة السلط الرياضية (32.0385، 35.7275).' : 'Store coordinates successfully acquired! Sport City, As-Salt (32.0385, 35.7275) was selected.'
+        isAr ? 'تم تحديد الموقع' : 'Location Acquired',
+        isAr ? `تم الحصول على إحداثيات المتجر بنجاح (${latStr}, ${lngStr}).` : `Store coordinates acquired (${latStr}, ${lngStr}).`
       );
-    }, 1500);
+    } catch {
+      Alert.alert(
+        isAr ? 'خطأ' : 'Error',
+        isAr ? 'فشل تحديد الموقع تلقائياً. يرجى إدخال الإحداثيات يدوياً.' : 'Failed to detect location. Please enter coordinates manually.'
+      );
+    } finally {
+      setGeolocating(false);
+    }
   };
 
   const handleInitialize = async () => {
@@ -344,7 +361,7 @@ export default function OnboardingScreen() {
               <Text style={styles.coordPrefix}>Lat:</Text>
               <TextInput
                 style={styles.input}
-                placeholder="32.0385"
+                placeholder="31.9500"
                 placeholderTextColor={Colors.textMuted}
                 value={latitude}
                 onChangeText={setLatitude}
@@ -357,7 +374,7 @@ export default function OnboardingScreen() {
               <Text style={styles.coordPrefix}>Lng:</Text>
               <TextInput
                 style={styles.input}
-                placeholder="35.7275"
+                placeholder="35.9100"
                 placeholderTextColor={Colors.textMuted}
                 value={longitude}
                 onChangeText={setLongitude}

@@ -22,9 +22,9 @@ import { useThemeColors } from '../../../context/ThemeContext';
 import { t, i18n } from '../../../services/i18n';
 import { getCurrencyCode, formatPrice } from '../../../services/currency';
 import { resolveImageUrl, formatDistanceKm } from '../../../services/utils';
+import { useLocation } from '../../../hooks/useLocation';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
-const DEFAULT_COORDS = { latitude: 32.0385, longitude: 35.7275 }; // As-Salt Fallback
 
 export default function CustomerOffersScreen() {
   const Colors = useThemeColors();
@@ -418,9 +418,8 @@ export default function CustomerOffersScreen() {
   const router = useRouter();
   const isAr = i18n.locale.includes('ar');
 
-  // Location States
-  const [locationPermission, setLocationPermission] = useState<'loading' | 'granted' | 'denied'>('loading');
-  const [coordinates, setCoordinates] = useState<{ latitude: number; longitude: number }>(DEFAULT_COORDS);
+  // Location
+  const { location: userLocation, loading: locationLoading, denied: locationDenied } = useLocation();
 
   // Offers Data & Loading
   const [offers, setOffers] = useState<CustomerSpecialOfferResponse[]>([]);
@@ -436,28 +435,14 @@ export default function CustomerOffersScreen() {
   const [showFiltersTray, setShowFiltersTray] = useState(false);
   const [showScoreInfo, setShowScoreInfo] = useState(false);
 
-  // Resolve user location on mount
-  const getUserLocation = async () => {
-    try {
-      setLocationPermission('loading');
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        setCoordinates({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
-        setLocationPermission('granted');
-        return { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
-      } else {
-        setLocationPermission('denied');
-        return DEFAULT_COORDS;
-      }
-    } catch (err) {
-      console.warn('Error fetching location:', err);
-      setLocationPermission('denied');
-      return DEFAULT_COORDS;
+  const fetchOffers = useCallback(async (coords?: { latitude: number; longitude: number } | null) => {
+    const activeCoords = coords || userLocation;
+    if (!activeCoords) {
+      setOffers([]);
+      setLoading(false);
+      setRefreshing(false);
+      return;
     }
-  };
-
-  const fetchOffers = useCallback(async (coords = coordinates) => {
     setLoading(true);
     try {
       const filters: CustomerOffersFilters = {
@@ -468,8 +453,8 @@ export default function CustomerOffersScreen() {
       };
 
       const fetchedOffers = await getCustomerSpecialOffers(
-        coords.latitude,
-        coords.longitude,
+        activeCoords.latitude,
+        activeCoords.longitude,
         filters
       );
       setOffers(Array.isArray(fetchedOffers) ? fetchedOffers : []);
@@ -480,23 +465,26 @@ export default function CustomerOffersScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [coordinates, searchQuery, selectedOfferType, selectedCategory, maxDistance, isAr]);
-
-  const loadDataOnMount = async () => {
-    const coords = await getUserLocation();
-    try {
-      const cats = await getCategories();
-      setCategories(cats);
-    } catch (err) {
-      console.warn('Failed to load categories tree:', err);
-    }
-    // Fetch offers immediately with resolved coordinates
-    await fetchOffers(coords);
-  };
+  }, [userLocation, searchQuery, selectedOfferType, selectedCategory, maxDistance]);
 
   useEffect(() => {
-    loadDataOnMount();
+    (async () => {
+      try {
+        const cats = await getCategories();
+        setCategories(cats);
+      } catch (err) {
+        console.warn('Failed to load categories tree:', err);
+      }
+    })();
   }, []);
+
+  useEffect(() => {
+    if (userLocation) {
+      fetchOffers(userLocation);
+    } else if (!locationLoading) {
+      setLoading(false);
+    }
+  }, [userLocation, locationLoading, fetchOffers]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -515,12 +503,14 @@ export default function CustomerOffersScreen() {
     setSearchQuery('');
     setShowFiltersTray(false);
     
-    // Fetch reset data
-    setLoading(true);
-    getCustomerSpecialOffers(coordinates.latitude, coordinates.longitude)
-      .then(setOffers)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    if (userLocation) {
+      // Fetch reset data
+      setLoading(true);
+      getCustomerSpecialOffers(userLocation.latitude, userLocation.longitude)
+        .then(setOffers)
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    }
   };
 
 
@@ -625,7 +615,7 @@ export default function CustomerOffersScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Top Banner for Fallback Coordinates */}
-      {locationPermission === 'denied' && (
+      {locationDenied && (
         <View style={styles.warningBanner}>
           <Ionicons name="location-sharp" size={16} color={Colors.background} />
           <Text style={styles.warningText}>
