@@ -55,6 +55,7 @@ from app.schemas.offer import OfferCreate, OfferUpdate, OfferResponse
 from app.schemas.market_profile import MarketProfileUpdate, EmployeesUpdate, MarketProfileResponse
 from app.services.embedding import embedding_service
 from app.services.alert_service import check_and_trigger_stock_alerts
+from app.services.storage import storage_service
 
 from app.config import settings
 from app.services.auth import create_access_token
@@ -808,29 +809,25 @@ async def create_new_item(
         except Exception:
             parsed_attributes = {}
     
-    # Save Primary Upload Image
-    os.makedirs(settings.upload_dir, exist_ok=True)
-    file_ext = os.path.splitext(image.filename)[1] or ".jpg"
-    unique_filename = f"{uuid.uuid4()}{file_ext}"
-    file_path = os.path.join(settings.upload_dir, unique_filename)
-    
+    # Save Primary Upload Image (local or cloud, based on STORAGE_BACKEND)
     image_bytes = await image.read()
-    with open(file_path, "wb") as f:
-        f.write(image_bytes)
-        
-    primary_image_url = f"/uploads/{unique_filename}"
-    
+    primary_image_url = await storage_service.upload(
+        file_bytes=image_bytes,
+        original_filename=image.filename or "photo.jpg",
+        subfolder="products",
+    )
+
     # Save Secondary Upload Images
     secondary_urls = []
     for sec_file in secondary_images:
         if sec_file.filename:
-            sec_ext = os.path.splitext(sec_file.filename)[1] or ".jpg"
-            sec_unique = f"{uuid.uuid4()}{sec_ext}"
-            sec_path = os.path.join(settings.upload_dir, sec_unique)
             sec_bytes = await sec_file.read()
-            with open(sec_path, "wb") as f:
-                f.write(sec_bytes)
-            secondary_urls.append(f"/uploads/{sec_unique}")
+            sec_url = await storage_service.upload(
+                file_bytes=sec_bytes,
+                original_filename=sec_file.filename,
+                subfolder="products",
+            )
+            secondary_urls.append(sec_url)
     
     # Gemma VLM Extraction: refine name, description and auto-categorize from image
     vlm_details = None

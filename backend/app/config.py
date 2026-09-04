@@ -190,6 +190,14 @@ class Settings(BaseSettings):
     # ── Uploads ─────────────────────────────────────────────────
     upload_dir: str = "./uploads"
 
+    # ── Storage Backend ─────────────────────────────────────────
+    storage_backend: str = "local"  # "local" or "r2"
+    r2_account_id: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
+    r2_bucket_name: str = "lamba-images"
+    r2_public_url: str = ""  # e.g. https://pub-xxx.r2.dev
+
     def model_post_init(self, __context) -> None:
         import os
         # Docker environment URL overrides
