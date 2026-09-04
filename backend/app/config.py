@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     # ── Security & CORS ─────────────────────────────────────────
     cors_origins: List[str] = ["http://localhost:3000", "http://localhost:8081"]
 
+    # ── Email ───────────────────────────────────────────────
+    email_provider: str = "mock"  # "mock" or "resend"
+    resend_api_key: str = ""
+    email_from: str = "Lamba <noreply@lambajo.com>"
+
     # ── CLIP Model (image search — disabled in text-only phase) ──
     clip_model_name: str = "clip-ViT-B-32"
     enable_image_search: bool = False  # When False, /image route returns 410 Gone

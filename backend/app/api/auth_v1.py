@@ -2,7 +2,7 @@
 Auth V1 API — Multi-channel registration (Email / Phone), verification, and sign-in.
 
 Endpoints:
-  POST /api/v1/auth/signup  — Register with email OR phone, triggers mock verification
+  POST /api/v1/auth/signup  — Register with email OR phone, dispatches verification code
   POST /api/v1/auth/verify  — Submit 6-digit verification code
   POST /api/v1/auth/signin  — Authenticate and receive JWT
 """
@@ -25,6 +25,7 @@ from app.schemas.auth_v1 import (
     SignInRequest, SignInResponse, SignInUserInfo,
 )
 from app.services.auth import hash_password, verify_password, create_access_token
+from app.services.email_service import send_verification_email
 
 logger = logging.getLogger(__name__)
 
@@ -36,24 +37,6 @@ def _generate_code(length: int = 6) -> str:
     return "".join(random.choices(string.digits, k=length))
 
 
-def _mock_send_sms(phone: str, code: str) -> None:
-    """Mock SMS gateway — prints to server console."""
-    logger.info("=" * 60)
-    logger.info("📱  MOCK SMS VERIFICATION")
-    logger.info(f"   To:   {phone}")
-    logger.info(f"   Code: {code}")
-    logger.info("=" * 60)
-
-
-def _mock_send_email(email: str, code: str) -> None:
-    """Mock Email gateway — prints to server console."""
-    logger.info("=" * 60)
-    logger.info("📧  MOCK EMAIL VERIFICATION")
-    logger.info(f"   To:   {email}")
-    logger.info(f"   Code: {code}")
-    logger.info("=" * 60)
-
-
 # ── POST /signup ────────────────────────────────────────────────
 @router.post("/signup", response_model=SignUpResponse, status_code=201)
 @limiter.limit("10/minute")
@@ -62,7 +45,7 @@ async def signup(request: Request, data: SignUpRequest, db: AsyncSession = Depen
     Register a new customer or merchant.
 
     Accepts email OR phone_number. Generates a 6-digit verification code
-    and dispatches it via the appropriate mock channel (SMS or Email).
+    and dispatches it via the appropriate channel (Email or SMS).
     The account is stored as unverified until /verify is called.
     """
     # Check for duplicate email or phone
@@ -97,13 +80,13 @@ async def signup(request: Request, data: SignUpRequest, db: AsyncSession = Depen
     db.add(user)
     await db.flush()
 
-    # Dispatch mock verification
-    if data.phone_number:
-        _mock_send_sms(data.phone_number, code)
-        channel = "sms"
-    else:
-        _mock_send_email(data.email, code)
-        channel = "email"
+    # Send verification code via configured provider (resend or mock)
+    channel = "email" if data.email else "sms"
+    if data.email:
+        await send_verification_email(data.email, code)
+    elif data.phone_number:
+        # SMS delivery not yet implemented — log to console
+        logger.info(f"📱  MOCK SMS: Code {code} → {data.phone_number}")
 
     return SignUpResponse(
         user_id=user.id,
