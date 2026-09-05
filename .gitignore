@@ -22,7 +22,6 @@ backend/uploads/*
 dist/
 web-build/
 node_modules/
-mobile/android/
 mobile/.env
 
 # Evaluation artifacts & labeling worksheets with transient data
