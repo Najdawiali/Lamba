@@ -400,7 +400,15 @@ async def _retrieve_fused_candidates(
                 deduped_parts.append(cleaned)
 
         doc_text = " - ".join(deduped_parts) if deduped_parts else (gi.name or "")
-        fused.append({"result": item, "text": doc_text, "cosine_sim": sem})
+        fused.append({
+            "result": item,
+            "text": doc_text,
+            "cosine_sim": sem,
+            "rrf_score": rrf_scores.get(key, 0.0),
+            "category": cat_name,
+            "category_name_ar": cat_name_ar,
+            "category_name_en": cat_name_en,
+        })
     return fused
 
 
@@ -744,6 +752,7 @@ async def _run_search(
     effective_listing_type = listing_type
     extracted_attrs: Dict[str, Any] = {}
     query_clean: Optional[str] = None
+    intent_analysis = None
     try:
         intent_analysis = await query_understanding_service.analyze_query_async(resolved_query)
         if not effective_listing_type and intent_analysis.intent in ("product", "service"):
@@ -881,6 +890,20 @@ async def _run_search(
 
     t4 = time.time()
     logger.info(f"[TIMING] Retrieval: {(t4-t3)*1000:.0f}ms")
+
+    fused.sort(key=lambda x: x['rrf_score'], reverse=True)
+
+    # ── Category boost: prioritize results matching the extracted category ──
+    if intent_analysis and getattr(intent_analysis, 'category_name', None):
+        cat = intent_analysis.category_name.lower()
+        for r in fused:
+            item_cat = (r.get('category') or '').lower()
+            item_cat_ar = (r.get('category_name_ar') or '').lower()
+            item_cat_en = (r.get('category_name_en') or '').lower()
+            if cat in item_cat or cat in item_cat_ar or cat in item_cat_en:
+                r['rrf_score'] *= 1.5  # 50% boost for category match
+        fused.sort(key=lambda x: x['rrf_score'], reverse=True)
+        logger.info(f"[SEARCH] Category boost applied for: {intent_analysis.category_name}")
 
     candidates = fused
     unique_item_ids_count = len(set(
