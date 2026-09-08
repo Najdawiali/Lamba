@@ -544,6 +544,12 @@ export default function CustomerProfileScreen() {
           />
           <Divider />
           <MenuRow
+            icon="heart-outline"
+            label={t('favorites.title', 'My Favorites')}
+            onPress={() => router.push('/(customer)/favorites' as any)}
+          />
+          <Divider />
+          <MenuRow
             icon="notifications-outline"
             label={t('profile.availability_alerts', 'تنبيهات التوفر')}
             badge={alertCount}

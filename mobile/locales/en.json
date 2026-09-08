@@ -297,9 +297,12 @@
     "price_placeholder": "e.g. 5.99"
   },
   "favorites": {
-    "title": "Favorites",
+    "title": "My Favorites",
     "subtitle": "Your saved markets & products",
     "empty": "No favorites yet",
+    "empty_hint": "Tap the heart icon on any product to save it here",
+    "remove_title": "Remove from Favorites",
+    "remove_confirm": "Remove from your favorites?",
     "empty_desc": "Products you love will appear here. Start exploring!",
     "explore": "Explore Products",
     "removed": "Removed from Favorites",
@@ -642,6 +645,7 @@
     "empty_subtitle": "Add or scan your first item to get started."
   },
   "common": {
+    "remove": "Remove",
     "error": "An error occurred",
     "success": "Success",
     "open": "Open",
