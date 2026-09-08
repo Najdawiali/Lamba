@@ -83,3 +83,11 @@ export async function signIn(emailOrPhone: string, password: string): Promise<Si
   await saveUser(data.user);
   return data;
 }
+
+export async function resendCode(userId: string): Promise<{ message: string; channel: string }> {
+  const { data } = await api.post<{ message: string; channel: string }>('/api/v1/auth/resend-code', {
+    user_id: userId,
+  });
+  return data;
+}
+

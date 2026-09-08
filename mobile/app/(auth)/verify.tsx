@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { verifyCode } from '../../services/api';
+import { verifyCode, resendCode } from '../../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
@@ -170,13 +170,20 @@ export default function VerifyScreen() {
   },
   }), [Colors]);
   const router = useRouter();
-  const params = useLocalSearchParams();
-  
-  // Route params passed from registration
-  const userId = params.userId as string;
-  const contact = (params.contact as string) || '';
-  const channel = (params.channel as string) || 'email';
-  const userType = (params.userType as string) || 'customer';
+  const { user_id: queryUserId, userId: legacyUserId, channel: queryChannel, contact: queryContact, user_type: queryUserType, userType: legacyUserType } = useLocalSearchParams<{
+    user_id?: string;
+    userId?: string;
+    channel?: string;
+    contact?: string;
+    user_type?: string;
+    userType?: string;
+  }>();
+
+  // Route params passed from registration or login
+  const userId = (queryUserId || legacyUserId) as string;
+  const contact = (queryContact as string) || '';
+  const channel = (queryChannel as string) || 'email';
+  const userType = (queryUserType || legacyUserType as string) || 'customer';
 
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -247,18 +254,21 @@ export default function VerifyScreen() {
     }
   }, [code, handleVerify]);
 
-  const handleResendCode = () => {
+  const handleResendCode = async () => {
     if (resendTimer > 0) return;
-    
-    // Simulate/mock resending verification code.
-    // In our backend design, the mock gateway prints the code to stdout.
-    // Since we don't have password credentials to call /signup again,
-    // we show a beautiful mock notification explaining that a new code was generated.
     setResendTimer(60);
-    Alert.alert(
-      t('verify.code_resent'),
-      t('verify.code_resent_desc')
-    );
+    try {
+      await resendCode(userId);
+      Alert.alert(
+        t('auth.code_sent', 'Code Sent'),
+        t('auth.code_resent_msg', 'A new verification code has been sent.'),
+      );
+    } catch (err: any) {
+      Alert.alert(
+        t('common.error', 'Error'),
+        err?.response?.data?.detail || t('auth.resend_failed', 'Failed to resend code. Please try again.'),
+      );
+    }
   };
 
   const handleBoxPress = () => {

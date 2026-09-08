@@ -73,21 +73,27 @@ export default function LoginScreen() {
       // Always route to customer search home for all accounts
       router.replace('/(customer)/search');
     } catch (err: any) {
-      const status = err?.response?.status;
-      const data = err?.response?.data;
-
-      if (status === 403 && data?.user_id) {
-        // Account unverified — show banner with instant activation action
-        setErrorMessage(t('login.unverified_account', 'Account is unverified. Please verify your account.'));
-        setUnverifiedDetails({
-          userId: data.user_id,
-          contact: data.contact,
-          channel: data.channel,
-          userType: data.user_type,
-        });
-      } else {
-        setErrorMessage(data?.detail || t('login.invalid_credentials', 'Invalid email/phone or password. Please try again.'));
+      if (err.response?.status === 403) {
+        const detail = err.response.data?.detail;
+        if (detail && detail.user_id) {
+          router.push({
+            pathname: '/(auth)/verify',
+            params: {
+              user_id: detail.user_id,
+              channel: detail.channel,
+              contact: detail.contact,
+              user_type: detail.user_type,
+              from_signin: 'true',
+            },
+          });
+          return;
+        }
       }
+
+      setErrorMessage(
+        err?.response?.data?.detail ||
+        t('login.invalid_credentials', 'Invalid email/phone or password. Please try again.')
+      );
     } finally {
       setLoading(false);
     }

@@ -82,6 +82,7 @@ export default function RegisterScreen() {
       router.push({
         pathname: '/(auth)/verify',
         params: {
+          user_id: response.user_id,
           userId: response.user_id,
           contact: activeTab === 'email' ? email.trim() : phone.trim(),
           channel: response.channel,

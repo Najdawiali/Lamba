@@ -10,11 +10,13 @@ Endpoints:
 import logging
 import random
 import string
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import JSONResponse
 from app.rate_limit import limiter
+from pydantic import BaseModel
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +33,10 @@ from app.services.email_service import send_verification_email
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Auth V1"])
+
+
+class ResendCodeRequest(BaseModel):
+    user_id: uuid.UUID
 
 
 def _generate_code(length: int = 6) -> str:
@@ -207,6 +213,40 @@ async def verify(request: Request, data: VerifyRequest, db: AsyncSession = Depen
     await db.commit()
 
     return VerifyResponse(verified=True, message="Account verified successfully!")
+
+
+# ── POST /resend-code ──────────────────────────────────────────
+@router.post("/resend-code")
+@limiter.limit("3/minute")
+async def resend_code(request: Request, data: ResendCodeRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Resend verification code for an unverified account.
+    Rate limited to 3 per minute to prevent abuse.
+    """
+    result = await db.execute(select(User).where(User.id == data.user_id))
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if user.verified:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Account is already verified")
+
+    code = f"{random.randint(0, 999999):06d}"
+    user.verification_code = code
+    user.verification_code_created_at = datetime.now(timezone.utc)
+    user.verification_attempts = 0
+    await db.flush()
+
+    if user.email:
+        await send_verification_email(user.email, code)
+    elif user.phone_number:
+        logger.info(f"📱  MOCK SMS: Code {code} → {user.phone_number}")
+
+    return {
+        "message": "Verification code resent",
+        "channel": "email" if user.email else "sms",
+    }
 
 
 # ── POST /signin ───────────────────────────────────────────────
