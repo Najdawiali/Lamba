@@ -13,6 +13,7 @@ import string
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import JSONResponse
 from app.rate_limit import limiter
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,19 +49,44 @@ async def signup(request: Request, data: SignUpRequest, db: AsyncSession = Depen
     and dispatches it via the appropriate channel (Email or SMS).
     The account is stored as unverified until /verify is called.
     """
-    # Check for duplicate email or phone
-    conditions = []
-    if data.email:
-        conditions.append(User.email == data.email)
-    if data.phone_number:
-        conditions.append(User.phone_number == data.phone_number)
+    # Check for existing account
+    result = await db.execute(select(User).where(
+        User.email == data.email if data.email else User.phone_number == data.phone_number
+    ))
+    existing_user = result.scalar_one_or_none()
 
-    existing = await db.execute(select(User).where(or_(*conditions)))
-    if existing.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email or phone number already exists",
-        )
+    if existing_user:
+        if existing_user.verified:
+            # Real verified account — cannot re-register
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Account already exists. Please sign in.",
+            )
+        else:
+            # Unverified account — regenerate OTP and resend
+            code = f"{random.randint(0, 999999):06d}"
+            existing_user.password_hash = hash_password(data.password)
+            existing_user.verification_code = code
+            existing_user.verification_code_created_at = datetime.now(timezone.utc)
+            existing_user.verification_attempts = 0
+            if data.full_name:
+                existing_user.full_name = data.full_name
+            await db.flush()
+
+            # Send new verification code
+            if data.email:
+                await send_verification_email(data.email, code)
+            elif data.phone_number:
+                logger.info(f"📱  MOCK SMS: Code {code} → {data.phone_number}")
+
+            return JSONResponse(
+                status_code=status.HTTP_201_CREATED,
+                content={
+                    "user_id": str(existing_user.id),
+                    "message": "Verification code resent. Please check your email.",
+                    "channel": "email" if data.email else "sms",
+                },
+            )
 
     # Generate verification code
     code = _generate_code()
