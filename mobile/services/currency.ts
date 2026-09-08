@@ -1,11 +1,7 @@
 /**
- * Currency Service — Locale-based currency detection & formatting.
+ * Currency Service — Currency preference & formatting.
  *
- * Detects user's locale on first launch and defaults to the appropriate currency:
- * - JO locale → JOD (Jordanian Dinar)
- * - SA locale → SAR (Saudi Riyal)
- * - Fallback → USD
- *
+ * Defaults to JOD (Jordanian Dinar) for Jordan-focused app.
  * Stores preference in SecureStore. Allows override from Profile → Settings.
  * Format: [amount] [code] — e.g. "45.00 JOD". Always 2 decimal places.
  */
@@ -14,6 +10,8 @@ import * as Localization from 'expo-localization';
 import * as SecureStore from 'expo-secure-store';
 
 const CURRENCY_KEY = 'lamba_currency';
+const CURRENCY_VERSION_KEY = 'lamba_currency_v';
+const CURRENT_CURRENCY_VERSION = '2'; // bump this to force re-default
 
 // Map of country/region codes to currency codes
 const LOCALE_CURRENCY_MAP: Record<string, string> = {
@@ -40,27 +38,26 @@ let _currentCurrency: string = 'JOD'; // Default to JOD
  */
 export const setupCurrency = async (): Promise<void> => {
   try {
-    // Check for stored preference first
+    // Check if currency was set under an older version (locale-based detection)
+    const version = await SecureStore.getItemAsync(CURRENCY_VERSION_KEY);
+    if (version !== CURRENT_CURRENCY_VERSION) {
+      // Clear old auto-detected currency and re-default to JOD
+      await SecureStore.deleteItemAsync(CURRENCY_KEY);
+      await SecureStore.setItemAsync(CURRENCY_VERSION_KEY, CURRENT_CURRENCY_VERSION);
+    }
+
+    // Check for stored preference (user override from Settings)
     const saved = await SecureStore.getItemAsync(CURRENCY_KEY);
     if (saved) {
       _currentCurrency = saved;
       return;
     }
 
-    // Detect from device locale
-    const locales = Localization.getLocales();
-    const regionCode = locales?.[0]?.regionCode?.toUpperCase();
-
-    if (regionCode && LOCALE_CURRENCY_MAP[regionCode]) {
-      _currentCurrency = LOCALE_CURRENCY_MAP[regionCode];
-    } else {
-      _currentCurrency = 'JOD'; // Default fallback
-    }
-
-    // Persist the detected currency
+    // Always default to JOD for Jordan-focused app
+    _currentCurrency = 'JOD';
     await SecureStore.setItemAsync(CURRENCY_KEY, _currentCurrency);
   } catch (err) {
-    console.warn('Currency detection failed, defaulting to JOD:', err);
+    console.warn('Failed to load currency preference, defaulting to JOD:', err);
     _currentCurrency = 'JOD';
   }
 };
