@@ -330,7 +330,7 @@ export default function MerchantInboxScreen() {
 
   if (selectedSession) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         {/* Chat Thread Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBackToInbox} style={styles.backBtn} activeOpacity={0.7}>
@@ -342,7 +342,8 @@ export default function MerchantInboxScreen() {
 
         <KeyboardAvoidingView 
           style={{ flex: 1 }} 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
         >
           {loadingMessages ? (
             <View style={styles.center}>
