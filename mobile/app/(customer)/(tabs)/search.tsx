@@ -925,7 +925,11 @@ export default function SearchScreen() {
   const renderHeader = () => (
     <View style={styles.header}>
       <View style={{ width: 40 }} />
-      <Text style={styles.headerTitle}>{t('welcome.title', 'Lamba')}</Text>
+      <Image
+        source={require('../../../assets/images/lamba-icon.png')}
+        style={{ width: 36, height: 36 }}
+        resizeMode="contain"
+      />
       <View style={{ width: 40 }} />
     </View>
   );
