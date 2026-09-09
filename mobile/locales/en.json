@@ -727,7 +727,8 @@
     "subtitle": "Discover nearby products and services",
     "sign_in": "Sign In",
     "create_account": "New account? Sign up now",
-    "version": "Lamba v1.2.0 · Local & Secure"
+    "version": "Lamba v1.2.0 · Local & Secure",
+    "tap_to_toggle": "Tap the bulb to switch theme"
   },
   "auth": {
     "sign_in_title": "Sign In",

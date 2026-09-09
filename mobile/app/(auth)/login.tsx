@@ -7,19 +7,22 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Image,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Image, Dimensions,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 
 import { Ionicons } from '@expo/vector-icons';
 import { signIn } from '../../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
-import { useThemeColors } from '../../context/ThemeContext';
+import { useThemeColors, useTheme } from '../../context/ThemeContext';
 import { t, toggleLanguage, i18n } from '../../services/i18n';
 
 export default function LoginScreen() {
   const Colors = useThemeColors();
+  const { isDark, setMode } = useTheme();
   const router = useRouter();
+  const { width: screenWidth } = Dimensions.get('window');
+  const iconSize = Math.min(screenWidth * 0.22, 85);
   const searchParams = useLocalSearchParams();
   const isAr = i18n.locale?.startsWith('ar');
 
@@ -318,11 +321,23 @@ export default function LoginScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <Image
-          source={require('../../assets/images/lamba-icon.png')}
-          style={{ width: 80, height: 80, borderRadius: 20, marginBottom: Spacing.md }}
-          resizeMode="contain"
-        />
+        <TouchableOpacity
+          onPress={() => {
+            setMode(isDark ? 'light' : 'dark');
+          }}
+          activeOpacity={0.8}
+          style={{ alignItems: 'center', marginBottom: Spacing.md }}
+        >
+          <Image
+            source={
+              isDark
+                ? require('../../assets/images/lamba-icon-off.png')
+                : require('../../assets/images/lamba-icon.png')
+            }
+            style={{ width: iconSize, height: iconSize }}
+            resizeMode="contain"
+          />
+        </TouchableOpacity>
         <Text style={styles.title}>{t('auth.sign_in_title', 'Sign In')}</Text>
         <Text style={styles.subtitle}>{t('login.shopper_subtitle', 'Discover products near you')}</Text>
       </View>
