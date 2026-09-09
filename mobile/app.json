@@ -4,7 +4,7 @@
     "slug": "lamba",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/images/lamba-icon.png",
     "scheme": "lamba",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -24,7 +24,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0A0A1A"
+        "foregroundImage": "./assets/images/lamba-icon.png",
+        "backgroundColor": "#0F1729"
       },
       "package": "com.lamba.app",
       "config": {
