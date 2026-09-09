@@ -144,6 +144,15 @@ export default function VerifyScreen() {
     marginTop: Spacing.lg,
     ...Shadows.small,
   },
+  verifyButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.md,
+    height: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: Spacing.lg,
+    ...Shadows.small,
+  },
   buttonDisabled: {
     opacity: 0.5,
   },
@@ -187,6 +196,7 @@ export default function VerifyScreen() {
 
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
+  const [verified, setVerified] = useState(false);
   const [resendTimer, setResendTimer] = useState(60);
   const [isFocused, setIsFocused] = useState(false);
   
@@ -205,8 +215,11 @@ export default function VerifyScreen() {
   }, [resendTimer]);
 
   const handleVerify = useCallback(async () => {
-    if (code.length !== CODE_LENGTH) {
-      Alert.alert(t('common.error'), t('verify.enter_all_digits'));
+    if (loading || verified) return; // prevent double-tap
+
+    const fullCode = Array.isArray(code) ? code.join('') : code;
+    if (fullCode.length !== 6) {
+      Alert.alert(t('common.error', 'Error'), t('auth.enter_code', 'Please enter the 6-digit code'));
       return;
     }
 
@@ -214,26 +227,33 @@ export default function VerifyScreen() {
     try {
       const response = await verifyCode({
         user_id: userId,
-        verification_code: code,
+        verification_code: fullCode,
       });
 
       if (response.verified) {
+        // Inside the success block, BEFORE showing the alert:
+        setVerified(true);
+        setLoading(false);
         Alert.alert(
-          t('common.success'),
-          t('verify.account_activated'),
+          t('common.success', 'Success'),
+          t('auth.account_verified', 'Account verified successfully!'),
           [
             {
               text: t('common.ok', 'OK'),
               onPress: () => {
-                // Navigate to Login and pre-fill the username
-                router.replace({
-                  pathname: '/(auth)/login',
-                  params: { prefill: contact }
-                });
+                if (contact) {
+                  router.replace({
+                    pathname: '/(auth)/login',
+                    params: { prefill: contact }
+                  });
+                } else {
+                  router.replace('/(auth)/login');
+                }
               }
             }
           ]
         );
+        return; // don't fall through to finally
       }
     } catch (err: any) {
       Alert.alert(
@@ -245,14 +265,14 @@ export default function VerifyScreen() {
     } finally {
       setLoading(false);
     }
-  }, [code, loading, userId]);
+  }, [code, loading, verified, userId, contact, router]);
 
   // Trigger verify automatically when all 6 digits are typed
   useEffect(() => {
-    if (code.length === CODE_LENGTH) {
+    if (code.length === CODE_LENGTH && !loading && !verified) {
       handleVerify();
     }
-  }, [code, handleVerify]);
+  }, [code, handleVerify, loading, verified]);
 
   const handleResendCode = async () => {
     if (resendTimer > 0) return;
@@ -351,9 +371,9 @@ export default function VerifyScreen() {
 
         {/* Verify Action Button (Fallback/Backup) */}
         <TouchableOpacity
-          style={[styles.button, (code.length !== CODE_LENGTH || loading) && styles.buttonDisabled]}
+          style={[styles.verifyButton, (loading || verified) && { opacity: 0.5 }]}
           onPress={handleVerify}
-          disabled={code.length !== CODE_LENGTH || loading}
+          disabled={loading || verified}
           activeOpacity={0.8}
         >
           {loading ? (
@@ -370,8 +390,14 @@ export default function VerifyScreen() {
               {t('verify.resend_in')} <Text style={styles.timerCount}>{resendTimer}s</Text>
             </Text>
           ) : (
-            <TouchableOpacity onPress={handleResendCode} activeOpacity={0.7}>
-              <Text style={styles.resendText}>{t('verify.resend')}</Text>
+            <TouchableOpacity
+              onPress={handleResendCode}
+              disabled={resendTimer > 0 || loading || verified}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.resendText, (loading || verified) && { opacity: 0.5 }]}>
+                {t('verify.resend')}
+              </Text>
             </TouchableOpacity>
           )}
         </View>
