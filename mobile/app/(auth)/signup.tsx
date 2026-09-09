@@ -121,6 +121,7 @@ export default function SignUpScreen() {
   const styles = useMemo(() => StyleSheet.create({
     container: { flex: 1, backgroundColor: Colors.background },
     scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: Spacing.xl, paddingVertical: Spacing.xxl },
+    scrollContent: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: Spacing.xl, paddingVertical: Spacing.xxl },
     glowOrb1: { position: 'absolute', top: '10%', right: '-20%', width: 300, height: 300, borderRadius: 150, backgroundColor: Colors.primary, opacity: 0.06 },
     glowOrb2: { position: 'absolute', bottom: '10%', left: '-15%', width: 260, height: 260, borderRadius: 130, backgroundColor: Colors.secondary, opacity: 0.05 },
     backButton: { position: 'absolute', top: 50, left: Spacing.xl, width: 42, height: 42, borderRadius: 21, backgroundColor: Colors.surface, justifyContent: 'center', alignItems: 'center', zIndex: 10, borderWidth: 1, borderColor: Colors.border },
@@ -144,8 +145,9 @@ export default function SignUpScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={{ flex: 1, backgroundColor: Colors.background }}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 20}
     >
       <View style={styles.glowOrb1} />
       <View style={styles.glowOrb2} />
@@ -158,7 +160,11 @@ export default function SignUpScreen() {
         <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={22} color={Colors.textSecondary} />
       </TouchableOpacity>
 
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         {/* Header Section */}
         <View style={styles.header}>
           <LinearGradient

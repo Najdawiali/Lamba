@@ -91,3 +91,18 @@ export async function resendCode(userId: string): Promise<{ message: string; cha
   return data;
 }
 
+export async function forgotPassword(email: string): Promise<{ message: string }> {
+  const { data } = await api.post<{ message: string }>('/api/v1/auth/forgot-password', { email });
+  return data;
+}
+
+export async function resetPassword(email: string, code: string, newPassword: string): Promise<{ message: string }> {
+  const { data } = await api.post<{ message: string }>('/api/v1/auth/reset-password', {
+    email,
+    code,
+    new_password: newPassword,
+  });
+  return data;
+}
+
+

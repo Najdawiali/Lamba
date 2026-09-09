@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import JSONResponse
 from app.rate_limit import limiter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,6 +37,16 @@ router = APIRouter(prefix="/api/v1/auth", tags=["Auth V1"])
 
 class ResendCodeRequest(BaseModel):
     user_id: uuid.UUID
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(..., min_length=3)
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str = Field(..., min_length=3)
+    code: str = Field(..., min_length=6, max_length=6)
+    new_password: str = Field(..., min_length=8, max_length=128)
 
 
 def _generate_code(length: int = 6) -> str:
@@ -247,6 +257,95 @@ async def resend_code(request: Request, data: ResendCodeRequest, db: AsyncSessio
         "message": "Verification code resent",
         "channel": "email" if user.email else "sms",
     }
+
+
+# ── POST /forgot-password ──────────────────────────────────────
+@router.post("/forgot-password")
+@limiter.limit("3/minute")
+async def forgot_password(request: Request, data: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Send a password reset code to the user's email.
+    Always returns success to prevent email enumeration.
+    """
+    result = await db.execute(select(User).where(User.email == data.email))
+    user = result.scalar_one_or_none()
+
+    if user and user.verified:
+        code = f"{random.randint(0, 999999):06d}"
+        user.verification_code = code
+        user.verification_code_created_at = datetime.now(timezone.utc)
+        user.verification_attempts = 0
+        await db.flush()
+        await send_verification_email(user.email, code)
+        logger.info(f"[AUTH] Password reset code sent to {data.email}")
+    else:
+        logger.info(f"[AUTH] Password reset requested for unknown/unverified email: {data.email}")
+
+    # Always return success to prevent email enumeration
+    return {"message": "If an account exists with this email, a reset code has been sent."}
+
+
+# ── POST /reset-password ───────────────────────────────────────
+@router.post("/reset-password")
+@limiter.limit("5/minute")
+async def reset_password(request: Request, data: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Reset password using the code sent to email.
+    """
+    result = await db.execute(select(User).where(User.email == data.email))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid request")
+
+    if not user.verification_code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No reset code pending. Please request a new one.",
+        )
+
+    # Check attempts
+    if user.verification_attempts >= 5:
+        user.verification_code = None
+        user.verification_code_created_at = None
+        user.verification_attempts = 0
+        await db.flush()
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many attempts. Please request a new reset code.",
+        )
+
+    # Check expiry (10 minutes)
+    if user.verification_code_created_at:
+        elapsed = datetime.now(timezone.utc) - user.verification_code_created_at
+        if elapsed.total_seconds() > 600:
+            user.verification_code = None
+            user.verification_code_created_at = None
+            user.verification_attempts = 0
+            await db.flush()
+            raise HTTPException(
+                status_code=status.HTTP_410_GONE,
+                detail="Reset code has expired. Please request a new one.",
+            )
+
+    # Verify code
+    if user.verification_code != data.code:
+        user.verification_attempts += 1
+        await db.flush()
+        remaining = 5 - user.verification_attempts
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid code. {remaining} attempts remaining.",
+        )
+
+    # Success — update password
+    user.password_hash = hash_password(data.new_password)
+    user.verification_code = None
+    user.verification_code_created_at = None
+    user.verification_attempts = 0
+    await db.flush()
+
+    return {"message": "Password reset successfully. Please sign in with your new password."}
 
 
 # ── POST /signin ───────────────────────────────────────────────

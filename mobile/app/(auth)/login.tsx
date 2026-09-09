@@ -8,6 +8,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Image, Dimensions,
+  ScrollView,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 
@@ -119,8 +120,12 @@ export default function LoginScreen() {
     container: {
       flex: 1,
       backgroundColor: Colors.background,
+    },
+    scrollContent: {
+      flexGrow: 1,
       justifyContent: 'center',
       paddingHorizontal: Spacing.xl,
+      paddingVertical: Spacing.xxl,
     },
     glowOrb1: {
       position: 'absolute',
@@ -304,8 +309,9 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={{ flex: 1, backgroundColor: Colors.background }}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 20}
     >
       <View style={styles.glowOrb1} />
       <View style={styles.glowOrb2} />
@@ -319,8 +325,13 @@ export default function LoginScreen() {
         <Ionicons name={i18n.locale?.startsWith('ar') ? "arrow-forward" : "arrow-back"} size={22} color={Colors.textSecondary} />
       </TouchableOpacity>
 
-      {/* Header */}
-      <View style={styles.header}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.header}>
         <TouchableOpacity
           onPress={() => {
             setMode(isDark ? 'light' : 'dark');
@@ -430,13 +441,7 @@ export default function LoginScreen() {
         <TouchableOpacity
           style={styles.forgotPassword}
           activeOpacity={0.7}
-          onPress={() => {
-            Alert.alert(
-              t('auth.forgot_password', 'نسيت كلمة المرور؟'),
-              t('auth.forgot_password_help', 'للمساعدة في استعادة حسابك، يرجى التواصل معنا عبر البريد الإلكتروني: support@lamba.app'),
-              [{ text: t('common.ok', 'حسناً') }]
-            );
-          }}
+          onPress={() => router.push('/(auth)/forgot-password')}
         >
           <Text style={styles.forgotPasswordText}>{t('auth.forgot_password', 'Forgot Password?')}</Text>
         </TouchableOpacity>
@@ -467,6 +472,7 @@ export default function LoginScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
