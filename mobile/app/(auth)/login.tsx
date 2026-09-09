@@ -328,15 +328,28 @@ export default function LoginScreen() {
           activeOpacity={0.8}
           style={{ alignItems: 'center', marginBottom: Spacing.md }}
         >
-          <Image
-            source={
-              isDark
-                ? require('../../assets/images/lamba-icon-off.png')
-                : require('../../assets/images/lamba-icon.png')
-            }
-            style={{ width: iconSize, height: iconSize }}
-            resizeMode="contain"
-          />
+          <View style={{ width: iconSize, height: iconSize }}>
+            <Image
+              source={require('../../assets/images/lamba-icon.png')}
+              style={{
+                width: iconSize,
+                height: iconSize,
+                position: 'absolute',
+                opacity: isDark ? 0 : 1,
+              }}
+              resizeMode="contain"
+            />
+            <Image
+              source={require('../../assets/images/lamba-icon-off.png')}
+              style={{
+                width: iconSize,
+                height: iconSize,
+                position: 'absolute',
+                opacity: isDark ? 1 : 0,
+              }}
+              resizeMode="contain"
+            />
+          </View>
         </TouchableOpacity>
         <Text style={styles.title}>{t('auth.sign_in_title', 'Sign In')}</Text>
         <Text style={styles.subtitle}>{t('login.shopper_subtitle', 'Discover products near you')}</Text>

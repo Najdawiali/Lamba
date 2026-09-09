@@ -8,7 +8,7 @@
  * - Version footer
  */
 
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useRef, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Animated, Image, Dimensions,
 } from 'react-native';
@@ -16,12 +16,13 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useThemeColors, useTheme } from '../../context/ThemeContext';
-import { t } from '../../services/i18n';
+import { t, i18n, changeLanguage } from '../../services/i18n';
 
 export default function WelcomeScreen() {
   const Colors = useThemeColors();
   const { isDark, setMode } = useTheme();
   const router = useRouter();
+  const [, setLangTick] = useState(0);
 
   const { width: screenWidth } = Dimensions.get('window');
   const iconSize = screenWidth * 0.38; // 38% of screen width — balanced for all devices
@@ -151,6 +152,36 @@ export default function WelcomeScreen() {
       <View style={styles.glowOrb2} />
       <View style={styles.glowOrb3} />
 
+      {/* Top Bar with Language Toggle */}
+      <View style={{
+        width: '100%',
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        paddingHorizontal: Spacing.xs,
+        paddingTop: Spacing.xs,
+      }}>
+        <TouchableOpacity
+          onPress={async () => {
+            const newLang = i18n.locale?.startsWith('ar') ? 'en' : 'ar';
+            await changeLanguage(newLang);
+            setLangTick(prev => prev + 1);
+          }}
+          style={{
+            paddingVertical: 6,
+            paddingHorizontal: 14,
+            borderRadius: 20,
+            borderWidth: 1,
+            borderColor: Colors.border,
+            backgroundColor: Colors.surface,
+          }}
+          activeOpacity={0.7}
+        >
+          <Text style={{ color: Colors.textPrimary, fontSize: 14, fontWeight: '600' }}>
+            {i18n.locale?.startsWith('ar') ? 'EN' : 'ع'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Hero Branding Section */}
       <Animated.View style={[styles.heroSection, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
         <TouchableOpacity
@@ -160,18 +191,31 @@ export default function WelcomeScreen() {
           activeOpacity={0.8}
           style={{ alignItems: 'center', marginBottom: Spacing.lg }}
         >
-          <Image
-            source={
-              isDark
-                ? require('../../assets/images/lamba-icon-off.png')
-                : require('../../assets/images/lamba-icon.png')
-            }
-            style={{ width: iconSize, height: iconSize }}
-            resizeMode="contain"
-          />
-          <Text style={{ 
-            color: Colors.textMuted, 
-            fontSize: 12, 
+          <View style={{ width: iconSize, height: iconSize }}>
+            <Image
+              source={require('../../assets/images/lamba-icon.png')}
+              style={{
+                width: iconSize,
+                height: iconSize,
+                position: 'absolute',
+                opacity: isDark ? 0 : 1,
+              }}
+              resizeMode="contain"
+            />
+            <Image
+              source={require('../../assets/images/lamba-icon-off.png')}
+              style={{
+                width: iconSize,
+                height: iconSize,
+                position: 'absolute',
+                opacity: isDark ? 1 : 0,
+              }}
+              resizeMode="contain"
+            />
+          </View>
+          <Text style={{
+            color: Colors.textMuted,
+            fontSize: 12,
             marginTop: 8,
             textAlign: 'center',
           }}>
