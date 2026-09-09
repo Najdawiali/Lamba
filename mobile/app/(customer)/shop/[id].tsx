@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
-  Image, Dimensions, Alert, Modal, TextInput, FlatList
+  Image, Dimensions, Alert, Modal, TextInput, FlatList, KeyboardAvoidingView, Platform
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -438,72 +438,79 @@ export default function ShopCatalogScreen() {
 
       {/* ════════ MODAL: Write Review ════════ */}
       <Modal visible={writeReviewModalVisible} animationType="slide" transparent onRequestClose={() => setWriteReviewModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <SafeAreaView style={[styles.modalContainer, { height: '55%' }]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('shop.write_review', 'Write a Review')}</Text>
-              <TouchableOpacity onPress={() => setWriteReviewModalVisible(false)} style={styles.closeBtn}>
-                <Ionicons name="close" size={24} color={Colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={{ padding: Spacing.xl }}>
-              <Text style={{ ...Typography.body, color: Colors.textSecondary, marginBottom: Spacing.md, textAlign: 'center' }}>
-                {t('shop.select_stars', 'Select your rating (must be near the store)')}
-              </Text>
-
-              {/* Star selector */}
-              <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: Spacing.xl }}>
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <TouchableOpacity key={star} onPress={() => setRatingScore(star)}>
-                    <Ionicons
-                      name={star <= ratingScore ? 'star' : 'star-outline'}
-                      size={36}
-                      color="#FFB800"
-                    />
-                  </TouchableOpacity>
-                ))}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalOverlay}>
+            <SafeAreaView style={[styles.modalContainer, { height: '55%' }]}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{t('shop.write_review', 'Write a Review')}</Text>
+                <TouchableOpacity onPress={() => setWriteReviewModalVisible(false)} style={styles.closeBtn}>
+                  <Ionicons name="close" size={24} color={Colors.textPrimary} />
+                </TouchableOpacity>
               </View>
 
-              <TextInput
-                style={{
-                  backgroundColor: Colors.surfaceElevated,
-                  borderRadius: BorderRadius.lg,
-                  padding: Spacing.md,
-                  color: Colors.textPrimary,
-                  borderWidth: 1,
-                  borderColor: Colors.border,
-                  height: 90,
-                  textAlignVertical: 'top',
-                  marginBottom: Spacing.xl,
-                }}
-                placeholder={t('shop.review_placeholder', 'Share your experience (optional)...')}
-                placeholderTextColor={Colors.textMuted}
-                multiline
-                value={reviewText}
-                onChangeText={setReviewText}
-              />
+              <ScrollView keyboardShouldPersistTaps="handled">
+                <View style={{ padding: Spacing.xl }}>
+                  <Text style={{ ...Typography.body, color: Colors.textSecondary, marginBottom: Spacing.md, textAlign: 'center' }}>
+                    {t('shop.select_stars', 'Select your rating (must be near the store)')}
+                  </Text>
 
-              <TouchableOpacity
-                style={{
-                  backgroundColor: Colors.primary,
-                  paddingVertical: 14,
-                  borderRadius: BorderRadius.lg,
-                  alignItems: 'center',
-                  opacity: submittingReview ? 0.7 : 1,
-                }}
-                onPress={handleSubmitReview}
-                disabled={submittingReview}
-              >
-                {submittingReview ? (
-                  <ActivityIndicator size="small" color="#FFF" />
-                ) : (
-                  <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 15 }}>{t('shop.submit_review', 'Submit Review')}</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </SafeAreaView>
-        </View>
+                  {/* Star selector */}
+                  <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: Spacing.xl }}>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <TouchableOpacity key={star} onPress={() => setRatingScore(star)}>
+                        <Ionicons
+                          name={star <= ratingScore ? 'star' : 'star-outline'}
+                          size={36}
+                          color="#FFB800"
+                        />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <TextInput
+                    style={{
+                      backgroundColor: Colors.surfaceElevated,
+                      borderRadius: BorderRadius.lg,
+                      padding: Spacing.md,
+                      color: Colors.textPrimary,
+                      borderWidth: 1,
+                      borderColor: Colors.border,
+                      height: 90,
+                      textAlignVertical: 'top',
+                      marginBottom: Spacing.xl,
+                    }}
+                    placeholder={t('shop.review_placeholder', 'Share your experience (optional)...')}
+                    placeholderTextColor={Colors.textMuted}
+                    multiline
+                    value={reviewText}
+                    onChangeText={setReviewText}
+                  />
+
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: Colors.primary,
+                      paddingVertical: 14,
+                      borderRadius: BorderRadius.lg,
+                      alignItems: 'center',
+                      opacity: submittingReview ? 0.7 : 1,
+                    }}
+                    onPress={handleSubmitReview}
+                    disabled={submittingReview}
+                  >
+                    {submittingReview ? (
+                      <ActivityIndicator size="small" color="#FFF" />
+                    ) : (
+                      <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 15 }}>{t('shop.submit_review', 'Submit Review')}</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </SafeAreaView>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
     </SafeAreaView>
