@@ -5,7 +5,6 @@
  * - App logo and name
  * - "تسجيل الدخول" (Sign in) button
  * - "حساب جديد" (Create account) link
- * - Language switcher pill (EN / ع)
  * - Version footer
  */
 
@@ -17,12 +16,11 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
-import { t, toggleLanguage, i18n } from '../../services/i18n';
+import { t } from '../../services/i18n';
 
 export default function AuthGatewayScreen() {
   const Colors = useThemeColors();
   const router = useRouter();
-  const isAr = i18n.locale?.startsWith('ar');
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -49,18 +47,18 @@ export default function AuthGatewayScreen() {
       backgroundColor: Colors.background,
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingVertical: Spacing.xxxl,
+      paddingTop: 60,
+      paddingBottom: Spacing.xxl,
       paddingHorizontal: Spacing.xl,
     },
     glowOrb1: {
       position: 'absolute',
-      top: '12%',
+      top: '10%',
       left: '-15%',
       width: 320,
       height: 320,
       borderRadius: 160,
-      backgroundColor: Colors.primary,
-      opacity: 0.08,
+      backgroundColor: 'rgba(255, 179, 0, 0.08)',
     },
     glowOrb2: {
       position: 'absolute',
@@ -69,36 +67,20 @@ export default function AuthGatewayScreen() {
       width: 280,
       height: 280,
       borderRadius: 140,
-      backgroundColor: Colors.secondary,
-      opacity: 0.06,
+      backgroundColor: 'rgba(255, 143, 0, 0.06)',
     },
-    topBar: {
-      width: '100%',
-      flexDirection: 'row',
-      justifyContent: 'flex-end',
-      paddingTop: Spacing.md,
-    },
-    langButton: {
-      paddingVertical: Spacing.xs,
-      paddingHorizontal: Spacing.md,
-      backgroundColor: Colors.surfaceElevated,
-      borderRadius: BorderRadius.full,
-      borderWidth: 1,
-      borderColor: Colors.border,
-      minWidth: 44,
-      minHeight: 36,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    langText: {
-      fontSize: 13,
-      color: Colors.textPrimary,
-      fontWeight: '700',
+    glowOrb3: {
+      position: 'absolute',
+      top: '40%',
+      right: '-20%',
+      width: 220,
+      height: 220,
+      borderRadius: 110,
+      backgroundColor: 'rgba(255, 213, 79, 0.07)',
     },
     heroSection: {
       alignItems: 'center',
       width: '100%',
-      marginTop: -Spacing.xxl,
     },
     title: {
       ...Typography.h1,
@@ -121,7 +103,7 @@ export default function AuthGatewayScreen() {
       marginBottom: Spacing.lg,
     },
     signInButton: {
-      backgroundColor: Colors.primary,
+      backgroundColor: '#FF8F00',
       borderRadius: BorderRadius.xl,
       height: 54,
       justifyContent: 'center',
@@ -132,7 +114,7 @@ export default function AuthGatewayScreen() {
     },
     signInButtonText: {
       ...Typography.button,
-      color: Colors.textOnPrimary,
+      color: '#FFFFFF',
       fontSize: 16,
       fontWeight: '800',
     },
@@ -143,7 +125,7 @@ export default function AuthGatewayScreen() {
       justifyContent: 'center',
       alignItems: 'center',
       borderWidth: 1,
-      borderColor: Colors.border,
+      borderColor: 'rgba(255, 143, 0, 0.3)',
     },
     createAccountText: {
       ...Typography.body,
@@ -160,22 +142,16 @@ export default function AuthGatewayScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Background glow ambiance */}
+      {/* Background warm amber glow ambiance */}
       <View style={styles.glowOrb1} />
       <View style={styles.glowOrb2} />
-
-      {/* Top Bar with Language Toggle */}
-      <View style={styles.topBar}>
-        <TouchableOpacity style={styles.langButton} onPress={toggleLanguage} activeOpacity={0.7}>
-          <Text style={styles.langText}>{isAr ? 'EN' : 'ع'}</Text>
-        </TouchableOpacity>
-      </View>
+      <View style={styles.glowOrb3} />
 
       {/* Hero Branding Section */}
       <Animated.View style={[styles.heroSection, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
         <Image
           source={require('../../assets/images/lamba-icon.png')}
-          style={{ width: 120, height: 120, borderRadius: 30, marginBottom: Spacing.xl }}
+          style={{ width: 220, height: 220, borderRadius: 40, marginBottom: Spacing.lg }}
           resizeMode="contain"
         />
 
@@ -192,7 +168,7 @@ export default function AuthGatewayScreen() {
           onPress={() => router.push('/(auth)/login')}
           activeOpacity={0.85}
         >
-          <Ionicons name="log-in-outline" size={20} color={Colors.textOnPrimary} />
+          <Ionicons name="log-in-outline" size={20} color="#FFFFFF" />
           <Text style={styles.signInButtonText}>{t('welcome.sign_in', 'Sign In')}</Text>
         </TouchableOpacity>
 
