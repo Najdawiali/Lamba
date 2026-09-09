@@ -33,8 +33,7 @@ export default function VerifyScreen() {
     width: 300,
     height: 300,
     borderRadius: 150,
-    backgroundColor: Colors.secondary,
-    opacity: 0.05,
+    backgroundColor: 'rgba(255, 179, 0, 0.08)',
   },
   glowOrb2: {
     position: 'absolute',
@@ -43,8 +42,7 @@ export default function VerifyScreen() {
     width: 250,
     height: 250,
     borderRadius: 125,
-    backgroundColor: Colors.primary,
-    opacity: 0.04,
+    backgroundColor: 'rgba(255, 143, 0, 0.06)',
   },
   backButton: {
     position: 'absolute',
@@ -83,16 +81,15 @@ export default function VerifyScreen() {
   contactText: {
     ...Typography.body,
     fontWeight: '700',
-    color: Colors.secondary,
+    color: '#FF8F00',
     marginTop: Spacing.xs,
   },
   card: {
-    backgroundColor: Colors.surfaceGlass,
+    backgroundColor: Colors.surface,
     borderRadius: BorderRadius.xl,
     padding: Spacing.xl,
     borderWidth: 1,
     borderColor: Colors.border,
-    ...Shadows.medium,
   },
   boxesContainer: {
     flexDirection: 'row',
@@ -112,12 +109,11 @@ export default function VerifyScreen() {
     position: 'relative',
   },
   boxFilled: {
-    borderColor: 'rgba(108, 99, 255, 0.4)',
+    borderColor: 'rgba(255, 143, 0, 0.4)',
   },
   boxFocused: {
-    borderColor: Colors.primary,
+    borderColor: '#FF8F00',
     backgroundColor: Colors.surfaceElevated,
-    ...Shadows.small,
   },
   boxText: {
     ...Typography.h2,
@@ -127,7 +123,7 @@ export default function VerifyScreen() {
     position: 'absolute',
     width: 2,
     height: 20,
-    backgroundColor: Colors.primary,
+    backgroundColor: '#FF8F00',
   },
   hiddenInput: {
     position: 'absolute',
@@ -136,29 +132,31 @@ export default function VerifyScreen() {
     opacity: 0,
   },
   button: {
-    backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.md,
-    height: 52,
+    backgroundColor: '#FF8F00',
+    borderRadius: BorderRadius.xl,
+    height: 54,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: Spacing.lg,
-    ...Shadows.small,
+    ...Shadows.glow,
   },
   verifyButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.md,
-    height: 52,
+    backgroundColor: '#FF8F00',
+    borderRadius: BorderRadius.xl,
+    height: 54,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: Spacing.lg,
-    ...Shadows.small,
+    ...Shadows.glow,
   },
   buttonDisabled: {
     opacity: 0.5,
   },
   buttonText: {
     ...Typography.button,
-    color: Colors.textOnPrimary,
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
   },
   resendContainer: {
     marginTop: Spacing.xl,
@@ -169,12 +167,12 @@ export default function VerifyScreen() {
     color: Colors.textMuted,
   },
   timerCount: {
-    color: Colors.secondary,
+    color: '#FF8F00',
     fontWeight: '700',
   },
   resendText: {
     ...Typography.bodySmall,
-    color: Colors.primary,
+    color: '#FF8F00',
     fontWeight: '700',
   },
   }), [Colors]);

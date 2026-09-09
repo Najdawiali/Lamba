@@ -100,7 +100,7 @@ export default function ForgotPasswordScreen() {
           </TouchableOpacity>
 
           <View style={styles.header}>
-            <Ionicons name="lock-closed-outline" size={48} color={Colors.primary} />
+            <Ionicons name="lock-closed-outline" size={48} color="#FF8F00" />
             <Text style={[styles.title, { color: Colors.textPrimary }]}>
               {step === 'email'
                 ? t('auth.forgot_password', 'Forgot Password?')
@@ -125,7 +125,7 @@ export default function ForgotPasswordScreen() {
                 autoCapitalize="none"
               />
               <TouchableOpacity
-                style={[styles.button, { backgroundColor: Colors.primary }, loading && { opacity: 0.5 }]}
+                style={[styles.button, { backgroundColor: '#FF8F00' }, loading && { opacity: 0.5 }]}
                 onPress={handleSendCode}
                 disabled={loading}
                 activeOpacity={0.8}
@@ -147,7 +147,7 @@ export default function ForgotPasswordScreen() {
                     style={[styles.codeInput, {
                       backgroundColor: Colors.surface,
                       color: Colors.textPrimary,
-                      borderColor: digit ? Colors.primary : Colors.border,
+                      borderColor: digit ? '#FF8F00' : Colors.border,
                     }]}
                     value={digit}
                     onChangeText={(text) => handleCodeInput(text, i)}
@@ -184,7 +184,7 @@ export default function ForgotPasswordScreen() {
               </View>
 
               <TouchableOpacity
-                style={[styles.button, { backgroundColor: Colors.primary }, loading && { opacity: 0.5 }]}
+                style={[styles.button, { backgroundColor: '#FF8F00' }, loading && { opacity: 0.5 }]}
                 onPress={handleResetPassword}
                 disabled={loading}
                 activeOpacity={0.8}
@@ -244,8 +244,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   button: {
+    backgroundColor: '#FF8F00',
     paddingVertical: Spacing.lg,
-    borderRadius: BorderRadius.lg,
+    borderRadius: BorderRadius.xl,
     alignItems: 'center',
   },
   buttonText: { color: '#FFF', fontSize: 16, fontWeight: '700' },

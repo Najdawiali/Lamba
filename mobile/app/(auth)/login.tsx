@@ -23,7 +23,7 @@ export default function LoginScreen() {
   const { isDark, setMode } = useTheme();
   const router = useRouter();
   const { width: screenWidth } = Dimensions.get('window');
-  const iconSize = Math.min(screenWidth * 0.22, 85);
+  const iconSize = screenWidth * 0.22; // smaller on login since there's a form below
   const searchParams = useLocalSearchParams();
   const isAr = i18n.locale?.startsWith('ar');
 
@@ -134,8 +134,7 @@ export default function LoginScreen() {
       width: 300,
       height: 300,
       borderRadius: 150,
-      backgroundColor: Colors.primary,
-      opacity: 0.06,
+      backgroundColor: 'rgba(255, 179, 0, 0.08)',
     },
     glowOrb2: {
       position: 'absolute',
@@ -144,8 +143,7 @@ export default function LoginScreen() {
       width: 250,
       height: 250,
       borderRadius: 125,
-      backgroundColor: Colors.secondary,
-      opacity: 0.05,
+      backgroundColor: 'rgba(255, 143, 0, 0.06)',
     },
     langButton: {
       position: 'absolute',
@@ -198,12 +196,11 @@ export default function LoginScreen() {
       color: Colors.textSecondary,
     },
     card: {
-      backgroundColor: Colors.surfaceGlass,
+      backgroundColor: Colors.surface,
       borderRadius: BorderRadius.xl,
       padding: Spacing.xl,
       borderWidth: 1,
       borderColor: Colors.border,
-      ...Shadows.medium,
     },
     cardTitle: {
       ...Typography.h3,
@@ -235,7 +232,7 @@ export default function LoginScreen() {
       justifyContent: 'center',
       gap: 4,
       borderRadius: BorderRadius.sm,
-      backgroundColor: Colors.primary,
+      backgroundColor: '#FF8F00',
       paddingVertical: Spacing.xs,
       paddingHorizontal: Spacing.sm,
       marginTop: Spacing.sm,
@@ -243,7 +240,7 @@ export default function LoginScreen() {
     },
     verifyActionBtnText: {
       ...Typography.caption,
-      color: Colors.textOnPrimary,
+      color: '#FFFFFF',
       fontWeight: '700',
     },
     inputContainer: {
@@ -273,23 +270,23 @@ export default function LoginScreen() {
     forgotPasswordText: {
       fontSize: 13,
       fontWeight: '600',
-      color: Colors.primary,
+      color: '#FF8F00',
     },
     button: {
-      backgroundColor: Colors.primary,
-      borderRadius: BorderRadius.md,
-      height: 52,
+      backgroundColor: '#FF8F00',
+      borderRadius: BorderRadius.xl,
+      height: 54,
       justifyContent: 'center',
       alignItems: 'center',
       marginTop: Spacing.md,
-      ...Shadows.small,
+      ...Shadows.glow,
     },
     buttonDisabled: {
       opacity: 0.6,
     },
     buttonText: {
       ...Typography.button,
-      color: Colors.textOnPrimary,
+      color: '#FFFFFF',
       fontSize: 16,
       fontWeight: '800',
     },
@@ -302,7 +299,7 @@ export default function LoginScreen() {
       color: Colors.textSecondary,
     },
     linkHighlight: {
-      color: Colors.primary,
+      color: '#FF8F00',
       fontWeight: '700',
     },
   }), [Colors]);
@@ -339,28 +336,15 @@ export default function LoginScreen() {
           activeOpacity={0.8}
           style={{ alignItems: 'center', marginBottom: Spacing.md }}
         >
-          <View style={{ width: iconSize, height: iconSize }}>
-            <Image
-              source={require('../../assets/images/lamba-icon.png')}
-              style={{
-                width: iconSize,
-                height: iconSize,
-                position: 'absolute',
-                opacity: isDark ? 0 : 1,
-              }}
-              resizeMode="contain"
-            />
-            <Image
-              source={require('../../assets/images/lamba-icon-off.png')}
-              style={{
-                width: iconSize,
-                height: iconSize,
-                position: 'absolute',
-                opacity: isDark ? 1 : 0,
-              }}
-              resizeMode="contain"
-            />
-          </View>
+          <Image
+            source={
+              isDark
+                ? require('../../assets/images/lamba-icon-off.png')
+                : require('../../assets/images/lamba-icon.png')
+            }
+            style={{ width: iconSize, height: iconSize }}
+            resizeMode="contain"
+          />
         </TouchableOpacity>
         <Text style={styles.title}>{t('auth.sign_in_title', 'Sign In')}</Text>
         <Text style={styles.subtitle}>{t('login.shopper_subtitle', 'Discover products near you')}</Text>

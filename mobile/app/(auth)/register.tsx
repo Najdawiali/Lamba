@@ -6,19 +6,22 @@
 import React, { useState, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, ScrollView
+  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, ScrollView,
+  Image, Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { signUp } from '../../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
-import { useThemeColors } from '../../context/ThemeContext';
+import { useThemeColors, useTheme } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
 
 export default function RegisterScreen() {
   const Colors = useThemeColors();
+  const { isDark, setMode } = useTheme();
   const router = useRouter();
+  const { width: screenWidth } = Dimensions.get('window');
+  const iconSize = screenWidth * 0.22;
   const isAr = i18n.locale?.startsWith('ar');
 
   const [activeTab, setActiveTab] = useState<'email' | 'phone'>('email');
@@ -117,8 +120,7 @@ export default function RegisterScreen() {
       width: 300,
       height: 300,
       borderRadius: 150,
-      backgroundColor: Colors.primary,
-      opacity: 0.06,
+      backgroundColor: 'rgba(255, 179, 0, 0.08)',
     },
     glowOrb2: {
       position: 'absolute',
@@ -127,8 +129,7 @@ export default function RegisterScreen() {
       width: 260,
       height: 260,
       borderRadius: 130,
-      backgroundColor: Colors.secondary,
-      opacity: 0.05,
+      backgroundColor: 'rgba(255, 143, 0, 0.06)',
     },
     backButton: {
       position: 'absolute',
@@ -149,15 +150,6 @@ export default function RegisterScreen() {
       marginBottom: Spacing.xl,
       marginTop: Spacing.lg,
     },
-    logoContainer: {
-      width: 76,
-      height: 76,
-      borderRadius: 38,
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginBottom: Spacing.md,
-      ...Shadows.glow,
-    },
     title: {
       ...Typography.h1,
       fontSize: 26,
@@ -172,12 +164,11 @@ export default function RegisterScreen() {
       textAlign: 'center',
     },
     card: {
-      backgroundColor: Colors.surfaceGlass,
+      backgroundColor: Colors.surface,
       borderRadius: BorderRadius.xl,
       padding: Spacing.xl,
       borderWidth: 1,
       borderColor: Colors.border,
-      ...Shadows.medium,
     },
     tabContainer: {
       flexDirection: 'row',
@@ -228,20 +219,20 @@ export default function RegisterScreen() {
       ...Typography.body,
     },
     button: {
-      backgroundColor: Colors.primary,
-      borderRadius: BorderRadius.md,
-      height: 52,
+      backgroundColor: '#FF8F00',
+      borderRadius: BorderRadius.xl,
+      height: 54,
       justifyContent: 'center',
       alignItems: 'center',
       marginTop: Spacing.md,
-      ...Shadows.small,
+      ...Shadows.glow,
     },
     buttonDisabled: {
       opacity: 0.6,
     },
     buttonText: {
       ...Typography.button,
-      color: Colors.textOnPrimary,
+      color: '#FFFFFF',
       fontSize: 16,
       fontWeight: '800',
     },
@@ -256,7 +247,7 @@ export default function RegisterScreen() {
       color: Colors.textSecondary,
     },
     linkHighlight: {
-      color: Colors.primary,
+      color: '#FF8F00',
       fontWeight: '700',
     },
   }), [Colors]);
@@ -280,14 +271,21 @@ export default function RegisterScreen() {
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         {/* Header */}
         <View style={styles.header}>
-          <LinearGradient
-            colors={[Colors.primary, '#8B83FF']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.logoContainer}
+          <TouchableOpacity
+            onPress={() => setMode(isDark ? 'light' : 'dark')}
+            activeOpacity={0.8}
+            style={{ alignItems: 'center', marginBottom: Spacing.md }}
           >
-            <Ionicons name="person-add-outline" size={36} color={Colors.textOnPrimary} />
-          </LinearGradient>
+            <Image
+              source={
+                isDark
+                  ? require('../../assets/images/lamba-icon-off.png')
+                  : require('../../assets/images/lamba-icon.png')
+              }
+              style={{ width: iconSize, height: iconSize }}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
           <Text style={styles.title}>{t('auth.sign_up_title', 'Create Account')}</Text>
           <Text style={styles.subtitle}>{t('welcome.subtitle', 'Join Lamba to discover local stores & products')}</Text>
         </View>
@@ -371,7 +369,7 @@ export default function RegisterScreen() {
             activeOpacity={0.85}
           >
             {loading ? (
-              <ActivityIndicator color={Colors.textOnPrimary} />
+              <ActivityIndicator color="#FFFFFF" />
             ) : (
               <Text style={styles.buttonText}>{t('auth.sign_up_button', 'Create Account')}</Text>
             )}
