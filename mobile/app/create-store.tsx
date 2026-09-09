@@ -184,7 +184,7 @@ export default function CreateStoreScreen() {
     heroSubtitle: { ...Typography.bodySmall, color: 'rgba(255, 255, 255, 0.9)', lineHeight: 20 },
     sectionCard: { backgroundColor: Colors.surface, borderRadius: BorderRadius.xl, padding: Spacing.lg, borderWidth: 1, borderColor: Colors.border, marginBottom: Spacing.lg, ...Shadows.medium },
     sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.md },
-    sectionTitle: { ...Typography.label, color: Colors.textPrimary, fontWeight: '700', fontSize: 14, textTransform: 'uppercase' },
+    sectionTitle: { ...Typography.label, color: Colors.textPrimary, fontWeight: '700', fontSize: 14 },
     inputLabel: { ...Typography.bodySmall, color: Colors.textSecondary, fontWeight: '600', marginBottom: Spacing.xs },
     inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.lg, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: Spacing.md, height: 52, marginBottom: Spacing.md },
     inputIcon: { marginHorizontal: Spacing.xs },
@@ -223,22 +223,22 @@ export default function CreateStoreScreen() {
           <LinearGradient colors={[Colors.primary, '#8B83FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.heroCard}>
             <View style={styles.heroHeader}>
               <View style={styles.heroIconContainer}><Ionicons name="storefront" size={28} color="#FFFFFF" /></View>
-              <Text style={styles.heroTitle}>{t('merchant.start_selling', 'Sell with Lamba')}</Text>
+              <Text style={styles.heroTitle}>{t('onboarding.hero_title', 'Sell with Lamba')}</Text>
             </View>
-            <Text style={styles.heroSubtitle}>{t('merchant.hero_desc', 'Set up your store and reach nearby shoppers.')}</Text>
+            <Text style={styles.heroSubtitle}>{t('onboarding.hero_subtitle', 'Set up your store and reach nearby shoppers.')}</Text>
           </LinearGradient>
 
           <View style={styles.sectionCard}>
             <View style={styles.sectionTitleRow}>
               <Ionicons name="business-outline" size={18} color={Colors.primary} />
-              <Text style={styles.sectionTitle}>{t('merchant.basic_info', 'Basic Information')}</Text>
+              <Text style={styles.sectionTitle}>{t('onboarding.basic_info', 'Basic Information')}</Text>
             </View>
-            <Text style={styles.inputLabel}>{t('merchant.store_name', 'Store Name')} *</Text>
+            <Text style={styles.inputLabel}>{t('onboarding.store_name', 'Store Name')} *</Text>
             <View style={styles.inputContainer}>
               <Ionicons name="pricetag-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
-              <TextInput style={styles.textInput} placeholder="e.g. Al-Quds Supermarket" placeholderTextColor={Colors.textMuted} value={name} onChangeText={setName} />
+              <TextInput style={styles.textInput} placeholder={t('onboarding.name_placeholder', 'e.g. Al-Quds Supermarket')} placeholderTextColor={Colors.textMuted} value={name} onChangeText={setName} />
             </View>
-            <Text style={styles.inputLabel}>{t('merchant.phone', 'Contact Number')}</Text>
+            <Text style={styles.inputLabel}>{t('onboarding.contact_number', 'Contact Number')}</Text>
             <View style={styles.inputContainer}>
               <Ionicons name="call-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
               <TextInput style={styles.textInput} placeholder="+962 79 XXX XXXX" placeholderTextColor={Colors.textMuted} value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
@@ -248,7 +248,7 @@ export default function CreateStoreScreen() {
           <View style={styles.sectionCard}>
             <View style={styles.sectionTitleRow}>
               <Ionicons name="grid-outline" size={18} color={Colors.primary} />
-              <Text style={styles.sectionTitle}>{t('merchant.category', 'Category')}</Text>
+              <Text style={styles.sectionTitle}>{t('onboarding.category', 'Category')}</Text>
             </View>
             <View style={styles.categoryGrid}>
               {CATEGORIES.map((cat) => {
@@ -268,28 +268,28 @@ export default function CreateStoreScreen() {
           <View style={styles.sectionCard}>
             <View style={styles.sectionTitleRow}>
               <Ionicons name="location-outline" size={18} color={Colors.primary} />
-              <Text style={styles.sectionTitle}>{t('map.location', 'Location')}</Text>
+              <Text style={styles.sectionTitle}>{t('onboarding.location', 'Location')}</Text>
             </View>
             <TouchableOpacity style={styles.gpsButton} onPress={handleGeolocate} disabled={geolocating}>
               {geolocating ? <ActivityIndicator size="small" color={Colors.primary} /> : (
                 <>
                   <Ionicons name="navigate-circle-outline" size={22} color={Colors.primary} />
-                  <Text style={styles.gpsButtonText}>{t('map.auto_detect', 'Auto-Detect Location')}</Text>
+                  <Text style={styles.gpsButtonText}>{t('onboarding.auto_detect', 'Auto-Detect Location')}</Text>
                 </>
               )}
             </TouchableOpacity>
-            <Text style={styles.inputLabel}>{t('merchant.address', 'Address')} *</Text>
+            <Text style={styles.inputLabel}>{t('onboarding.address', 'Address')} *</Text>
             <View style={styles.inputContainer}>
               <Ionicons name="map-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
               <TextInput style={styles.textInput} placeholder="City, Street, Landmark" placeholderTextColor={Colors.textMuted} value={address} onChangeText={setAddress} />
             </View>
             <View style={styles.coordsRow}>
               <View style={styles.coordField}>
-                <Text style={styles.inputLabel}>{t('map.lat', 'Latitude')}</Text>
+                <Text style={styles.inputLabel}>{t('onboarding.latitude', 'Latitude')}</Text>
                 <View style={styles.inputContainer}><TextInput style={styles.textInput} value={latitude} onChangeText={setLatitude} keyboardType="numeric" /></View>
               </View>
               <View style={styles.coordField}>
-                <Text style={styles.inputLabel}>{t('map.lng', 'Longitude')}</Text>
+                <Text style={styles.inputLabel}>{t('onboarding.longitude', 'Longitude')}</Text>
                 <View style={styles.inputContainer}><TextInput style={styles.textInput} value={longitude} onChangeText={setLongitude} keyboardType="numeric" /></View>
               </View>
             </View>
@@ -298,17 +298,17 @@ export default function CreateStoreScreen() {
           <View style={styles.sectionCard}>
             <View style={styles.sectionTitleRow}>
               <Ionicons name="time-outline" size={18} color={Colors.primary} />
-              <Text style={styles.sectionTitle}>{t('merchant.hours', 'Operating Hours')}</Text>
+              <Text style={styles.sectionTitle}>{t('onboarding.operating_hours', 'Operating Hours')}</Text>
             </View>
             <View style={styles.presetRow}>
               <TouchableOpacity style={[styles.presetChip, hoursPreset === 'standard' && styles.presetChipActive]} onPress={() => setHoursPreset('standard')}>
-                <Text style={[styles.presetText, hoursPreset === 'standard' && styles.presetTextActive]}>{t('merchant.standard', 'Standard')}</Text>
+                <Text style={[styles.presetText, hoursPreset === 'standard' && styles.presetTextActive]}>{t('onboarding.hours_standard', 'Standard')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.presetChip, hoursPreset === 'open_24_7' && styles.presetChipActive]} onPress={() => setHoursPreset('open_24_7')}>
-                <Text style={[styles.presetText, hoursPreset === 'open_24_7' && styles.presetTextActive]}>{t('merchant.24_7', '24/7')}</Text>
+                <Text style={[styles.presetText, hoursPreset === 'open_24_7' && styles.presetTextActive]}>24/7</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.presetChip, hoursPreset === 'weekdays' && styles.presetChipActive]} onPress={() => setHoursPreset('weekdays')}>
-                <Text style={[styles.presetText, hoursPreset === 'weekdays' && styles.presetTextActive]}>{t('merchant.weekdays', 'Workdays')}</Text>
+                <Text style={[styles.presetText, hoursPreset === 'weekdays' && styles.presetTextActive]}>{t('onboarding.hours_workdays', 'Workdays')}</Text>
               </TouchableOpacity>
             </View>
           </View>

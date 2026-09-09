@@ -489,9 +489,9 @@ export default function OnboardingScreen() {
           </Text>
           <View style={styles.presetRow}>
             {([
-              { key: 'standard', label: t('common.all', 'Standard') },
+              { key: 'standard', label: t('onboarding.hours_standard', 'Standard') },
               { key: 'open_24_7', label: '24/7' },
-              { key: 'weekdays', label: t('history.this_week', 'Weekdays') },
+              { key: 'weekdays', label: t('onboarding.hours_workdays', 'Workdays') },
             ] as const).map((opt) => (
               <TouchableOpacity
                 key={opt.key}
