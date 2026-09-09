@@ -11,10 +11,9 @@
 
 import React, { useRef, useEffect, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Animated,
+  View, Text, StyleSheet, TouchableOpacity, Animated, Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
@@ -101,15 +100,6 @@ export default function AuthGatewayScreen() {
       width: '100%',
       marginTop: -Spacing.xxl,
     },
-    logoContainer: {
-      width: 96,
-      height: 96,
-      borderRadius: 48,
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginBottom: Spacing.xl,
-      ...Shadows.glow,
-    },
     title: {
       ...Typography.h1,
       fontSize: 36,
@@ -183,14 +173,11 @@ export default function AuthGatewayScreen() {
 
       {/* Hero Branding Section */}
       <Animated.View style={[styles.heroSection, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-        <LinearGradient
-          colors={[Colors.primary, '#8B83FF']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.logoContainer}
-        >
-          <Ionicons name="eye" size={52} color={Colors.textOnPrimary} />
-        </LinearGradient>
+        <Image
+          source={require('../../assets/images/lamba-icon.png')}
+          style={{ width: 120, height: 120, borderRadius: 30, marginBottom: Spacing.xl }}
+          resizeMode="contain"
+        />
 
         <Text style={styles.title}>{t('welcome.title', 'Lamba')}</Text>
         <Text style={styles.tagline}>

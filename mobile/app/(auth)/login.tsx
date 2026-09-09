@@ -7,10 +7,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Alert
+  KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
+
 import { Ionicons } from '@expo/vector-icons';
 import { signIn } from '../../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
@@ -178,15 +178,6 @@ export default function LoginScreen() {
       alignItems: 'center',
       marginBottom: Spacing.xl,
     },
-    logoContainer: {
-      width: 76,
-      height: 76,
-      borderRadius: 38,
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginBottom: Spacing.md,
-      ...Shadows.glow,
-    },
     title: {
       ...Typography.h1,
       fontSize: 26,
@@ -327,14 +318,11 @@ export default function LoginScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <LinearGradient
-          colors={[Colors.primary, '#8B83FF']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.logoContainer}
-        >
-          <Ionicons name="log-in-outline" size={36} color={Colors.textOnPrimary} />
-        </LinearGradient>
+        <Image
+          source={require('../../assets/images/lamba-icon.png')}
+          style={{ width: 80, height: 80, borderRadius: 20, marginBottom: Spacing.md }}
+          resizeMode="contain"
+        />
         <Text style={styles.title}>{t('auth.sign_in_title', 'Sign In')}</Text>
         <Text style={styles.subtitle}>{t('login.shopper_subtitle', 'Discover products near you')}</Text>
       </View>
