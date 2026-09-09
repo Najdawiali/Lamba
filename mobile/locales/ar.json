@@ -27,6 +27,7 @@
   "auth.password_reset_success": "تم إعادة تعيين كلمة المرور بنجاح!",
   "auth.reset_failed": "فشل إعادة التعيين",
   "auth.enter_email": "يرجى إدخال البريد الإلكتروني",
+  "search.popular_items": "الأكثر بحثاً",
   "location": {
     "title": "الموقع مطلوب",
     "subtitle": "لمبة تحتاج موقعك لعرض المتاجر والمنتجات القريبة منك.",
@@ -197,6 +198,7 @@
     "recommendations_title": "لم نجد نتيجة مطابقة لـ \"{{query}}\"",
     "recommendations_subtitle": "لكن قد يعجبك:",
     "popular": "بحث شائع",
+    "popular_items": "الأكثر بحثاً",
     "recent": "بحث سابق",
     "error_title": "حدث خطأ في البحث",
     "error_subtitle": "تحقق من اتصالك بالإنترنت"

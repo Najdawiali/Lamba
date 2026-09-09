@@ -1021,12 +1021,23 @@ export default function SearchScreen() {
     };
 
     const QUICK_CATEGORIES = [
-      { emoji: '🥬', label: t('explore.quick_veg', 'خضار'), query: isAr ? 'خضار' : 'Vegetables' },
-      { emoji: '🥩', label: t('explore.quick_meat', 'لحوم'), query: isAr ? 'لحوم' : 'Meat' },
-      { emoji: '🧴', label: t('explore.quick_cleaning', 'تنظيف'), query: isAr ? 'أغراض تنظيف' : 'Cleaning' },
-      { emoji: '✂️', label: t('explore.quick_services', 'خدمات'), query: isAr ? 'خدمات' : 'Services' },
-      { emoji: '☕', label: t('explore.quick_drinks', 'مشروبات'), query: isAr ? 'مشروبات' : 'Beverages' },
+      { key: 'tea', label: { en: 'Tea', ar: 'شاي' }, emoji: '🍵' },
+      { key: 'milk', label: { en: 'Milk', ar: 'حليب' }, emoji: '🥛' },
+      { key: 'bread', label: { en: 'Bread', ar: 'خبز' }, emoji: '🍞' },
+      { key: 'honey', label: { en: 'Honey', ar: 'عسل' }, emoji: '🍯' },
+      { key: 'coffee', label: { en: 'Coffee', ar: 'قهوة' }, emoji: '☕' },
+      { key: 'oil', label: { en: 'Olive Oil', ar: 'زيت زيتون' }, emoji: '🫒' },
+      { key: 'rice', label: { en: 'Rice', ar: 'أرز' }, emoji: '🍚' },
+      { key: 'sugar', label: { en: 'Sugar', ar: 'سكر' }, emoji: '🧂' },
+      { key: 'eggs', label: { en: 'Eggs', ar: 'بيض' }, emoji: '🥚' },
+      { key: 'chicken', label: { en: 'Chicken', ar: 'دجاج' }, emoji: '🍗' },
     ];
+
+    const handleCategorySearch = (cat: typeof QUICK_CATEGORIES[0]) => {
+      const searchTerm = isAr ? cat.label.ar : cat.label.en;
+      setQuery(searchTerm);
+      executeSearch(searchTerm);
+    };
 
     return (
       <ScrollView contentContainerStyle={styles.feedContent} showsVerticalScrollIndicator={false}>
@@ -1037,7 +1048,10 @@ export default function SearchScreen() {
           </Text>
         </View>
 
-        {/* 2. Quick Category Shortcuts */}
+        {/* 2. Popular Item Shortcuts */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>{t('search.popular_items', 'Popular Items')}</Text>
+        </View>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -1045,11 +1059,8 @@ export default function SearchScreen() {
         >
           {QUICK_CATEGORIES.map((cat) => (
             <TouchableOpacity
-              key={cat.label}
-              onPress={() => {
-                setQuery(cat.query);
-                executeSearch(cat.query);
-              }}
+              key={cat.key}
+              onPress={() => handleCategorySearch(cat)}
               style={styles.quickCategoryItem}
               activeOpacity={0.7}
             >
@@ -1057,7 +1068,7 @@ export default function SearchScreen() {
                 <Text style={styles.quickCategoryEmoji}>{cat.emoji}</Text>
               </View>
               <Text style={styles.quickCategoryLabel} numberOfLines={1}>
-                {cat.label}
+                {isAr ? cat.label.ar : cat.label.en}
               </Text>
             </TouchableOpacity>
           ))}

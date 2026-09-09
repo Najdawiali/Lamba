@@ -27,6 +27,7 @@
   "auth.password_reset_success": "Password reset successfully!",
   "auth.reset_failed": "Reset failed",
   "auth.enter_email": "Please enter your email",
+  "search.popular_items": "Popular Items",
   "location": {
     "title": "Location Required",
     "subtitle": "Lamba needs your location to show nearby stores and products.",
@@ -197,6 +198,7 @@
     "recommendations_title": "No exact matches for \"{{query}}\"",
     "recommendations_subtitle": "You might also like:",
     "popular": "Popular Search",
+    "popular_items": "Popular Items",
     "recent": "Recent Search",
     "error_title": "Search Error",
     "error_subtitle": "Check your internet connection"
