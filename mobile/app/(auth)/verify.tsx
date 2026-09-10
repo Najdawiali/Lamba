@@ -9,6 +9,7 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, Alert, ActivityIndicator
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { verifyCode, resendCode } from '../../services/api';
@@ -18,6 +19,7 @@ import { t, i18n } from '../../services/i18n';
 
 export default function VerifyScreen() {
   const Colors = useThemeColors();
+  const isAr = i18n.locale?.startsWith('ar');
 
   const styles = useMemo(() => StyleSheet.create({
   container: {
@@ -43,16 +45,6 @@ export default function VerifyScreen() {
     height: 250,
     borderRadius: 125,
     backgroundColor: 'rgba(255, 143, 0, 0.06)',
-  },
-  backButton: {
-    position: 'absolute',
-    top: 60,
-    left: Spacing.xl,
-    padding: Spacing.sm,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: BorderRadius.full,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
   },
   header: {
     alignItems: 'center',
@@ -316,18 +308,28 @@ export default function VerifyScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      {/* Background glow effects */}
-      <View style={styles.glowOrb1} />
-      <View style={styles.glowOrb2} />
+    <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }} edges={['top']}>
+      {/* RTL-Safe Header */}
+      <View style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: Spacing.lg,
+        paddingVertical: Spacing.md,
+      }}>
+        <TouchableOpacity onPress={() => router.back()} style={{ width: 40, height: 40, justifyContent: 'center', alignItems: 'center' }}>
+          <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={22} color={Colors.textPrimary} />
+        </TouchableOpacity>
+        <View style={{ width: 40 }} />
+      </View>
 
-      {/* Back button to re-register */}
-      <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
-        <Ionicons name={i18n.locale?.startsWith('ar') ? "arrow-forward" : "arrow-back"} size={24} color={Colors.textSecondary} />
-      </TouchableOpacity>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        {/* Background glow effects */}
+        <View style={styles.glowOrb1} />
+        <View style={styles.glowOrb2} />
 
       <View style={styles.header}>
         <View style={styles.iconContainer}>
@@ -401,6 +403,7 @@ export default function VerifyScreen() {
         </View>
       </View>
     </KeyboardAvoidingView>
+  </SafeAreaView>
   );
 
 }

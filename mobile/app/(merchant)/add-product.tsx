@@ -552,7 +552,7 @@ export default function AddProductScreen() {
       left: 0, right: 0, zIndex: 10, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20,
     },
     scannerCloseBtn: { padding: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 },
-    scannerModalTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold', marginLeft: 16 },
+    scannerModalTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold', marginStart: 16 },
     scannerOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
     scannerTargetBox: {
       width: 280, height: 180, borderWidth: 2, borderColor: Colors.secondary,

@@ -174,7 +174,7 @@ export default function CreateStoreScreen() {
   const styles = useMemo(() => StyleSheet.create({
     container: { flex: 1, backgroundColor: Colors.background },
     headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.xl, paddingVertical: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border, backgroundColor: Colors.surface },
-    headerTitle: { ...Typography.h2, color: Colors.textPrimary, fontWeight: '700' },
+    headerTitle: { ...Typography.h2, color: Colors.textPrimary, fontWeight: '700', textAlign: 'center' },
     backButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.surfaceElevated, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
     scroll: { paddingHorizontal: Spacing.xl, paddingVertical: Spacing.xl, paddingBottom: Spacing.xxxl * 2 },
     heroCard: { borderRadius: BorderRadius.xl, padding: Spacing.xl, marginBottom: Spacing.xl, ...Shadows.glow },
@@ -212,7 +212,7 @@ export default function CreateStoreScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.headerBar}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
-          <Ionicons name={i18n.locale?.startsWith('ar') ? "arrow-forward" : "arrow-back"} size={22} color={Colors.textPrimary} />
+          <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={22} color={Colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('profile.add_store', 'Create New Store')}</Text>
         <View style={{ width: 40 }} />

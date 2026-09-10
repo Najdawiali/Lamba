@@ -18,6 +18,7 @@ import {
   Image,
   Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { signUp } from '../../services/api';
@@ -128,7 +129,6 @@ export default function SignUpScreen() {
     scrollContent: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: Spacing.xl, paddingVertical: Spacing.xxl },
     glowOrb1: { position: 'absolute', top: '10%', right: '-20%', width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(255, 179, 0, 0.08)' },
     glowOrb2: { position: 'absolute', bottom: '10%', left: '-15%', width: 260, height: 260, borderRadius: 130, backgroundColor: 'rgba(255, 143, 0, 0.06)' },
-    backButton: { position: 'absolute', top: 50, left: Spacing.xl, width: 42, height: 42, borderRadius: 21, backgroundColor: Colors.surface, justifyContent: 'center', alignItems: 'center', zIndex: 10, borderWidth: 1, borderColor: Colors.border },
     header: { alignItems: 'center', marginBottom: Spacing.xl, marginTop: Spacing.lg },
     welcomeText: { ...Typography.label, color: '#FF8F00', fontWeight: '700', marginBottom: Spacing.xs, textTransform: 'uppercase', letterSpacing: 1 },
     title: { ...Typography.h1, fontSize: 26, color: Colors.textPrimary, marginBottom: Spacing.xs, textAlign: 'center', fontWeight: '800' },
@@ -147,27 +147,34 @@ export default function SignUpScreen() {
   }), [Colors]);
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={{ flex: 1, backgroundColor: Colors.background }}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 20}
-    >
-      <View style={styles.glowOrb1} />
-      <View style={styles.glowOrb2} />
-
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={() => router.back()}
-        activeOpacity={0.7}
+    <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }} edges={['top']}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 20}
       >
-        <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={22} color={Colors.textSecondary} />
-      </TouchableOpacity>
+        <View style={styles.glowOrb1} />
+        <View style={styles.glowOrb2} />
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
+        {/* RTL-Safe Header */}
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingHorizontal: Spacing.lg,
+          paddingVertical: Spacing.md,
+        }}>
+          <TouchableOpacity onPress={() => router.back()} style={{ width: 40, height: 40, justifyContent: 'center', alignItems: 'center' }}>
+            <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={22} color={Colors.textPrimary} />
+          </TouchableOpacity>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
         {/* Header Section */}
         <View style={styles.header}>
           <TouchableOpacity
@@ -302,5 +309,6 @@ export default function SignUpScreen() {
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+  </SafeAreaView>
   );
 }

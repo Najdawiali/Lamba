@@ -5,10 +5,12 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getMessages, sendMessage } from '../../../services/api';
 import { useThemeColors } from '../../../context/ThemeContext';
+import { Spacing, Typography } from '../../../constants/theme';
 import { i18n } from '../../../services/i18n';
 
 export default function ChatScreen() {
   const Colors = useThemeColors();
+  const isAr = i18n.locale?.startsWith('ar');
   const { id, marketName, suggestion } = useLocalSearchParams<{ id: string; marketName?: string; suggestion?: string }>();
   const router = useRouter();
   const [messages, setMessages] = useState<any[]>([]);
@@ -131,20 +133,20 @@ export default function ChatScreen() {
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
-            paddingHorizontal: 16,
-            paddingVertical: 14,
+            paddingHorizontal: Spacing.lg,
+            paddingVertical: Spacing.md,
             borderBottomWidth: 1,
             borderBottomColor: Colors.border,
             backgroundColor: Colors.surface,
           }}
         >
-          <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name={i18n.locale?.startsWith('ar') ? "arrow-forward" : "arrow-back"} size={24} color={Colors.textPrimary} />
+          <TouchableOpacity onPress={() => router.back()} style={{ width: 40, height: 40, justifyContent: 'center', alignItems: 'center' }}>
+            <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={22} color={Colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={{ color: Colors.textPrimary, fontSize: 17, fontWeight: '600' }}>
+          <Text style={[Typography.h3, { color: Colors.textPrimary, textAlign: 'center', flex: 1 }]}>
             {decodeURIComponent((marketName as string) || '')}
           </Text>
-          <View style={{ width: 24 }} />
+          <View style={{ width: 40 }} />
         </View>
 
         {/* Messages list */}

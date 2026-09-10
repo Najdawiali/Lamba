@@ -601,7 +601,7 @@ export default function MerchantOffersScreen() {
         <SafeAreaView style={[styles.modalSafeArea, { backgroundColor: Colors.background }]}>
           {/* Modal Header */}
           <View style={[styles.modalHeader, { borderBottomColor: Colors.border }]}>
-            <View style={[styles.modalHeaderRow, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+            <View style={styles.modalHeaderRow}>
               {createStep > 1 ? (
                 <TouchableOpacity
                   style={styles.modalBackButton}
@@ -1418,6 +1418,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
   },
   modalHeaderRow: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },

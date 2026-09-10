@@ -150,7 +150,7 @@ export default function ShopCatalogScreen() {
 
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border },
     headerBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.surfaceElevated, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
-    headerTitle: { ...Typography.h3, color: Colors.textPrimary },
+    headerTitle: { ...Typography.h3, color: Colors.textPrimary, textAlign: 'center' },
 
     // Shop Info Card
     shopCard: {
@@ -242,7 +242,7 @@ export default function ShopCatalogScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
-          <Ionicons name={i18n.locale?.startsWith('ar') ? "arrow-forward" : "arrow-back"} size={22} color={Colors.textPrimary} />
+          <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={22} color={Colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('product.view_full_shop', 'View Full Shop')}</Text>
         <View style={{ width: 40 }} />

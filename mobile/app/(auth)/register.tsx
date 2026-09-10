@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView, Platform, Alert, ActivityIndicator, ScrollView,
   Image, Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { signUp } from '../../services/api';
@@ -131,20 +132,6 @@ export default function RegisterScreen() {
       borderRadius: 130,
       backgroundColor: 'rgba(255, 143, 0, 0.06)',
     },
-    backButton: {
-      position: 'absolute',
-      top: 50,
-      left: Spacing.xl,
-      width: 42,
-      height: 42,
-      borderRadius: 21,
-      backgroundColor: Colors.surface,
-      justifyContent: 'center',
-      alignItems: 'center',
-      zIndex: 10,
-      borderWidth: 1,
-      borderColor: Colors.border,
-    },
     header: {
       alignItems: 'center',
       marginBottom: Spacing.xl,
@@ -253,22 +240,29 @@ export default function RegisterScreen() {
   }), [Colors]);
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={styles.glowOrb1} />
-      <View style={styles.glowOrb2} />
-
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={() => router.back()}
-        activeOpacity={0.7}
+    <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }} edges={['top']}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <Ionicons name={i18n.locale?.startsWith('ar') ? "arrow-forward" : "arrow-back"} size={22} color={Colors.textSecondary} />
-      </TouchableOpacity>
+        <View style={styles.glowOrb1} />
+        <View style={styles.glowOrb2} />
 
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        {/* RTL-Safe Header */}
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingHorizontal: Spacing.lg,
+          paddingVertical: Spacing.md,
+        }}>
+          <TouchableOpacity onPress={() => router.back()} style={{ width: 40, height: 40, justifyContent: 'center', alignItems: 'center' }}>
+            <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={22} color={Colors.textPrimary} />
+          </TouchableOpacity>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
@@ -389,5 +383,6 @@ export default function RegisterScreen() {
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+  </SafeAreaView>
   );
 }

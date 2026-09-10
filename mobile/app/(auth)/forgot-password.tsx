@@ -90,14 +90,25 @@ export default function ForgotPasswordScreen() {
         style={{ flex: 1 }}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 20}
       >
+        {/* RTL-Safe Header */}
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingHorizontal: Spacing.lg,
+          paddingVertical: Spacing.md,
+        }}>
+          <TouchableOpacity onPress={() => step === 'code' ? setStep('email') : router.back()} style={{ width: 40, height: 40, justifyContent: 'center', alignItems: 'center' }}>
+            <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={22} color={Colors.textPrimary} />
+          </TouchableOpacity>
+          <View style={{ width: 40 }} />
+        </View>
+
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <TouchableOpacity onPress={() => step === 'code' ? setStep('email') : router.back()} style={styles.backBtn}>
-            <Ionicons name={isAr ? 'arrow-forward' : 'arrow-back'} size={22} color={Colors.textPrimary} />
-          </TouchableOpacity>
 
           <View style={styles.header}>
             <Ionicons name="lock-closed-outline" size={48} color="#FF8F00" />
@@ -206,7 +217,6 @@ export default function ForgotPasswordScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { padding: Spacing.xl, flexGrow: 1 },
-  backBtn: { width: 40, height: 40, justifyContent: 'center' },
   header: { alignItems: 'center', marginVertical: Spacing.xl },
   title: { ...Typography.h2, marginTop: Spacing.md, textAlign: 'center' },
   subtitle: { ...Typography.body, marginTop: Spacing.sm, textAlign: 'center', lineHeight: 22 },
