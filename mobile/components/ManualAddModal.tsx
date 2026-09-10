@@ -193,7 +193,7 @@ export default function ManualAddModal({
         {/* Header */}
         <View style={styles.manualAddHeader}>
           <Text style={styles.manualAddTitle}>
-            {t('scanner.add_manually', 'إضافة يدوياً')}
+            {t('scanner.manual_add', 'Manual Add')}
           </Text>
           <TouchableOpacity onPress={onClose}>
             <Ionicons name="close" size={24} color={Colors.textPrimary} />
@@ -205,7 +205,7 @@ export default function ManualAddModal({
           <Ionicons name="search-outline" size={18} color={Colors.textMuted} />
           <TextInput
             style={styles.manualAddSearchInput}
-            placeholder={t('scanner.search_products', 'ابحث عن منتج...')}
+            placeholder={t('scanner.search_products', 'Search products...')}
             placeholderTextColor={Colors.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -238,7 +238,7 @@ export default function ManualAddModal({
                       {isAr ? (item.name_ar || item.name) : (item.name_en || item.name)}
                     </Text>
                     <Text style={styles.manualAddItemSub}>
-                      {formatPrice(item.price)} · {t('dashboard.stock_label', 'المخزون')}: {item.stock_count}
+                      {formatPrice(item.price)} · {t('dashboard.stock_label', 'Stock')}: {item.stock_count}
                     </Text>
                   </View>
 
@@ -275,7 +275,7 @@ export default function ManualAddModal({
             ListEmptyComponent={
               <View style={{ alignItems: 'center', paddingVertical: Spacing.xxxl }}>
                 <Text style={{ color: Colors.textMuted, fontSize: 14 }}>
-                  {t('common.no_results', 'لا توجد نتائج')}
+                  {t('common.no_results', 'No results found')}
                 </Text>
               </View>
             }
@@ -299,7 +299,7 @@ export default function ManualAddModal({
               activeOpacity={0.8}
             >
               <Ionicons name="checkmark-circle" size={18} color="#FFF" />
-              <Text style={styles.manualAddDoneBtnText}>{t('common.done', 'تم')}</Text>
+              <Text style={styles.manualAddDoneBtnText}>{t('common.done', 'Done')}</Text>
             </TouchableOpacity>
           </View>
         )}

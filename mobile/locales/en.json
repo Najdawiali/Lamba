@@ -566,7 +566,14 @@
     "transaction_success_desc": "Sale has been recorded and inventory levels updated successfully.",
     "receipt_summary": "Receipt Summary",
     "thanks": "Thank you for using Lamba POS!",
-    "new_transaction": "New Transaction"
+    "new_transaction": "New Transaction",
+    "manual_add": "Manual Add",
+    "add_manually": "Manual Add",
+    "position_barcode": "Position a barcode within the guide to scan.",
+    "pos_cashier": "POS Cashier",
+    "inventory": "Inventory",
+    "search_products": "Search products...",
+    "checkout_error": "An error occurred during transaction checkout."
   },
   "addProduct": {
     "title": "Add Product",
@@ -763,7 +770,8 @@
     "very_close": "Very close",
     "message": "Message",
     "reviews": "Reviews",
-    "directions": "Directions"
+    "directions": "Directions",
+    "no_results": "No results found"
   },
   "shop": {
     "reviews_title": "Customer Reviews",

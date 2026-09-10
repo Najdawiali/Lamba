@@ -545,7 +545,14 @@
     "receipt_summary": "ملخص الإيصال",
     "thanks": "شكراً لك على استخدام نقطة بيع لمبة!",
     "new_transaction": "معاملة جديدة",
-    "enter_manually": "إدخال يدوي"
+    "enter_manually": "إدخال يدوي",
+    "manual_add": "إضافة يدوياً",
+    "add_manually": "إضافة يدوياً",
+    "position_barcode": "وجّه الباركود داخل الإطار للمسح",
+    "pos_cashier": "الكاشير",
+    "inventory": "المخزون",
+    "search_products": "ابحث عن منتج...",
+    "checkout_error": "حدث خطأ أثناء إتمام معاملة البيع."
   },
   "addProduct": {
     "title": "إضافة منتج",
@@ -742,7 +749,8 @@
     "very_close": "قريب جداً",
     "message": "مراسلة",
     "reviews": "التقييمات",
-    "directions": "الاتجاهات"
+    "directions": "الاتجاهات",
+    "no_results": "لا توجد نتائج"
   },
   "shop": {
     "reviews_title": "تقييمات وآراء العملاء",

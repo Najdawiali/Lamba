@@ -748,7 +748,7 @@ const styles = useMemo(() => StyleSheet.create({
         if (err?.response?.status === 404) {
           setScanResult(null);
         } else {
-          Alert.alert(isAr ? 'خطأ في الاتصال' : 'Connection Error', isAr ? 'فشل البحث عن المنتج.' : 'Failed to query item.');
+          Alert.alert(t('common.error', 'Connection Error'), t('scanner.failed_checking_product', 'Failed checking product barcode details.'));
           setScanned(false);
           isScanningRef.current = false;
           animateDrawer(false);
@@ -938,7 +938,7 @@ const styles = useMemo(() => StyleSheet.create({
         return;
       }
       console.warn('POS Checkout failed:', err);
-      Alert.alert(t('common.error', 'فشل إتمام البيع'), isAr ? 'حدث خطأ أثناء إتمام معاملة البيع.' : 'An error occurred during transaction checkout.');
+      Alert.alert(t('common.error', 'Error'), t('scanner.checkout_error', 'An error occurred during transaction checkout.'));
     } finally {
       setCheckingOut(false);
     }
@@ -1084,7 +1084,7 @@ const styles = useMemo(() => StyleSheet.create({
                   activeOpacity={0.8}
                 >
                   <Text style={[styles.modeTabText, scannerMode === 'cashier' && styles.modeTabTextActive]}>
-                    {t('scanner.pos_mode', 'POS Cashier')}
+                    {t('scanner.pos_cashier', 'POS Cashier')}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
@@ -1093,7 +1093,7 @@ const styles = useMemo(() => StyleSheet.create({
                   activeOpacity={0.8}
                 >
                   <Text style={[styles.modeTabText, scannerMode === 'inventory' && styles.modeTabTextActive]}>
-                    {t('scanner.inventory_mode', 'Stock Edit')}
+                    {t('scanner.inventory', 'Inventory')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1130,7 +1130,7 @@ const styles = useMemo(() => StyleSheet.create({
         <View style={styles.overlayBottom}>
           <Text style={styles.helperText}>
             {scannerMode === 'cashier' 
-              ? t('scanner.scan_pos_instruction', 'Scan items continuously to add to invoice')
+              ? t('scanner.position_barcode', 'Position a barcode within the guide to scan.')
               : t('scanner.scan_inventory_instruction', 'Align barcode inside viewfinder to update stock')}
           </Text>
 
@@ -1142,7 +1142,7 @@ const styles = useMemo(() => StyleSheet.create({
             >
               <Ionicons name="search-outline" size={18} color="#FFF" />
               <Text style={styles.manualAddBtnText}>
-                {t('scanner.add_manually', 'إضافة يدوياً')}
+                {t('scanner.manual_add', 'Manual Add')}
               </Text>
             </TouchableOpacity>
           )}
@@ -1225,7 +1225,7 @@ const styles = useMemo(() => StyleSheet.create({
                         {i18n.locale?.startsWith('ar') ? (scanResult.name_ar || scanResult.name) : (scanResult.name_en || scanResult.name)}
                       </Text>
                       <Text style={styles.itemCategory}>
-                        {(i18n.locale?.startsWith('ar') ? (scanResult.category_name_ar || scanResult.category) : (scanResult.category_name_en || scanResult.category)) || 'General'}
+                        {(i18n.locale?.startsWith('ar') ? (scanResult.category_name_ar || scanResult.category) : (scanResult.category_name_en || scanResult.category)) || t('common.general', 'General')}
                       </Text>
                       <View style={styles.badgeRow}>
                         <View style={[styles.badge, scanResult.exists_in_branch ? styles.badgeSuccess : styles.badgeInfo]}>
