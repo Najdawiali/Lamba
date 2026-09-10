@@ -1168,13 +1168,15 @@ export default function DashboardScreen() {
       />
 
       {/* Floating Add Product Button */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => router.push('/(merchant)/add-product')}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="add" size={28} color="#FFFFFF" />
-      </TouchableOpacity>
+      {products.length > 0 && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => router.push('/(merchant)/add-product')}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="add" size={28} color="#FFFFFF" />
+        </TouchableOpacity>
+      )}
 
       {/* Edit Product Modal */}
       <Modal
