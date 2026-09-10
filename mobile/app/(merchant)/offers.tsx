@@ -583,13 +583,15 @@ export default function MerchantOffersScreen() {
       )}
 
       {/* FAB: Green circle with white "+" bottom-right */}
-      <TouchableOpacity
-        style={[styles.fab, { backgroundColor: Colors.tabActive }]}
-        onPress={openCreateModal}
-        activeOpacity={0.85}
-      >
-        <Ionicons name="add" size={32} color="#FFFFFF" />
-      </TouchableOpacity>
+      {offers.length > 0 && (
+        <TouchableOpacity
+          style={[styles.fab, { backgroundColor: Colors.tabActive }]}
+          onPress={openCreateModal}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="add" size={32} color="#FFFFFF" />
+        </TouchableOpacity>
+      )}
 
       {/* ── CREATE OFFER 3-STEP MODAL ────────────────────────────── */}
       <Modal
