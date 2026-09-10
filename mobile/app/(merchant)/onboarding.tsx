@@ -107,13 +107,51 @@ export default function OnboardingScreen() {
         return;
       }
       const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const latStr = position.coords.latitude.toFixed(6);
-      const lngStr = position.coords.longitude.toFixed(6);
+      const coords = position.coords;
+      const latStr = coords.latitude.toFixed(6);
+      const lngStr = coords.longitude.toFixed(6);
       setLatitude(latStr);
       setLongitude(lngStr);
+
+      // Use Google Maps Geocoding for precise Arabic address
+      try {
+        const GOOGLE_API_KEY = 'AIzaSyBE961k1OZH9eyXXuPbwCrr3aGulb_pWIo';
+        const geoUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${coords.latitude},${coords.longitude}&language=ar&key=${GOOGLE_API_KEY}`;
+        const geoResp = await fetch(geoUrl);
+        const geoData = await geoResp.json();
+        
+        if (geoData.status === 'OK' && geoData.results?.length > 0) {
+          // Use the first result — most precise street-level address
+          const fullAddress = geoData.results[0].formatted_address;
+          setAddress(fullAddress);
+        } else {
+          // Fallback to expo-location if Google fails
+          const geocode = await Location.reverseGeocodeAsync({
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+          });
+          if (geocode && geocode.length > 0) {
+            const place = geocode[0];
+            const parts = [place.street, place.city, place.region].filter(Boolean);
+            setAddress(parts.join(', ') || `${place.city} (${place.region})`);
+          }
+        }
+      } catch (geoErr) {
+        // Fallback to expo-location
+        const geocode = await Location.reverseGeocodeAsync({
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        });
+        if (geocode && geocode.length > 0) {
+          const place = geocode[0];
+          const parts = [place.street, place.city, place.region].filter(Boolean);
+          setAddress(parts.join(', ') || `${place.city} (${place.region})`);
+        }
+      }
+
       Alert.alert(
-        t('onboarding.location_acquired', 'Location Acquired'),
-        t('onboarding.location_success', `Store coordinates acquired (${latStr}, ${lngStr}).`, { lat: latStr, lng: lngStr })
+        t('onboarding.location_success', 'Location detected'),
+        t('onboarding.location_detected_msg', 'Your store location has been set. Please verify the address below.')
       );
     } catch {
       Alert.alert(
@@ -124,6 +162,7 @@ export default function OnboardingScreen() {
       setGeolocating(false);
     }
   };
+  const handleAutoDetect = handleGeolocate;
 
   const handleInitialize = async () => {
     if (!name.trim() || !address.trim() || !latitude.trim() || !longitude.trim()) {

@@ -28,6 +28,7 @@
   "auth.reset_failed": "Reset failed",
   "auth.enter_email": "Please enter your email",
   "search.popular_items": "Popular Items",
+  "onboarding.location_detected_msg": "Your store location has been set. Please verify the address below.",
   "location": {
     "title": "Location Required",
     "subtitle": "Lamba needs your location to show nearby stores and products.",
@@ -647,7 +648,8 @@
     "location_permission": "Location Permission",
     "location_permission_desc": "Please allow location access to detect store coordinates",
     "location_acquired": "Location Acquired",
-    "location_success": "Store coordinates acquired ({{lat}}, {{lng}}).",
+    "location_success": "Location detected",
+    "location_detected_msg": "Your store location has been set. Please verify the address below.",
     "location_failed": "Failed to detect location. Please enter coordinates manually.",
     "fill_all_fields": "Please fill in all physical store fields",
     "invalid_lat": "Please enter a valid Latitude (-90 to 90)",
