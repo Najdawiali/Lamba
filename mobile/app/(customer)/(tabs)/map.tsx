@@ -64,10 +64,11 @@ export default function MapScreen() {
 
   recenterBtn: { position: 'absolute', bottom: 150, right: Spacing.xl, width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.surfaceElevated, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border, ...Shadows.medium, zIndex: 10 },
   
-  markerPin: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.surface, borderWidth: 2, borderColor: Colors.primary, justifyContent: 'center', alignItems: 'center', ...Shadows.small },
-  markerPinSelected: { backgroundColor: Colors.primary, borderColor: Colors.textOnPrimary, ...Shadows.glow },
-  markerArrow: { width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 8, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: Colors.primary, alignSelf: 'center', marginTop: -2 },
-  markerArrowSelected: { borderTopColor: Colors.textOnPrimary },
+  markerWrapper: { padding: 8, alignItems: 'center' },
+  markerPin: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.surface, borderWidth: 2, borderColor: Colors.primary, justifyContent: 'center', alignItems: 'center' },
+  markerPinSelected: { backgroundColor: Colors.primary, borderColor: Colors.textOnPrimary },
+  markerArrow: { width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 8, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: Colors.primary, alignSelf: 'center', marginTop: -1 },
+  markerArrowSelected: { borderTopColor: Colors.primary },
 
   loadingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(10,10,26,0.3)' },
   
@@ -208,10 +209,12 @@ export default function MapScreen() {
               zIndex={isSelected ? 10 : 1}
               tracksViewChanges={true}
             >
-              <View style={[styles.markerPin, isSelected && styles.markerPinSelected]}>
-                <Ionicons name="storefront" size={20} color={isSelected ? Colors.textOnPrimary : Colors.primary} />
+              <View style={styles.markerWrapper}>
+                <View style={[styles.markerPin, isSelected && styles.markerPinSelected]}>
+                  <Ionicons name="storefront" size={20} color={isSelected ? Colors.textOnPrimary : Colors.primary} />
+                </View>
+                <View style={[styles.markerArrow, isSelected && styles.markerArrowSelected]} />
               </View>
-              <View style={[styles.markerArrow, isSelected && styles.markerArrowSelected]} />
             </Marker>
           );
         })}
