@@ -1,4 +1,18 @@
 <resources>
+  <string name="auth">"[object Object]"</string>
+  <string name="auth.forgot_password">"Forgot Password?"</string>
+  <string name="auth.reset_password">"Reset Password"</string>
+  <string name="auth.forgot_subtitle">"Enter your email and we'll send you a reset code"</string>
+  <string name="auth.reset_subtitle">"Enter the code and your new password"</string>
+  <string name="auth.send_code">"Send Reset Code"</string>
+  <string name="auth.new_password">"New Password"</string>
+  <string name="auth.password_min">"Password must be at least 8 characters"</string>
+  <string name="auth.reset_code_sent">"If an account exists, a reset code has been sent to your email."</string>
+  <string name="auth.password_reset_success">"Password reset successfully!"</string>
+  <string name="auth.reset_failed">"Reset failed"</string>
+  <string name="auth.enter_email">"Please enter your email"</string>
+  <string name="search.popular_items">"Popular Items"</string>
+  <string name="onboarding.location_detected_msg">"Your store location has been set. Please verify the address below."</string>
   <string name="location">"[object Object]"</string>
   <string name="login">"[object Object]"</string>
   <string name="register">"[object Object]"</string>
@@ -24,7 +38,6 @@
   <string name="common">"[object Object]"</string>
   <string name="shop">"[object Object]"</string>
   <string name="welcome">"[object Object]"</string>
-  <string name="auth">"[object Object]"</string>
   <string name="messages">"[object Object]"</string>
   <string name="market">"[object Object]"</string>
   <string name="merchant">"[object Object]"</string>

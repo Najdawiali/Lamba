@@ -1,4 +1,18 @@
 <resources>
+  <string name="auth">"[object Object]"</string>
+  <string name="auth.forgot_password">"نسيت كلمة المرور؟"</string>
+  <string name="auth.reset_password">"إعادة تعيين كلمة المرور"</string>
+  <string name="auth.forgot_subtitle">"أدخل بريدك الإلكتروني وسنرسل لك رمز إعادة التعيين"</string>
+  <string name="auth.reset_subtitle">"أدخل الرمز وكلمة المرور الجديدة"</string>
+  <string name="auth.send_code">"إرسال رمز التعيين"</string>
+  <string name="auth.new_password">"كلمة المرور الجديدة"</string>
+  <string name="auth.password_min">"كلمة المرور يجب أن تكون 8 أحرف على الأقل"</string>
+  <string name="auth.reset_code_sent">"إذا كان الحساب موجوداً، تم إرسال رمز إعادة التعيين إلى بريدك الإلكتروني."</string>
+  <string name="auth.password_reset_success">"تم إعادة تعيين كلمة المرور بنجاح!"</string>
+  <string name="auth.reset_failed">"فشل إعادة التعيين"</string>
+  <string name="auth.enter_email">"يرجى إدخال البريد الإلكتروني"</string>
+  <string name="search.popular_items">"الأكثر بحثاً"</string>
+  <string name="onboarding.location_detected_msg">"تم تحديد موقع متجرك. يرجى التأكد من العنوان أدناه."</string>
   <string name="location">"[object Object]"</string>
   <string name="login">"[object Object]"</string>
   <string name="register">"[object Object]"</string>
@@ -24,7 +38,6 @@
   <string name="shop">"[object Object]"</string>
   <string name="explore">"[object Object]"</string>
   <string name="welcome">"[object Object]"</string>
-  <string name="auth">"[object Object]"</string>
   <string name="messages">"[object Object]"</string>
   <string name="market">"[object Object]"</string>
   <string name="merchant">"[object Object]"</string>
