@@ -458,13 +458,13 @@ export default function ShopCatalogScreen() {
                   </Text>
 
                   {/* Star selector */}
-                  <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: Spacing.xl }}>
+                  <View style={[{ flexDirection: 'row', direction: 'ltr', justifyContent: 'center', gap: 12, marginBottom: Spacing.xl }, { writingDirection: 'ltr' } as any]}>
                     {[1, 2, 3, 4, 5].map((star) => (
                       <TouchableOpacity key={star} onPress={() => setRatingScore(star)}>
                         <Ionicons
                           name={star <= ratingScore ? 'star' : 'star-outline'}
                           size={36}
-                          color="#FFB800"
+                          color="#F59E0B"
                         />
                       </TouchableOpacity>
                     ))}

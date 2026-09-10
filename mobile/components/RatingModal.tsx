@@ -85,6 +85,8 @@ export default function RatingModal({ visible, onClose, marketId, marketName }: 
   },
   starRow: {
     flexDirection: 'row',
+    direction: 'ltr',
+    writingDirection: 'ltr' as any,
     justifyContent: 'center',
     gap: Spacing.md,
     marginVertical: Spacing.md,

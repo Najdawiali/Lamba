@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Platform } from 'react-native';
+import { Platform, I18nManager } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -12,11 +12,24 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
+import * as SecureStore from 'expo-secure-store';
 
 import { setupI18n } from '../services/i18n';
 import { setupCurrency } from '../services/currency';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
 import api from '../services/api';
+
+// Set RTL before first render — synchronous check
+try {
+  const savedLocale = typeof SecureStore.getItem === 'function' ? SecureStore.getItem('lamba_language') : null;
+  const shouldBeRTL = savedLocale ? savedLocale === 'ar' : true; // Arabic is default
+  if (I18nManager.isRTL !== shouldBeRTL) {
+    I18nManager.allowRTL(shouldBeRTL);
+    I18nManager.forceRTL(shouldBeRTL);
+  }
+} catch (e) {
+  console.warn('Error reading saved locale on startup:', e);
+}
 
 const isExpoGo = Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
 

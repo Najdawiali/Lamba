@@ -1,4 +1,4 @@
-import { I18nManager } from 'react-native';
+import { I18nManager, Platform, DevSettings } from 'react-native';
 import * as Localization from 'expo-localization';
 import { I18n } from 'i18n-js';
 import * as SecureStore from 'expo-secure-store';
@@ -45,7 +45,12 @@ export const toggleLanguage = async () => {
 export const changeLanguage = async (targetLang: 'ar' | 'en') => {
   const isRTL = targetLang === 'ar';
 
-  // Persist preference
+  // Persist preference synchronously if supported, and async to guarantee disk flush
+  try {
+    if (typeof SecureStore.setItem === 'function') {
+      SecureStore.setItem(LANGUAGE_KEY, targetLang);
+    }
+  } catch {}
   try {
     await SecureStore.setItemAsync(LANGUAGE_KEY, targetLang);
   } catch {}
@@ -58,14 +63,32 @@ export const changeLanguage = async (targetLang: 'ar' | 'en') => {
   I18nManager.forceRTL(isRTL);
 
   // Reload app to apply RTL layout changes
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+    }
+    return;
+  }
+
+  // 1. Try Updates.reloadAsync() for production EAS/standalone builds
   try {
     const Updates = require('expo-updates');
-    if (Updates && Updates.reloadAsync) {
+    if (Updates && typeof Updates.reloadAsync === 'function') {
       await Updates.reloadAsync();
+      return;
     }
   } catch (e) {
-    // In Expo Go / dev mode, Updates.reloadAsync() will throw or not be available.
-    console.warn('Could not auto-reload app, manual restart required:', e);
+    console.warn('Updates.reloadAsync() failed or unavailable:', e);
+  }
+
+  // 2. Try DevSettings.reload() for local development / Expo Go
+  try {
+    if (DevSettings && typeof DevSettings.reload === 'function') {
+      DevSettings.reload();
+      return;
+    }
+  } catch (e) {
+    console.warn('DevSettings.reload() failed:', e);
   }
 };
 
