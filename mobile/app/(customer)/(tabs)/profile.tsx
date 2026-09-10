@@ -280,9 +280,6 @@ export default function CustomerProfileScreen() {
   const mainText = hasName ? user.full_name : (user?.email || user?.phone_number || t('profile.lamba_shopper'));
   const initials = mainText ? mainText.charAt(0).toUpperCase() : 'L';
   const isAr = i18n.locale.includes('ar');
-  const userBadge = (user?.user_type === 'merchant' || user?.role === 'merchant' || hasStore)
-    ? t('profile.store_owner', 'صاحب متجر')
-    : t('profile.shopper_account', 'متسوق');
 
   const styles = useMemo(() => StyleSheet.create({
     container: {
@@ -464,7 +461,7 @@ export default function CustomerProfileScreen() {
             paddingHorizontal: 12,
           }}>
             <Text style={{ color: Colors.primary, fontSize: 12, fontWeight: '600' }}>
-              {userBadge}
+              {user?.user_type === 'merchant' ? t('profile.role_merchant', 'Store Owner') : t('profile.role_customer', 'Shopper')}
             </Text>
           </View>
         </View>
@@ -539,7 +536,7 @@ export default function CustomerProfileScreen() {
         }}>
           <MenuRow
             icon="person-outline"
-            label={t('profile.edit_profile', 'تعديل الملف الشخصي')}
+            label={t('profile.edit_profile', 'Edit Profile')}
             onPress={handleOpenEditProfile}
           />
           <Divider />
@@ -551,7 +548,7 @@ export default function CustomerProfileScreen() {
           <Divider />
           <MenuRow
             icon="notifications-outline"
-            label={t('profile.availability_alerts', 'تنبيهات التوفر')}
+            label={t('profile.alerts', 'Availability Alerts')}
             badge={alertCount}
             onPress={handleOpenAlerts}
           />
@@ -569,14 +566,14 @@ export default function CustomerProfileScreen() {
         }}>
           <MenuRow
             icon="language-outline"
-            label={t('profile.language', 'اللغة')}
+            label={t('profile.language', 'Language')}
             value={isAr ? 'العربية' : 'English'}
             onPress={() => setShowLanguageModal(true)}
           />
           <Divider />
           <MenuRow
             icon="color-palette-outline"
-            label={t('profile.theme', 'المظهر')}
+            label={t('profile.theme', 'Theme')}
             value={themeMode === 'dark' ? t('profile.theme_dark', 'Dark') : themeMode === 'light' ? t('profile.theme_light', 'Light') : t('profile.theme_system', 'System')}
             onPress={() => setThemeModalVisible(true)}
           />
@@ -594,19 +591,19 @@ export default function CustomerProfileScreen() {
         }}>
           <MenuRow
             icon="shield-checkmark-outline"
-            label={t('profile.privacy_policy', 'سياسة الخصوصية')}
+            label={t('profile.privacy_policy', 'Privacy Policy')}
             onPress={() => setPrivacyModalVisible(true)}
           />
           <Divider />
           <MenuRow
             icon="document-text-outline"
-            label={t('profile.terms', 'شروط الخدمة')}
+            label={t('profile.terms', 'Terms of Service')}
             onPress={() => setTermsModalVisible(true)}
           />
           <Divider />
           <MenuRow
             icon="information-circle-outline"
-            label={t('profile.version', 'الإصدار')}
+            label={t('profile.version', 'Version')}
             value={`v${Constants.expoConfig?.version || '1.0.0'}`}
             showChevron={false}
             onPress={() => {}}
@@ -770,7 +767,7 @@ export default function CustomerProfileScreen() {
         <View style={styles.modalOverlay}>
           <SafeAreaView style={[styles.modalContainer, { height: '40%' }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('profile.theme', 'اختيار المظهر')}</Text>
+              <Text style={styles.modalTitle}>{t('profile.theme', 'Theme')}</Text>
               <TouchableOpacity onPress={() => setThemeModalVisible(false)} style={styles.closeBtn}>
                 <Ionicons name="close" size={24} color={Colors.textPrimary} />
               </TouchableOpacity>
