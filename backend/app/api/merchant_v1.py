@@ -880,16 +880,6 @@ async def create_new_item(
     except Exception as e:
         logger.error(f"CLIP encoding failed: {e}")
         
-    # Generate 384-d text vector (MiniLM) using refined VLM/English metadata
-    text_vector = None
-    try:
-        text = refined_name
-        if refined_desc:
-            text = f"{refined_name}. {refined_desc}"
-        text_vector = embedding_service.encode_text_384(text)
-    except Exception as e:
-        logger.error(f"MiniLM encoding failed: {e}")
-        
     # Save GlobalItem (preserves original inputs for display, uses VLM/translated vectors)
     effective_barcode = barcode if (listing_type == "product" and barcode) else None
     gi = GlobalItem(
@@ -899,7 +889,7 @@ async def create_new_item(
         listing_type=listing_type or "product",
         attributes=parsed_attributes,
         category_id=cat.id,
-        text_embedding=text_vector.tolist() if text_vector is not None else None,
+        text_embedding=None,
         image_embedding=image_vector.tolist() if image_vector is not None else None,
         created_by=user.id
     )
