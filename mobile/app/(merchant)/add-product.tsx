@@ -4,13 +4,13 @@
  * Product / Service type toggle, dynamic conditional fields, Category Tree selectors, and Multi-Image uploads.
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Image, Modal, Switch
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -64,14 +64,6 @@ export default function AddProductScreen() {
   const [showScanner, setShowScanner] = useState(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
 
-  useEffect(() => {
-    if (params.barcode) {
-      setBarcode(params.barcode);
-      setListingType('product');
-      setActiveTab('new');
-    }
-  }, [params.barcode]);
-
   // New Item (AI pipeline) state
   const [newItemName, setNewItemName] = useState('');
   const [newItemDesc, setNewItemDesc] = useState('');
@@ -91,6 +83,52 @@ export default function AddProductScreen() {
   const [categoriesTree, setCategoriesTree] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>('');
+
+  const resetForm = useCallback(() => {
+    setNewItemName('');
+    setNewItemDesc('');
+    setStockCount('10');
+    setNewItemPrice('');
+    setImageUri(null);
+    setSecondaryImageUris([]);
+    setStockStatus('available');
+    setSelectedCategory('');
+    setSelectedSubcategory('');
+    setGender(null);
+    setAppointmentRequired(false);
+    setHomeServiceAvailable(false);
+    setShowScanner(false);
+    setSearchQuery('');
+    setHasSearched(false);
+    setMatches([]);
+    setSelectedMatch(null);
+    setLinkPrice('');
+    setListingType('product');
+    setCsvUploadResult(null);
+    setLoading(false);
+
+    if (params.barcode) {
+      setBarcode(params.barcode);
+      setActiveTab('new');
+    } else {
+      setBarcode('');
+      setActiveTab('catalog');
+    }
+  }, [params.barcode]);
+
+  useFocusEffect(
+    useCallback(() => {
+      resetForm();
+    }, [resetForm])
+  );
+
+  useEffect(() => {
+    if (params.barcode) {
+      setBarcode(params.barcode);
+      setListingType('product');
+      setActiveTab('new');
+    }
+  }, [params.barcode]);
 
   // Filter categories by listing type (product vs service vs both)
   const filteredCategories = useMemo(() => {
@@ -171,6 +209,7 @@ export default function AddProductScreen() {
           {
             text: t('common.ok', 'OK'),
             onPress: () => {
+              resetForm();
               queryClient.invalidateQueries({ queryKey: merchantKeys.items });
               queryClient.invalidateQueries({ queryKey: merchantKeys.inventoryValue });
               router.replace('/(merchant)/dashboard');
@@ -363,6 +402,7 @@ export default function AddProductScreen() {
             {
               text: isAr ? 'حسناً' : 'Great',
               onPress: () => {
+                resetForm();
                 queryClient.invalidateQueries({ queryKey: merchantKeys.items });
                 queryClient.invalidateQueries({ queryKey: merchantKeys.inventoryValue });
                 router.replace('/(merchant)/dashboard');
@@ -418,7 +458,15 @@ export default function AddProductScreen() {
       setCsvUploadResult(response);
       queryClient.invalidateQueries({ queryKey: merchantKeys.items });
       queryClient.invalidateQueries({ queryKey: merchantKeys.inventoryValue });
-      Alert.alert(t('common.success', 'Success'), response.message);
+      Alert.alert(t('common.success', 'Success'), response.message, [
+        {
+          text: t('common.ok', 'OK'),
+          onPress: () => {
+            resetForm();
+            router.replace('/(merchant)/dashboard');
+          },
+        },
+      ]);
     } catch (err: any) {
       Alert.alert(isAr ? 'فشل الرفع' : 'Upload Failed', err?.response?.data?.detail || 'Something went wrong');
     } finally {
