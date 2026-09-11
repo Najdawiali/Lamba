@@ -630,7 +630,7 @@ export default function CustomerOffersScreen() {
           <View>
             <Text style={styles.headerTitle}>{t('offers.title')}</Text>
             <Text style={styles.headerSubtitle}>
-              {t('offers.subtitle')}
+              {t('offers.customer_subtitle', 'Deals and discounts near you')}
             </Text>
           </View>
           <TouchableOpacity

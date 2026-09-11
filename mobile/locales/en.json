@@ -276,7 +276,8 @@
   },
   "offers": {
     "title": "Special Offers",
-    "subtitle": "Deals and discounts near you",
+    "subtitle": "Manage your store promotions",
+    "customer_subtitle": "Deals and discounts near you",
     "no_offers_yet": "No Offers Yet",
     "no_offers_prompt": "Tap + New Offer to create your first promotion.",
     "new_offer": "+ New Offer",

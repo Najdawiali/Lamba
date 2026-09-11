@@ -544,11 +544,15 @@ export default function MerchantOffersScreen() {
       {/* Screen Header */}
       <View style={[styles.header, { borderBottomColor: Colors.border }]}>
         <View style={{ alignItems: isAr ? 'flex-end' : 'flex-start' }}>
-          <Text style={[styles.headerTitle, { color: Colors.textPrimary }]}>
-            {isAr ? 'العروض الخاصة' : 'Special Offers'}
+          <Text
+            style={[styles.headerTitle, { color: Colors.textPrimary }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+          >
+            {t('offers.title', 'Special Offers')}
           </Text>
           <Text style={[styles.headerSubtitle, { color: Colors.textMuted }]}>
-            {isAr ? 'أدر العروض والخصومات في متجرك' : 'Manage promotions and discounts'}
+            {t('offers.subtitle', 'Manage your store promotions')}
           </Text>
         </View>
       </View>
@@ -1230,6 +1234,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     ...Typography.h2,
+    fontSize: 20,
   },
   headerSubtitle: {
     ...Typography.caption,
