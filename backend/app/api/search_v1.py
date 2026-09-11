@@ -125,6 +125,7 @@ async def _retrieve_fused_candidates(
     filters: Optional[SearchFilters],
     listing_type: Optional[str] = None,
     extracted_attrs: Optional[Dict[str, Any]] = None,
+    category_id: Optional[uuid.UUID] = None,
 ) -> List[dict]:
     """
     Run one ranked semantic branch per query vector plus one ranked lexical
@@ -304,6 +305,30 @@ async def _retrieve_fused_candidates(
             .limit(settings.retrieval_per_branch)
         )
         await _run_branch(stmt)
+
+    # Category branch — items in the detected category (+ subcategories),
+    # ranked by semantic similarity.  Gives category-matching items an extra
+    # RRF vote so they rank higher even when their lexical/semantic scores
+    # are moderate.
+    if category_id:
+        cat_ids_subq = select(Category.id).where(
+            or_(
+                Category.id == category_id,
+                Category.parent_category_id == category_id,
+            )
+        )
+        cat_stmt = (
+            _base_stmt()
+            .where(GlobalItem.category_id.in_(cat_ids_subq))
+        )
+        if primary_vec is not None:
+            cat_stmt = (
+                cat_stmt
+                .where(GlobalItem.text_embedding.is_not(None))
+                .order_by(GlobalItem.text_embedding.cosine_distance(primary_vec).asc())
+            )
+        cat_stmt = cat_stmt.limit(settings.retrieval_per_branch)
+        await _run_branch(cat_stmt)
 
     # Reciprocal Rank Fusion across all ranked lists.
     rrf_scores: dict = defaultdict(float)
@@ -764,6 +789,36 @@ async def _run_search(
     except Exception as e:
         logger.warning(f"Query understanding skipped: {e}")
 
+    # ── Resolve category for retrieval branch ────────────────────
+    resolved_category_id: Optional[uuid.UUID] = None
+    if intent_analysis and getattr(intent_analysis, 'category_name', None):
+        _cat_name = intent_analysis.category_name.strip()
+        if _cat_name:
+            # Exact match (case-insensitive) on name / name_ar / name_en
+            _cat_row = (await db.execute(
+                select(Category.id).where(
+                    or_(
+                        func.lower(Category.name) == _cat_name.lower(),
+                        func.lower(Category.name_ar) == _cat_name.lower(),
+                        func.lower(Category.name_en) == _cat_name.lower(),
+                    )
+                ).limit(1)
+            )).first()
+            if not _cat_row:
+                # Fuzzy fallback — ILIKE substring
+                _cat_row = (await db.execute(
+                    select(Category.id).where(
+                        or_(
+                            Category.name.ilike(f"%{_cat_name}%"),
+                            Category.name_ar.ilike(f"%{_cat_name}%"),
+                            Category.name_en.ilike(f"%{_cat_name}%"),
+                        )
+                    ).limit(1)
+                )).first()
+            if _cat_row:
+                resolved_category_id = _cat_row[0]
+                logger.info(f"[SEARCH] Resolved category '{_cat_name}' → {resolved_category_id}")
+
     # Primary text for semantic search embedding: use query_clean if modifiers were extracted, else resolved_query
     primary_text = query_clean or resolved_query
     query_script = _script_of(primary_text)
@@ -867,6 +922,7 @@ async def _run_search(
         filters=filters,
         listing_type=effective_listing_type,
         extracted_attrs=extracted_attrs,
+        category_id=resolved_category_id,
     )
 
     # Soft fallback: if attribute-filtered retrieval returns too few results,
@@ -886,6 +942,7 @@ async def _run_search(
             filters=filters,
             listing_type=effective_listing_type,
             extracted_attrs=None,
+            category_id=resolved_category_id,
         )
 
     t4 = time.time()
