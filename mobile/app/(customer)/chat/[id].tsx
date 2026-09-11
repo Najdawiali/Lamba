@@ -3,7 +3,7 @@ import { View, Text, TextInput, FlatList, TouchableOpacity, KeyboardAvoidingView
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getMessages, sendMessage } from '../../../services/api';
+import { getMessages, sendMessage, getUser } from '../../../services/api';
 import { useThemeColors } from '../../../context/ThemeContext';
 import { Spacing, Typography } from '../../../constants/theme';
 import { i18n } from '../../../services/i18n';
@@ -17,7 +17,12 @@ export default function ChatScreen() {
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [myUserId, setMyUserId] = useState<string>('');
   const flatListRef = useRef<FlatList>(null);
+
+  useEffect(() => {
+    getUser().then(u => { if (u?.id) setMyUserId(u.id); });
+  }, []);
 
   const fetchMessages = useCallback(async () => {
     if (!id) return;
@@ -79,46 +84,51 @@ export default function ChatScreen() {
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
   };
 
-  const renderMessage = ({ item }: { item: any }) => (
-    <View
-      style={{
-        alignSelf: item.is_me ? 'flex-end' : 'flex-start',
-        backgroundColor: item.is_me ? Colors.primary : Colors.surfaceElevated,
-        borderRadius: 16,
-        borderBottomRightRadius: item.is_me ? 4 : 16,
-        borderBottomLeftRadius: item.is_me ? 16 : 4,
-        paddingVertical: 10,
-        paddingHorizontal: 14,
-        maxWidth: '75%',
-        marginVertical: 4,
-        marginHorizontal: 16,
-      }}
-    >
-      <Text
+  const renderMessage = ({ item }: { item: any }) => {
+    const isMine = Boolean(item.is_me || (myUserId && item.sender_id === myUserId));
+    return (
+      <View
         style={{
-          color: item.is_me ? '#FFFFFF' : Colors.textPrimary,
-          fontSize: 14,
-          lineHeight: 20,
-          textAlign: 'right',
+          alignSelf: isMine ? 'flex-end' : 'flex-start',
+          backgroundColor: isMine ? Colors.primary : Colors.surface,
+          borderRadius: 16,
+          borderBottomRightRadius: isMine ? 4 : 16,
+          borderBottomLeftRadius: isMine ? 16 : 4,
+          borderWidth: isMine ? 0 : 1,
+          borderColor: isMine ? 'transparent' : Colors.border,
+          paddingVertical: 10,
+          paddingHorizontal: 14,
+          maxWidth: '78%',
+          marginVertical: 4,
+          marginHorizontal: 16,
         }}
       >
-        {item.text}
-      </Text>
-      <Text
-        style={{
-          color: item.is_me ? 'rgba(255,255,255,0.7)' : Colors.textSecondary,
-          fontSize: 10,
-          textAlign: 'left',
-          marginTop: 4,
-        }}
-      >
-        {new Date(item.created_at).toLocaleTimeString('ar-JO', {
-          hour: '2-digit',
-          minute: '2-digit',
-        })}
-      </Text>
-    </View>
-  );
+        <Text
+          style={{
+            color: isMine ? '#FFFFFF' : Colors.textPrimary,
+            fontSize: 15,
+            lineHeight: 20,
+            textAlign: isAr ? 'right' : 'left',
+          }}
+        >
+          {item.text}
+        </Text>
+        <Text
+          style={{
+            color: isMine ? 'rgba(255,255,255,0.7)' : Colors.textSecondary,
+            fontSize: 10,
+            textAlign: 'left',
+            marginTop: 4,
+          }}
+        >
+          {item.created_at ? new Date(item.created_at).toLocaleTimeString(isAr ? 'ar-JO' : 'en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }) : ''}
+        </Text>
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }} edges={['top', 'bottom']}>

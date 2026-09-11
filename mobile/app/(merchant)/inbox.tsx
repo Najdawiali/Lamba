@@ -30,6 +30,7 @@ export default function MerchantInboxScreen() {
   
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [loading, setLoading] = useState(true);
+  const [myUserId, setMyUserId] = useState<string>('');
   
   // Chat thread states
   const [selectedSession, setSelectedSession] = useState<ChatSession | null>(null);
@@ -40,12 +41,6 @@ export default function MerchantInboxScreen() {
   
   const flatListRef = useRef<FlatList>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
-
-  // Load current user ID for message alignment
-  useEffect(() => {
-    getUser().then(u => { if (u?.id) setUserId(u.id); });
-  }, []);
 
   // Load chat sessions on mount
   useEffect(() => {
@@ -65,6 +60,8 @@ export default function MerchantInboxScreen() {
 
   const fetchSessions = async () => {
     try {
+      const currentUser = await getUser();
+      if (currentUser?.id) setMyUserId(currentUser.id);
       const res = await getConversations();
       setSessions(res.data || []);
     } catch (err) {
@@ -125,7 +122,7 @@ export default function MerchantInboxScreen() {
       const res = await sendMessage(selectedSession.id, inputText.trim());
       const newMsg = res.data || {
         id: `msg-${Date.now()}`,
-        sender_id: userId,
+        sender_id: myUserId,
         text: inputText.trim(),
         created_at: new Date().toISOString(),
       };
@@ -174,10 +171,10 @@ export default function MerchantInboxScreen() {
   };
 
   const renderMessageBubble = ({ item }: { item: ChatMessage }) => {
-    const isMe = item.sender_id === userId;
+    const isMine = item.sender_id === myUserId;
     return (
-      <View style={[styles.messageBubble, isMe ? styles.messageMe : styles.messageThem]}>
-        <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextThem]}>
+      <View style={isMine ? styles.myBubble : styles.theirBubble}>
+        <Text style={isMine ? styles.myText : styles.theirText}>
           {item.text}
         </Text>
       </View>
@@ -272,25 +269,36 @@ export default function MerchantInboxScreen() {
   },
 
   // Chat Thread Bubble Styles
-  messageBubble: {
-    maxWidth: '80%',
-    padding: Spacing.md,
-    borderRadius: BorderRadius.lg,
-    marginBottom: Spacing.sm,
-  },
-  messageMe: {
+  myBubble: {
     alignSelf: 'flex-end',
     backgroundColor: Colors.primary,
+    borderRadius: 16,
     borderBottomRightRadius: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    maxWidth: '78%',
+    marginBottom: 6,
   },
-  messageThem: {
+  theirBubble: {
     alignSelf: 'flex-start',
-    backgroundColor: Colors.surfaceElevated,
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
     borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    maxWidth: '78%',
+    marginBottom: 6,
   },
-  messageText: { ...Typography.body },
-  messageTextMe: { color: Colors.textOnPrimary },
-  messageTextThem: { color: Colors.textPrimary },
+  myText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+  },
+  theirText: {
+    color: Colors.textPrimary,
+    fontSize: 15,
+  },
   
   // Chat Thread Input Styles
   inputContainer: {
@@ -336,7 +344,7 @@ export default function MerchantInboxScreen() {
           <TouchableOpacity onPress={handleBackToInbox} style={styles.backBtn} activeOpacity={0.7}>
             <Ionicons name={i18n.locale?.startsWith('ar') ? "arrow-forward" : "arrow-back"} size={24} color={Colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.title} numberOfLines={1}>{selectedSession.partner_name || t('inbox.chat_with_customer', 'محادثة مع العميل')}</Text>
+          <Text style={styles.title} numberOfLines={1}>{selectedSession.partner_name || t('chat.chat_with_customer', 'Chat with Customer')}</Text>
           <View style={{ width: 40 }} />
         </View>
 

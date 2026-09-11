@@ -352,6 +352,10 @@
     "track_products": "Track product availability",
     "get_notified": "Get notified on price drops"
   },
+  "chat": {
+    "chat_with_customer": "Chat with Customer"
+  },
+  "chat.chat_with_customer": "Chat with Customer",
   "inbox": {
     "title": "Messages",
     "empty": "No Messages Yet",
