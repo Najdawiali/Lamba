@@ -33,6 +33,11 @@
   "profile.role_customer": "متسوق",
   "profile.alerts": "تنبيهات التوفر",
   "profile.theme": "المظهر",
+  "addProduct.select_image": "اختيار صورة",
+  "addProduct.image_source": "اختر مصدر الصورة",
+  "addProduct.camera": "التقاط صورة",
+  "addProduct.gallery": "اختيار من المعرض",
+  "addProduct.camera_permission": "يجب السماح بالوصول إلى الكاميرا",
   "location": {
     "title": "الموقع مطلوب",
     "subtitle": "لمبة تحتاج موقعك لعرض المتاجر والمنتجات القريبة منك.",
@@ -581,7 +586,12 @@
     "search_global_catalog": "البحث في الكتالوج العام",
     "or_scan_barcode": "أو امسح الباركود",
     "scan_barcode": "مسح الباركود",
-    "search_instruction": "ابحث باسم المنتج أو الباركود للعثور على عناصر في كتالوج لمبة العام. إذا لم تجده، انتقل إلى إضافة منتج جديد لإنشاء قائمة مخصصة."
+    "search_instruction": "ابحث باسم المنتج أو الباركود للعثور على عناصر في كتالوج لمبة العام. إذا لم تجده، انتقل إلى إضافة منتج جديد لإنشاء قائمة مخصصة.",
+    "select_image": "اختيار صورة",
+    "image_source": "اختر مصدر الصورة",
+    "camera": "التقاط صورة",
+    "gallery": "اختيار من المعرض",
+    "camera_permission": "يجب السماح بالوصول إلى الكاميرا"
   },
   "lowStock": {
     "title": "لوحة إعادة التعبئة",

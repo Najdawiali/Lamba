@@ -33,6 +33,11 @@
   "profile.role_customer": "Shopper",
   "profile.alerts": "Availability Alerts",
   "profile.theme": "Theme",
+  "addProduct.select_image": "Select Image",
+  "addProduct.image_source": "Choose image source",
+  "addProduct.camera": "Take Photo",
+  "addProduct.gallery": "Choose from Gallery",
+  "addProduct.camera_permission": "Camera permission is required",
   "location": {
     "title": "Location Required",
     "subtitle": "Lamba needs your location to show nearby stores and products.",
@@ -601,7 +606,12 @@
     "required": "Required",
     "media_library_permission": "Media Library Permission Required",
     "media_library_permission_secondary": "Lamba needs access to your gallery to upload images.",
-    "subcategory": "Subcategory"
+    "subcategory": "Subcategory",
+    "select_image": "Select Image",
+    "image_source": "Choose image source",
+    "camera": "Take Photo",
+    "gallery": "Choose from Gallery",
+    "camera_permission": "Camera permission is required"
   },
   "lowStock": {
     "title": "Replenishment Board",

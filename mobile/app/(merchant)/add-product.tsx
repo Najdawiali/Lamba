@@ -177,44 +177,91 @@ export default function AddProductScreen() {
   };
 
   // 3. Primary Photo Picker
-  const handlePickImage = async () => {
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (permissionResult.granted === false) {
-      Alert.alert(t('scanner.permission_denied', 'Permission Required'), t('addProduct.media_library_permission', 'Library permissions are required to upload a product photo.'));
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      setImageUri(result.assets[0].uri);
-    }
+  const pickImage = () => {
+    Alert.alert(
+      t('addProduct.select_image', 'Select Image'),
+      t('addProduct.image_source', 'Choose image source'),
+      [
+        {
+          text: t('addProduct.camera', 'Take Photo'),
+          onPress: async () => {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert(t('common.error', 'Error'), t('addProduct.camera_permission', 'Camera permission is required'));
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ['images'],
+              allowsEditing: true,
+              quality: 0.8,
+            });
+            if (!result.canceled && result.assets?.length > 0) {
+              setImageUri(result.assets[0].uri);
+            }
+          },
+        },
+        {
+          text: t('addProduct.gallery', 'Choose from Gallery'),
+          onPress: async () => {
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ['images'],
+              allowsEditing: true,
+              quality: 0.8,
+            });
+            if (!result.canceled && result.assets?.length > 0) {
+              setImageUri(result.assets[0].uri);
+            }
+          },
+        },
+        { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+      ],
+    );
   };
+  const handlePickImage = pickImage;
 
   // 4. Secondary Detail Photos Picker
-  const handlePickSecondaryImages = async () => {
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (permissionResult.granted === false) {
-      Alert.alert(t('scanner.permission_denied', 'Permission Required'), t('addProduct.media_library_permission_secondary', 'Library permissions are required to upload secondary photos.'));
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsMultipleSelection: true,
-      quality: 0.8,
-    });
-
-    if (!result.canceled && result.assets) {
-      const uris = result.assets.map(asset => asset.uri);
-      setSecondaryImageUris(prev => [...prev, ...uris]);
-    }
+  const pickSecondaryImage = () => {
+    Alert.alert(
+      t('addProduct.select_image', 'Select Image'),
+      t('addProduct.image_source', 'Choose image source'),
+      [
+        {
+          text: t('addProduct.camera', 'Take Photo'),
+          onPress: async () => {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert(t('common.error', 'Error'), t('addProduct.camera_permission', 'Camera permission is required'));
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ['images'],
+              allowsEditing: true,
+              quality: 0.8,
+            });
+            if (!result.canceled && result.assets?.length > 0) {
+              setSecondaryImageUris(prev => [...prev, result.assets[0].uri]);
+            }
+          },
+        },
+        {
+          text: t('addProduct.gallery', 'Choose from Gallery'),
+          onPress: async () => {
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ['images'],
+              allowsMultipleSelection: true,
+              quality: 0.8,
+            });
+            if (!result.canceled && result.assets?.length > 0) {
+              const uris = result.assets.map(asset => asset.uri);
+              setSecondaryImageUris(prev => [...prev, ...uris]);
+            }
+          },
+        },
+        { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+      ],
+    );
   };
+  const handlePickSecondaryImages = pickSecondaryImage;
 
   // 5. Ingest Brand-New Product / Service via AI Pipeline
   const handleAddNewItem = async () => {
@@ -946,7 +993,7 @@ export default function AddProductScreen() {
                       </TouchableOpacity>
                     </View>
                   ) : (
-                    <TouchableOpacity style={styles.photoPickerBtn} onPress={handlePickImage} activeOpacity={0.7}>
+                    <TouchableOpacity style={styles.photoPickerBtn} onPress={pickImage} activeOpacity={0.7}>
                       <Ionicons name="camera-outline" size={32} color={Colors.primary} />
                       <Text style={styles.photoPickerText}>{t('merchant.add_photo', 'Select Primary Photo')}</Text>
                     </TouchableOpacity>
@@ -970,7 +1017,7 @@ export default function AddProductScreen() {
                       </View>
                     ))}
                     
-                    <TouchableOpacity style={styles.addSecBtn} onPress={handlePickSecondaryImages} activeOpacity={0.7}>
+                    <TouchableOpacity style={styles.addSecBtn} onPress={pickSecondaryImage} activeOpacity={0.7}>
                       <Ionicons name="add" size={20} color={Colors.primary} />
                       <Text style={styles.addSecText}>{t('merchant.add_photo', 'Detail Photo')}</Text>
                     </TouchableOpacity>
