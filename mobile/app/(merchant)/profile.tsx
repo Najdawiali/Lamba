@@ -65,15 +65,24 @@ const MenuRow = ({
   const Colors = useThemeColors();
   const isAr = i18n.locale.includes('ar');
 
+  const styles = useMemo(() => StyleSheet.create({
+    menuRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      minHeight: 56,
+      paddingVertical: Spacing.md,
+      paddingHorizontal: 20,
+    },
+    menuValue: {
+      ...Typography.caption,
+      color: Colors.textMuted,
+      fontSize: 12,
+      lineHeight: 16,
+    },
+  }), [Colors]);
+
   const content = (
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 14,
-        paddingHorizontal: 20,
-      }}
-    >
+    <View style={styles.menuRow}>
       {/* Left side: chevron / lock icon + value / badge */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1, maxWidth: '55%' }}>
         {isLocked ? (
@@ -81,10 +90,8 @@ const MenuRow = ({
         ) : showChevron ? (
           <Ionicons name={isAr ? "chevron-back" : "chevron-forward"} size={16} color={Colors.textSecondary} />
         ) : null}
-        {value && (
-          <Text style={{ color: Colors.textSecondary, fontSize: 13 }} numberOfLines={1}>
-            {value}
-          </Text>
+        {value !== undefined && (
+          <Text style={[styles.menuValue, { marginTop: 2 }]} numberOfLines={2} ellipsizeMode="tail">{value}</Text>
         )}
         {badge !== undefined && badge > 0 && (
           <View style={{
@@ -581,6 +588,16 @@ export default function MerchantProfileScreen() {
       textAlign: isAr ? 'right' : 'left',
       paddingHorizontal: 20,
       paddingBottom: Spacing.sm,
+    },
+    menuRow: {
+      minHeight: 56,
+      paddingVertical: Spacing.md,
+    },
+    menuValue: {
+      ...Typography.caption,
+      color: Colors.textMuted,
+      fontSize: 12,
+      lineHeight: 16,
     },
     menuLabel: {
       color: Colors.textPrimary,
