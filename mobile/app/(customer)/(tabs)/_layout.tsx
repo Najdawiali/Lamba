@@ -10,14 +10,12 @@
 
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Typography } from '../../../constants/theme';
 import { useThemeColors } from '../../../context/ThemeContext';
 import { t } from '../../../services/i18n';
 
 export default function CustomerTabsLayout() {
   const Colors = useThemeColors();
-  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
@@ -27,9 +25,6 @@ export default function CustomerTabsLayout() {
           backgroundColor: Colors.surface,
           borderTopColor: Colors.border,
           borderTopWidth: 1,
-          height: 56 + insets.bottom,
-          paddingBottom: insets.bottom,
-          paddingTop: 8,
         },
         tabBarActiveTintColor: Colors.primary,
         tabBarInactiveTintColor: Colors.textMuted,

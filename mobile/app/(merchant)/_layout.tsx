@@ -16,13 +16,11 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '../../context/ThemeContext';
 import { t } from '../../services/i18n';
 
 export default function MerchantLayout() {
   const Colors = useThemeColors();
-  const insets = useSafeAreaInsets();
 
   return (
     <View style={styles.wrapper}>
@@ -34,10 +32,6 @@ export default function MerchantLayout() {
             backgroundColor: Colors.background,
             borderTopColor: Colors.border,
             borderTopWidth: 1,
-            height: 56 + insets.bottom,
-            paddingBottom: insets.bottom,
-            paddingTop: 8,
-            paddingHorizontal: 4,
           },
           tabBarItemStyle: {
             paddingHorizontal: 4,
