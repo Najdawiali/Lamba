@@ -614,9 +614,12 @@
     "no_history_desc": "أول عملية بيع POS ستظهر هنا.",
     "go_to_cashier": "الذهاب إلى الكاشير",
     "today": "اليوم",
-    "this_week": "هذا الأسبوع",
-    "this_month": "هذا الشهر",
-    "all_time": "كل الأوقات"
+    "week": "الأسبوع",
+    "month": "الشهر",
+    "all": "الكل",
+    "this_week": "الأسبوع",
+    "this_month": "الشهر",
+    "all_time": "الكل"
   },
   "onboarding": {
     "title": "إعداد المتجر",

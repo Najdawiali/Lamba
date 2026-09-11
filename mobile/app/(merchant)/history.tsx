@@ -38,12 +38,13 @@ export default function ReceiptHistoryScreen() {
 
   const isAr = i18n.locale?.startsWith('ar');
 
-  const dateFilters = [
+  const PERIODS = [
     { key: 'today', label: t('history.today', 'Today') },
-    { key: 'week', label: t('history.this_week', 'This Week') },
-    { key: 'month', label: t('history.this_month', 'This Month') },
-    { key: 'all', label: t('history.all_time', 'All Time') },
+    { key: 'week', label: t('history.week', 'This Week') },
+    { key: 'month', label: t('history.month', 'This Month') },
+    { key: 'all', label: t('history.all', 'All Time') },
   ];
+  const dateFilters = PERIODS;
 
   const fetchHistory = useCallback(async (showIndicator = true) => {
     if (showIndicator) setLoading(true);
@@ -155,6 +156,8 @@ export default function ReceiptHistoryScreen() {
   headerTitle: {
     ...Typography.h2,
     color: Colors.textPrimary,
+    textAlign: 'center',
+    flex: 1,
   },
   metricsContainer: {
     paddingHorizontal: Spacing.lg,
@@ -361,9 +364,10 @@ export default function ReceiptHistoryScreen() {
   filterPill: {
     backgroundColor: Colors.surfaceElevated,
     borderRadius: 20,
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: 14,
     paddingVertical: Spacing.sm,
     justifyContent: 'center',
+    flexShrink: 0,
   },
   filterPillActive: { backgroundColor: Colors.primary },
   filterPillText: { fontSize: 13, fontWeight: '600', color: Colors.textMuted },
@@ -395,9 +399,7 @@ export default function ReceiptHistoryScreen() {
         >
           <Ionicons name={isAr ? "arrow-forward" : "arrow-back"} size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>
-          {t('history.title')}
-        </Text>
+        <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit>{t('history.title', 'Sales History')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -438,7 +440,7 @@ export default function ReceiptHistoryScreen() {
         style={styles.filterRow}
         contentContainerStyle={styles.filterRowContent}
       >
-        {dateFilters.map((f) => (
+        {PERIODS.map((f) => (
           <TouchableOpacity
             key={f.key}
             style={[

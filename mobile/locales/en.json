@@ -634,6 +634,9 @@
     "no_history_desc": "Your first POS checkout will appear here.",
     "go_to_cashier": "Go to Cashier",
     "today": "Today",
+    "week": "This Week",
+    "month": "This Month",
+    "all": "All Time",
     "this_week": "This Week",
     "this_month": "This Month",
     "all_time": "All Time"
