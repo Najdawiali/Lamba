@@ -232,7 +232,8 @@ export default function SearchScreen() {
       setHasSearched(true);
 
       if (userId) {
-        await handleSaveSearch(type === 'image' ? '[Photo Query]' : searchQuery.trim(), response.total_results);
+        // Fire-and-forget — never let history save errors interfere with results
+        handleSaveSearch(type === 'image' ? '[Photo Query]' : searchQuery.trim(), response.total_results).catch(() => {});
       }
     } catch (err) {
       console.error('Search failed:', err);
