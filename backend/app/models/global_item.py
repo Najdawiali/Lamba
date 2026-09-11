@@ -25,7 +25,7 @@ class GlobalItem(Base):
     barcode: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True, index=True)
     
     listing_type: Mapped[str] = mapped_column(
-        String(16), nullable=False, server_default="product"
+        String, nullable=False, server_default="product"
     )
     attributes = mapped_column(JSONB, nullable=True, server_default="{}")
     name_ar: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -309,7 +309,7 @@ export default function AddProductScreen() {
         formData.append('barcode', barcode.trim());
       }
       formData.append('stock_count', listingType === 'product' ? stockNum.toString() : '99');
-      formData.append('listing_type', listingType);
+      formData.append('listing_type', listingType || 'product');
       formData.append('attributes', JSON.stringify(attributes));
 
       // Pass category_id if chosen
