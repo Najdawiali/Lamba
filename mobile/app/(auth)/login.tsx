@@ -157,6 +157,13 @@ export default function LoginScreen() {
       marginBottom: Spacing.xs,
       fontWeight: '800',
     },
+    headerTitle: {
+      ...Typography.h1,
+      fontSize: 26,
+      color: Colors.textPrimary,
+      marginBottom: Spacing.xs,
+      fontWeight: '800',
+    },
     subtitle: {
       ...Typography.body,
       color: Colors.textSecondary,
@@ -318,7 +325,9 @@ export default function LoginScreen() {
             resizeMode="contain"
           />
         </TouchableOpacity>
-        <Text style={styles.title}>{t('auth.sign_in_title', 'Sign In')}</Text>
+        <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit>
+          {t('auth.sign_in', 'Sign In')}
+        </Text>
         <Text style={styles.subtitle}>{t('login.shopper_subtitle', 'Discover products near you')}</Text>
       </View>
 

@@ -13,6 +13,15 @@
   <string name="auth.enter_email">"يرجى إدخال البريد الإلكتروني"</string>
   <string name="search.popular_items">"الأكثر بحثاً"</string>
   <string name="onboarding.location_detected_msg">"تم تحديد موقع متجرك. يرجى التأكد من العنوان أدناه."</string>
+  <string name="profile.role_merchant">"صاحب متجر"</string>
+  <string name="profile.role_customer">"متسوق"</string>
+  <string name="profile.alerts">"تنبيهات التوفر"</string>
+  <string name="profile.theme">"المظهر"</string>
+  <string name="addProduct.select_image">"اختيار صورة"</string>
+  <string name="addProduct.image_source">"اختر مصدر الصورة"</string>
+  <string name="addProduct.camera">"التقاط صورة"</string>
+  <string name="addProduct.gallery">"اختيار من المعرض"</string>
+  <string name="addProduct.camera_permission">"يجب السماح بالوصول إلى الكاميرا"</string>
   <string name="location">"[object Object]"</string>
   <string name="login">"[object Object]"</string>
   <string name="register">"[object Object]"</string>
@@ -24,6 +33,8 @@
   <string name="map">"[object Object]"</string>
   <string name="offers">"[object Object]"</string>
   <string name="favorites">"[object Object]"</string>
+  <string name="chat">"[object Object]"</string>
+  <string name="chat.chat_with_customer">"محادثة مع العميل"</string>
   <string name="inbox">"[object Object]"</string>
   <string name="profile">"[object Object]"</string>
   <string name="product">"[object Object]"</string>

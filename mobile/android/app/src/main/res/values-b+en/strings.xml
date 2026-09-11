@@ -13,6 +13,15 @@
   <string name="auth.enter_email">"Please enter your email"</string>
   <string name="search.popular_items">"Popular Items"</string>
   <string name="onboarding.location_detected_msg">"Your store location has been set. Please verify the address below."</string>
+  <string name="profile.role_merchant">"Store Owner"</string>
+  <string name="profile.role_customer">"Shopper"</string>
+  <string name="profile.alerts">"Availability Alerts"</string>
+  <string name="profile.theme">"Theme"</string>
+  <string name="addProduct.select_image">"Select Image"</string>
+  <string name="addProduct.image_source">"Choose image source"</string>
+  <string name="addProduct.camera">"Take Photo"</string>
+  <string name="addProduct.gallery">"Choose from Gallery"</string>
+  <string name="addProduct.camera_permission">"Camera permission is required"</string>
   <string name="location">"[object Object]"</string>
   <string name="login">"[object Object]"</string>
   <string name="register">"[object Object]"</string>
@@ -25,6 +34,8 @@
   <string name="map">"[object Object]"</string>
   <string name="offers">"[object Object]"</string>
   <string name="favorites">"[object Object]"</string>
+  <string name="chat">"[object Object]"</string>
+  <string name="chat.chat_with_customer">"Chat with Customer"</string>
   <string name="inbox">"[object Object]"</string>
   <string name="profile">"[object Object]"</string>
   <string name="product">"[object Object]"</string>

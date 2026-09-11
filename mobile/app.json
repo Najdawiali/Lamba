@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "backgroundColor": "#0A0A1A"
+      "backgroundColor": "#2D1B0A"
     },
     "ios": {
       "supportsTablet": true,
@@ -25,7 +25,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/lamba-icon.png",
-        "backgroundColor": "#0F1729"
+        "backgroundColor": "#2D1B0A"
       },
       "package": "com.lamba.app",
       "config": {
