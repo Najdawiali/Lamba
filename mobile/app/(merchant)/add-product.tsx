@@ -20,7 +20,8 @@ import {
   checkItemName, linkExistingItem, addNewItem,
   uploadItemsCSV, getCategories, CatalogItemMatch, updateMarketItem,
 } from '../../services/api';
-import { useMarket } from '../../hooks/useMerchant';
+import { useQueryClient } from '@tanstack/react-query';
+import { useMarket, merchantKeys } from '../../hooks/useMerchant';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
@@ -30,6 +31,7 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
 
 export default function AddProductScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const Colors = useThemeColors();
   const params = useLocalSearchParams<{ barcode?: string }>();
   const isAr = i18n.locale?.startsWith('ar');
@@ -166,7 +168,14 @@ export default function AddProductScreen() {
       }
       if (resp.success) {
         Alert.alert(t('common.success', 'Success'), resp.message, [
-          { text: t('common.ok', 'OK'), onPress: () => router.replace('/(merchant)/dashboard') }
+          {
+            text: t('common.ok', 'OK'),
+            onPress: () => {
+              queryClient.invalidateQueries({ queryKey: merchantKeys.items });
+              queryClient.invalidateQueries({ queryKey: merchantKeys.inventoryValue });
+              router.replace('/(merchant)/dashboard');
+            },
+          },
         ]);
       }
     } catch (err: any) {
@@ -350,7 +359,16 @@ export default function AddProductScreen() {
           isAr 
             ? 'تم تصنيف وفهرسة ونشر العنصر في متجرك بنجاح!' 
             : 'Your item was successfully auto-categorized, vector-encoded, and added to your store!',
-          [{ text: isAr ? 'حسناً' : 'Great', onPress: () => router.replace('/(merchant)/dashboard') }]
+          [
+            {
+              text: isAr ? 'حسناً' : 'Great',
+              onPress: () => {
+                queryClient.invalidateQueries({ queryKey: merchantKeys.items });
+                queryClient.invalidateQueries({ queryKey: merchantKeys.inventoryValue });
+                router.replace('/(merchant)/dashboard');
+              },
+            },
+          ]
         );
       }
     } catch (err: any) {
@@ -398,6 +416,8 @@ export default function AddProductScreen() {
       const response = await uploadItemsCSV(selectedShopId, formData);
 
       setCsvUploadResult(response);
+      queryClient.invalidateQueries({ queryKey: merchantKeys.items });
+      queryClient.invalidateQueries({ queryKey: merchantKeys.inventoryValue });
       Alert.alert(t('common.success', 'Success'), response.message);
     } catch (err: any) {
       Alert.alert(isAr ? 'فشل الرفع' : 'Upload Failed', err?.response?.data?.detail || 'Something went wrong');
