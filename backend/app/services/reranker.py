@@ -156,78 +156,27 @@ class RerankerService:
                 scores = await self._call_deepinfra_reranker(query, candidates)
                 k = top_k or getattr(settings, "reranker_final_k", 15)
 
-                # ── Diagnostic: log raw scores before any processing ──
-                logger.debug(
-                    "[RERANKER DEBUG] provider=deepinfra  query=%r  "
-                    "instruction_enabled=%s  num_docs=%d",
-                    query,
-                    getattr(settings, "reranker_instruction_enabled", False),
-                    len(candidates),
-                )
-                for idx, (c_item, raw_s) in enumerate(zip(candidates, scores)):
-                    doc_text = c_item.get("text", c_item.get("name", ""))
-                    logger.debug(
-                        "[RERANKER DEBUG]  doc#%d  raw_score=%.6f  text=%r",
-                        idx, raw_s, doc_text[:120],
-                    )
+                # DeepInfra Qwen3-Reranker returns {"scores": [0.99, 0.68, ...]}
+                # Scores are positionally mapped to input documents
+                if scores and len(scores) == len(candidates):
+                    # Normalize scores to 0-1
+                    max_raw = max(scores)
+                    min_raw = min(scores)
+                    span = max_raw - min_raw
 
-                # ── Normalize scores ──────────────────────────────────
-                # DeepInfra may return raw logits OR pre-sigmoid values.
-                # Either way, if the spread is tiny the scores are useless
-                # for ranking. Apply min-max normalization across the batch
-                # to restore discrimination.
-                import math as _math
-                norm_method = getattr(settings, "reranker_score_normalization", "auto").lower()
+                    for i, score in enumerate(scores):
+                        norm = (score - min_raw) / span if span > 1e-9 else 0.5
+                        candidates[i]["rerank_score"] = norm
 
-                # Step 1: If scores look like raw logits (any outside [0,1]),
-                # apply sigmoid first to get them into [0,1].
-                normalized = []
-                needs_sigmoid = any(s < 0.0 or s > 1.0 for s in scores)
-                for s in scores:
-                    v = float(s)
-                    if norm_method == "sigmoid" or (norm_method == "auto" and needs_sigmoid):
-                        v = 1.0 / (1.0 + _math.exp(-v))
-                    normalized.append(v)
-
-                # Step 2: Check spread & max score before rescaling.
-                # If all scores are near zero (max_score < 0.10), nothing in the catalog matched.
-                # Do NOT rescale in that case — let them fall below the 0.50 guard floor naturally.
-                lo, hi = min(normalized), max(normalized)
-                spread = hi - lo
-                if spread < 0.05 and hi < 0.10:
-                    logger.debug(
-                        "[RERANKER DEBUG] All scores are near zero (max=%.4f, spread=%.4f). "
-                        "Preserving raw scores so guard filter drops them.",
-                        hi, spread,
-                    )
-                elif spread < 0.05 and hi >= 0.10 and len(normalized) > 1:
-                    logger.debug(
-                        "[RERANKER DEBUG] Score spread=%.6f is compressed (range %.4f–%.4f). "
-                        "Applying min-max rescaling to [0.3, 1.0].",
-                        spread, lo, hi,
-                    )
-                    # Rescale to [0.3, 1.0] so floor guard (0.50) still works
-                    for j in range(len(normalized)):
-                        normalized[j] = 0.3 + 0.7 * ((normalized[j] - lo) / spread) if spread > 0 else 0.5
+                    # Sort by rerank_score descending
+                    candidates.sort(key=lambda c: c.get("rerank_score", 0), reverse=True)
+                    logger.info(f"[RERANKER] Scored {len(scores)} candidates. Top: {candidates[0].get('text', '?')[:30]} = {candidates[0]['rerank_score']:.3f}")
                 else:
-                    logger.debug(
-                        "[RERANKER DEBUG] Score spread=%.6f OK (range %.4f–%.4f).",
-                        spread, lo, hi,
-                    )
+                    logger.warning(f"[RERANKER] Score count mismatch: got {len(scores)} scores for {len(candidates)} candidates")
+                    # Fallback: keep original order
+                    for c in candidates:
+                        c["rerank_score"] = c.get("cosine_sim", 0.5)
 
-                for idx, (c_item, norm_s) in enumerate(zip(candidates, normalized)):
-                    logger.debug(
-                        "[RERANKER DEBUG]  doc#%d  normalized_score=%.6f  name=%r",
-                        idx, norm_s,
-                        c_item.get("result", {}).name if hasattr(c_item.get("result", {}), "name") else "?",
-                    )
-
-                for i, c in enumerate(candidates):
-                    c["rerank_score"] = normalized[i] if i < len(normalized) else 0.0
-                    c["reranker_available"] = True
-                    c["reranker_fallback"] = False
-                # Sort by rerank_score descending
-                candidates.sort(key=lambda x: x.get("rerank_score", 0.0), reverse=True)
                 return candidates[:k]
             except Exception as e:
                 logger.warning(
