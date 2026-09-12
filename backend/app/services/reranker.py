@@ -42,8 +42,10 @@ class RerankerService:
 
     async def _call_deepinfra_reranker(
         self, query: str, candidates: List[Dict[str, Any]]
-    ) -> List[float]:
-        """Call DeepInfra reranker API with retry logic."""
+    ) -> List[Dict[str, Any]]:
+        """Call DeepInfra reranker API with retry logic.
+        Returns list of {"index": int, "score": float} dicts (min-max normalized).
+        """
         import httpx
 
         url = f"https://api.deepinfra.com/v1/inference/{settings.reranker_model}"
@@ -115,8 +117,23 @@ class RerankerService:
                     "[RERANKER API] Raw scores from DeepInfra: %s",
                     [round(s, 6) for s in raw_scores],
                 )
+
+                # ── Min-max normalize and return index-aware dicts ─
+                if raw_scores:
+                    max_raw = max(raw_scores)
+                    min_raw = min(raw_scores)
+                    span = max_raw - min_raw
+                else:
+                    max_raw = min_raw = span = 0.0
+
+                result = []
+                for i, score in enumerate(raw_scores):
+                    norm = (score - min_raw) / span if span > 1e-9 else 0.5
+                    result.append({"index": i, "score": norm})
+
+                logger.info(f"[RERANKER] Scored {len(raw_scores)} documents via DeepInfra")
                 deepinfra_breaker.record_success()
-                return raw_scores
+                return result
             except Exception as e:
                 last_error = e
                 if "Retryable HTTP" not in str(e):
@@ -153,31 +170,28 @@ class RerankerService:
         elif provider == "deepinfra":
             # DeepInfra reranker API call
             try:
-                scores = await self._call_deepinfra_reranker(query, candidates)
+                score_items = await self._call_deepinfra_reranker(query, candidates)
                 k = top_k or getattr(settings, "reranker_final_k", 15)
 
-                # DeepInfra Qwen3-Reranker returns {"scores": [0.99, 0.68, ...]}
-                # Scores are positionally mapped to input documents
-                if scores and len(scores) == len(candidates):
-                    # Normalize scores to 0-1
-                    max_raw = max(scores)
-                    min_raw = min(scores)
-                    span = max_raw - min_raw
+                # Map scores back to correct candidates using the index field
+                for item in score_items:
+                    idx = item.get("index")
+                    if idx is not None and idx < len(candidates):
+                        candidates[idx]["rerank_score"] = item["score"]
+                    else:
+                        logger.warning(f"[RERANKER] Missing or invalid index in score item: {item}")
 
-                    for i, score in enumerate(scores):
-                        norm = (score - min_raw) / span if span > 1e-9 else 0.5
-                        candidates[i]["rerank_score"] = norm
-
-                    # Sort by rerank_score descending
-                    candidates.sort(key=lambda c: c.get("rerank_score", 0), reverse=True)
-                    logger.info(f"[RERANKER] Scored {len(scores)} candidates. Top: {candidates[0].get('text', '?')[:30]} = {candidates[0]['rerank_score']:.3f}")
-                else:
-                    logger.warning(f"[RERANKER] Score count mismatch: got {len(scores)} scores for {len(candidates)} candidates")
-                    # Fallback: keep original order
-                    for c in candidates:
-                        c["rerank_score"] = c.get("cosine_sim", 0.5)
-
-                return candidates[:k]
+                # Sort by rerank_score descending, return top_k
+                reranked = sorted(
+                    [c for c in candidates if "rerank_score" in c],
+                    key=lambda c: c["rerank_score"],
+                    reverse=True,
+                )
+                # Include any candidates that didn't get a rerank score at the end
+                unranked = [c for c in candidates if "rerank_score" not in c]
+                for c in unranked:
+                    c["rerank_score"] = c.get("cosine_sim", 0.5)
+                return (reranked + unranked)[:k]
             except Exception as e:
                 logger.warning(
                     f"DeepInfra reranker failed, falling back to fusion rank: {e}"
