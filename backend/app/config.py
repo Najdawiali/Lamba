@@ -120,7 +120,7 @@ class Settings(BaseSettings):
     # ── Reranker Provider & Model Configuration ──────────────────
     reranker_provider: str = "deepinfra"  # "local_transformers", "local", "deepinfra"
     enable_reranker: bool = True
-    reranker_model: str = "Qwen/Qwen3-Reranker-0.6B"
+    reranker_model: str = "Qwen/Qwen3-Reranker-4B"
     local_rerank_model_path: str = ""
     local_rerank_device: str = "auto"
     local_rerank_max_length: int = 512
