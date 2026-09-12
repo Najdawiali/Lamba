@@ -504,6 +504,31 @@ async def _rerank_and_finalize(
 
     # Sort results by blended relevance score
     out.sort(key=lambda r: r.semantic_score, reverse=True)
+
+    # ── Score-gap filter: remove results after a significant relevance drop ──
+    # Standard IR technique: if there's a >15% relative drop between consecutive
+    # results, the items below the gap are likely irrelevant.
+    # Only applies when we have a clear top result (score > 0.5)
+    if len(out) >= 2 and out[0].semantic_score > 0.5:
+        filtered = [out[0]]
+        for i in range(1, len(out)):
+            prev_score = out[i - 1].semantic_score
+            curr_score = out[i].semantic_score
+            # Relative drop from previous item
+            if prev_score > 0:
+                relative_drop = (prev_score - curr_score) / prev_score
+                if relative_drop > 0.15:
+                    # Found a significant gap — stop here
+                    logger.info(
+                        f"[SCORE GAP] Cutting after #{i}: "
+                        f"{out[i-1].name[:25]} ({prev_score:.3f}) → "
+                        f"{out[i].name[:25]} ({curr_score:.3f}), "
+                        f"drop={relative_drop:.1%}"
+                    )
+                    break
+            filtered.append(out[i])
+        out = filtered
+
     return _deduplicate_by_product(out)
 
 
