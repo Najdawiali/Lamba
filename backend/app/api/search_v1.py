@@ -477,6 +477,8 @@ async def _rerank_and_finalize(
             blended = round(0.7 * rerank_score + 0.3 * cosine_sim, 4)
             r.semantic_score = blended
             r.final_score = blended
+            if len(out) < 5:
+                logger.info(f"[BLEND] {r.name[:30]:30s} cosine={cosine_sim:.4f} rerank={rerank_score:.4f} blended={blended:.4f}")
             out.append(r)
             rerank_log_entries.append((r, cosine_sim, rerank_score, blended))
 
@@ -1026,6 +1028,7 @@ async def hybrid_search(
             listing_type=search_request.listing_type,
         )
         if cached is not None:
+            logger.info("[SEARCH] Returning L2 cached result — reranker skipped")
             return cached
 
         scored, primary_vec = await _run_search(
