@@ -91,7 +91,24 @@ class RerankerService:
                     raise Exception(f"Retryable HTTP {resp.status_code}")
                 resp.raise_for_status()
                 data = resp.json()
-                raw_scores = data["scores"]
+
+                # DeepInfra returns either a flat "scores" list (positional)
+                # or a "results" list of {index, relevance_score} dicts
+                # (sorted by score descending, NOT positional).
+                if "scores" in data:
+                    raw_scores = data["scores"]
+                elif "results" in data:
+                    # Map scores back to positional order using the index field
+                    raw_scores = [0.0] * len(candidates)
+                    for item in data["results"]:
+                        idx = item.get("index", None)
+                        score = item.get("relevance_score", item.get("score", 0.0))
+                        if idx is not None and idx < len(raw_scores):
+                            raw_scores[idx] = score
+                        else:
+                            logger.warning(f"[RERANKER] Invalid index in response item: {item}")
+                else:
+                    raise KeyError(f"Unexpected reranker response keys: {list(data.keys())}")
 
                 # ── Diagnostic: log raw API response ──────────────
                 logger.debug(
