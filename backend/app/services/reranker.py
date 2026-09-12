@@ -118,18 +118,9 @@ class RerankerService:
                     [round(s, 6) for s in raw_scores],
                 )
 
-                # ── Min-max normalize and return index-aware dicts ─
-                if raw_scores:
-                    max_raw = max(raw_scores)
-                    min_raw = min(raw_scores)
-                    span = max_raw - min_raw
-                else:
-                    max_raw = min_raw = span = 0.0
-
                 result = []
                 for i, score in enumerate(raw_scores):
-                    norm = (score - min_raw) / span if span > 1e-9 else 0.5
-                    result.append({"index": i, "score": norm})
+                    result.append({"index": i, "score": score})
 
                 logger.info(f"[RERANKER] Scored {len(raw_scores)} documents via DeepInfra")
                 deepinfra_breaker.record_success()
