@@ -132,10 +132,10 @@ class Settings(BaseSettings):
     reranker_score_normalization: str = "auto"  # "auto", "sigmoid", "softmax", "none"
 
     reranker_top_k: int = 30          # How many fused candidates to cross-encode
-    reranker_final_k: int = 15        # Final results returned after reranking
+    reranker_final_k: int = 8         # Final results returned after reranking
     reranker_weight: float = 0.7
     prior_weight: float = 0.3
-    reranker_instruction_enabled: bool = False
+    reranker_instruction_enabled: bool = True
 
     # Reranker Cache Configuration:
     reranker_cache_enabled: bool = True
@@ -144,7 +144,7 @@ class Settings(BaseSettings):
     reranker_cache_ttl_sec: int = 3600
 
     # Instruction used for cross-encoder reranking:
-    reranker_instruction: str = "Given a user search for local products and services, judge whether this listing is relevant."
+    reranker_instruction: str = "Judge whether the document is the exact same product type the user is searching for."
     reranker_query_template: str = ""
     reranker_document_template: str = ""
     reranker_pair_template: str = ""

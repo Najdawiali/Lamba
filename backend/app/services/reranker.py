@@ -54,19 +54,27 @@ class RerankerService:
             "Content-Type": "application/json",
         }
         documents = [c.get("text", c.get("name", "")) for c in candidates]
-        payload: Dict[str, Any] = {
-            "queries": [query],
+
+        # Qwen3-Reranker native format: instruction embedded in query
+        # DeepInfra ignores the separate "instruction" field, but the model
+        # responds strongly to the documented <Instruct>/<Query> template.
+        if getattr(settings, "reranker_instruction_enabled", True):
+            instruction = settings.reranker_instruction
+            formatted_query = f"<Instruct>: {instruction}\n<Query>: {query}"
+        else:
+            formatted_query = query
+
+        payload = {
+            "queries": [formatted_query] * len(documents),
             "documents": documents,
         }
-        if getattr(settings, "reranker_instruction_enabled", True):
-            payload["instruction"] = settings.reranker_instruction
 
         # ── Diagnostic: log outbound payload ──────────────────────
         logger.debug(
             "[RERANKER API] Sending to DeepInfra: model=%s  query=%r  "
-            "instruction=%r  num_documents=%d",
+            "formatted_query=%r  num_documents=%d",
             settings.reranker_model, query,
-            payload.get("instruction", "<none>"),
+            formatted_query,
             len(documents),
         )
         for di, doc in enumerate(documents):
