@@ -161,7 +161,7 @@ class Settings(BaseSettings):
     enable_query_expansion: bool = False
     expansion_provider: str = "disabled"  # "disabled", "local_transformers", "api"
     expansion_model: str = "Qwen/Qwen2.5-7B-Instruct"
-    expansion_max_variants: int = 3
+    expansion_max_variants: int = 5
     expansion_timeout_sec: float = 20.0
     expansion_cache_size: int = 4096
     expansion_cache_max_size: int = 4096

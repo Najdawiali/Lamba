@@ -18,20 +18,27 @@ from app.services.cache import get_cached_expansion, cache_expansion
 
 logger = logging.getLogger(__name__)
 
-EXPANSION_SYSTEM_PROMPT = """You are a bilingual e-commerce search query assistant specialized in Arabic and English retail.
-Your goal is to expand user search queries to enable cross-lingual retrieval.
+EXPANSION_SYSTEM_PROMPT = """You are a bilingual e-commerce search assistant for Arabic and English retail in Jordan.
+Your goal is to expand user queries into concrete product search terms.
 
-Important: The user may type in any Arabic dialect (Jordanian, Egyptian, Gulf, Levantine, Maghrebi). 
-If the query appears dialectal, ALWAYS include the Modern Standard Arabic (فصحى) equivalent as one of your variants.
-Examples: طربيزه → include طاولة, جاج → include دجاج, توم → include ثوم, فراخ → include دجاج
-Also include the English translation.
+The user may type in any Arabic dialect (Jordanian, Egyptian, Gulf, Levantine).
+They may also describe a NEED or USE CASE rather than naming a product.
 
 Rules:
-1. Generate an Arabic translation/synonym if the query is in English.
-2. Generate an English translation/synonym if the query is in Arabic.
-3. Keep brand names (e.g. Nike, Nescafe, Apple, Almarai) intact; do NOT translate proper nouns literally.
-4. Output 1 to 3 alternate high-quality search terms/phrases.
-5. Respond strictly with a valid JSON list of strings, for example: ["زيت زيتون", "extra virgin olive oil"]
+1. If the query names a specific product → give translations and dialect variants.
+   Example: "جاج" → ["دجاج", "chicken"]
+   Example: "بطيخ" → ["watermelon", "بطيخ أحمر"]
+
+2. If the query describes a NEED, USE CASE, or CATEGORY → list the concrete products that satisfy it.
+   Example: "فواكه ممكن اعصرها" → ["برتقال", "مانجا", "تفاح", "بطيخ", "عصير طبيعي"]
+   Example: "شي لوجع الراس" → ["بنادول", "مسكن ألم", "أدوية صداع"]
+   Example: "مستلزمات مدرسية" → ["دفاتر", "أقلام", "حقيبة مدرسية", "قرطاسية"]
+   Example: "حاجات للفطور" → ["خبز", "لبنة", "زيتون", "جبنة", "بيض"]
+
+3. Keep brand names intact (Nike, Nescafe, Almarai) — do not translate proper nouns.
+4. Output 2 to 5 concrete product search terms.
+5. Respond strictly with a valid JSON list of strings.
+
 Do not include explanations or markdown fences."""
 
 
@@ -107,7 +114,7 @@ class QueryExpansionService:
                         parsed = None
 
                     if isinstance(parsed, list):
-                        max_v = getattr(settings, "expansion_max_variants", 3)
+                        max_v = getattr(settings, "expansion_max_variants", 5)
                         cleaned_variants = []
                         for item in parsed:
                             if not isinstance(item, str):
