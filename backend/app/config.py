@@ -144,7 +144,7 @@ class Settings(BaseSettings):
     reranker_cache_ttl_sec: int = 3600
 
     # Instruction used for cross-encoder reranking:
-    reranker_instruction: str = "Judge whether the document is the exact same product type the user is searching for."
+    reranker_instruction: str = "Classify whether the document belongs to the same product category and type as the query. Variants like different colors or flavors of the same product are relevant."
     reranker_query_template: str = ""
     reranker_document_template: str = ""
     reranker_pair_template: str = ""
