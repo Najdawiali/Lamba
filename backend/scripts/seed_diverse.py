@@ -259,7 +259,7 @@ async def get_or_create_categories(session: AsyncSession) -> dict:
             cat = existing.scalar_one_or_none()
 
             if cat is None:
-                parent_id = created[parent_en].id if parent_en else None
+                parent_id = created[parent_en]["id"] if parent_en else None
                 cat = Category(
                     name=name_en,
                     name_en=name_en,
@@ -270,7 +270,12 @@ async def get_or_create_categories(session: AsyncSession) -> dict:
                 session.add(cat)
                 await session.flush()
                 logger.info(f"  + category: {name_en} / {name_ar}")
-            created[name_en] = cat
+            created[name_en] = {
+                "id": cat.id,
+                "name": cat.name,
+                "name_ar": cat.name_ar,
+                "name_en": cat.name_en,
+            }
 
     return created
 
@@ -309,7 +314,9 @@ async def seed(clear: bool = False):
         if market is None:
             logger.error("No market found. Run the main seed script first.")
             sys.exit(1)
-        logger.info(f"Attaching products to market: {market.name}\n")
+        market_id = market.id
+        market_name = market.name
+        logger.info(f"Attaching products to market: {market_name}\n")
 
         # ── Ensure categories ────────────────────────────────────
         logger.info("Ensuring category taxonomy...")
@@ -345,11 +352,11 @@ async def seed(clear: bool = False):
             # (matches the enrichment pattern used elsewhere in the pipeline)
             search_terms = " ".join([
                 name_ar, name_en, desc_ar,
-                cat.name_ar or "", cat.name_en or "", cat.name,
+                cat.get("name_ar") or "", cat.get("name_en") or "", cat["name"],
             ]).strip()
 
             # Embed the enriched text
-            embed_input = f"{name_ar}. {desc_ar}. {cat.name_ar} {cat.name_en}"
+            embed_input = f"{name_ar}. {desc_ar}. {cat.get('name_ar', '')} {cat.get('name_en', '')}"
             try:
                 vec = await embedding_service.encode_text_async(
                     embed_input, text_type="document"
@@ -369,7 +376,7 @@ async def seed(clear: bool = False):
                 barcode=barcode,
                 listing_type="product",
                 attributes={},
-                category_id=cat.id,
+                category_id=cat["id"],
                 text_embedding=embedding,
                 search_terms=search_terms,
             )
@@ -377,7 +384,7 @@ async def seed(clear: bool = False):
             await session.flush()
 
             mi = MarketItem(
-                market_id=market.id,
+                market_id=market_id,
                 item_id=gi.id,
                 stock_count=10,
                 status=True,
