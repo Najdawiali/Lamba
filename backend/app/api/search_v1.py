@@ -999,25 +999,36 @@ async def _run_search(
     candidates = _dedup_candidates(candidates, max_unique=50)
     logger.debug(f"[DEDUP PRE-RERANK] After: {len(candidates)} unique products")
 
-    # Build the rerank query. For descriptive/intent queries, the LLM expansion
-    # produces concrete product terms — include them so the reranker judges
-    # candidates against what the user actually wants, not the colloquial phrasing.
-    expansion_variants = variants
-    if expansion_variants and len(expansion_variants) > 0:
-        # Descriptive query expanded into product terms — rerank against both
-        expanded_terms = " ".join(expansion_variants[:5])
-        rerank_query = f"{normalized_input or query_text} ({expanded_terms})"
-    elif synonym_variants and synonym_variants[0]:
+    if synonym_variants and synonym_variants[0]:
         rerank_query = synonym_variants[0]
     elif arabicized and arabicized.strip() and arabicized.lower() != query_text.lower() and norm_arabicized:
         rerank_query = norm_arabicized
     else:
         rerank_query = normalized_input or query_text
 
-    logger.info(f"[RERANK QUERY] Using: {rerank_query[:80]}")
+    # Multi-query reranking: descriptive queries expand into concrete product
+    # terms. The cross-encoder scores poorly on multi-term queries, so we rerank
+    # against each variant separately and keep the best score per item.
+    expansion_variants = variants if variants else []
 
-    # 4. Cross-encode + language-aware ordering on the 30 unique products.
-    scored = await _rerank_and_finalize(rerank_query, candidates, query_script)
+    if expansion_variants and len(expansion_variants) >= 2:
+        # Descriptive/intent query — rerank per variant, merge by max score
+        import copy
+        best_by_id = {}
+
+        for variant in expansion_variants[:5]:
+            variant_candidates = copy.deepcopy(candidates)
+            variant_scored = await _rerank_and_finalize(variant, variant_candidates, query_script)
+            for r in variant_scored:
+                key = str(r.market_item_id)
+                if key not in best_by_id or r.semantic_score > best_by_id[key].semantic_score:
+                    best_by_id[key] = r
+
+        scored = sorted(best_by_id.values(), key=lambda r: r.semantic_score, reverse=True)
+        scored = scored[: settings.reranker_final_k]
+        logger.info(f"[MULTI-RERANK] Merged {len(expansion_variants)} variants → {len(scored)} results")
+    else:
+        scored = await _rerank_and_finalize(rerank_query, candidates, query_script)
 
     t5 = time.time()
     logger.info(f"[TIMING] Reranker + Finalize: {(t5-t4)*1000:.0f}ms")
