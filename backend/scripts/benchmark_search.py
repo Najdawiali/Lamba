@@ -1,716 +1,560 @@
-import time
-import requests
+"""
+Lamba Search Benchmark
+======================
+
+Evaluates search quality against a golden dataset using standard IR metrics.
+Run before and after any search change to measure impact objectively.
+
+Setup (once — seeds the diverse catalog the benchmark expects):
+    docker exec eagle_api python scripts/seed_diverse.py
+
+Usage:
+    docker exec eagle_api python scripts/benchmark_search.py
+    docker exec eagle_api python scripts/benchmark_search.py --save baseline
+    docker exec eagle_api python scripts/benchmark_search.py --compare baseline
+    docker exec eagle_api python scripts/benchmark_search.py --category brand
+
+Metrics:
+    MRR       Where does the first relevant result appear? 1.0 = always first.
+    NDCG@5    Quality of the top-5 ranking. Rewards best items highest.
+    P@3       What fraction of the top 3 are relevant?
+    Recall    Of all expected items, how many appeared anywhere?
+    Noise     Fraction of results that should NOT be there. Lower is better.
+"""
+
+import argparse
 import json
-import os
-import sys
+import math
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List
 
-# Define 100 test queries with expected target matches
-# Each query has a list of alternative clauses. A result is a match if it satisfies ALL keywords in ANY of the clauses.
-TEST_CASES = [
-    # ── 1. Exact Matches (Arabic) ─────────────────────────────────
-    {
-        "query": "شاي أخضر صيني",
-        "category": "exact_ar",
-        "expected": [["شاي", "أخضر", "صيني"]]
-    },
-    {
-        "query": "قهوة تركية فاخرة",
-        "category": "exact_ar",
-        "expected": [["قهوة", "تركية"]]
-    },
-    {
-        "query": "هيل أخضر",
-        "category": "exact_ar",
-        "expected": [["هيل", "أخضر"]]
-    },
-    {
-        "query": "فستق حلبي محمص",
-        "category": "exact_ar",
-        "expected": [["فستق", "حلبي", "محمص"]]
-    },
-    {
-        "query": "زيت حبة البركة",
-        "category": "exact_ar",
-        "expected": [["زيت", "البركة"]]
-    },
-    {
-        "query": "قرفة سيلانية",
-        "category": "exact_ar",
-        "expected": [["قرفة", "سيلانية"]]
-    },
-    {
-        "query": "سماق مطحون",
-        "category": "exact_ar",
-        "expected": [["سماق", "مطحون"]]
-    },
-    {
-        "query": "طحينة فاخرة",
-        "category": "exact_ar",
-        "expected": [["طحينة"]]
-    },
-    {
-        "query": "شاي بابونج عضوي",
-        "category": "exact_ar",
-        "expected": [["بابونج"]]
-    },
-    {
-        "query": "بذور كتان عضوية",
-        "category": "exact_ar",
-        "expected": [["كتان"]]
-    },
-    {
-        "query": "زيت جوز هند بكر",
-        "category": "exact_ar",
-        "expected": [["زيت", "جوز", "هند", "بكر"]]
-    },
-    {
-        "query": "كركم عضوي مطحون",
-        "category": "exact_ar",
-        "expected": [["كركم"]]
-    },
-    {
-        "query": "عسل أزهار برية",
-        "category": "exact_ar",
-        "expected": [["عسل", "أزهار"]]
-    },
-    {
-        "query": "شاي أحمر تركي",
-        "category": "exact_ar",
-        "expected": [["شاي", "أحمر", "تركي"]]
-    },
-    {
-        "query": "قهوة عربية بالهيل",
-        "category": "exact_ar",
-        "expected": [["قهوة", "عربية"]]
-    },
-    {
-        "query": "تمر عجوة المدينة",
-        "category": "exact_ar",
-        "expected": [["عجوة"]]
-    },
-    {
-        "query": "زيت زيتون بلدي",
-        "category": "exact_ar",
-        "expected": [["زيت", "زيتون", "بلدي"]]
-    },
-    {
-        "query": "حلاوة طحينية",
-        "category": "exact_ar",
-        "expected": [["حلاوة"]]
-    },
-    {
-        "query": "ماء ورد",
-        "category": "exact_ar",
-        "expected": [["ماء", "ورد"]]
-    },
-    {
-        "query": "ماء زهر",
-        "category": "exact_ar",
-        "expected": [["ماء", "زهر"]]
-    },
+import httpx
 
-    # ── 2. Exact Matches (English) ────────────────────────────────
-    {
-        "query": "Matcha Organic",
-        "category": "exact_en",
-        "expected": [["matcha"]]
-    },
-    {
-        "query": "Arabic Coffee - Dark Roast",
-        "category": "exact_en",
-        "expected": [["arabic", "coffee"]]
-    },
-    {
-        "query": "Honey - Sidr Premium",
-        "category": "exact_en",
-        "expected": [["sidr", "honey"]]
-    },
-    {
-        "query": "Dates - Medjool Premium",
-        "category": "exact_en",
-        "expected": [["medjool", "dates"]]
-    },
-    {
-        "query": "Olive Oil - Extra Virgin",
-        "category": "exact_en",
-        "expected": [["olive", "oil"]]
-    },
-    {
-        "query": "Saffron - Iranian Grade 1",
-        "category": "exact_en",
-        "expected": [["saffron"]]
-    },
-    {
-        "query": "Turkish Coffee - Medium",
-        "category": "exact_en",
-        "expected": [["turkish", "coffee"]]
-    },
-    {
-        "query": "Earl Grey Tea",
-        "category": "exact_en",
-        "expected": [["earl", "grey"]]
-    },
-    {
-        "query": "Cardamom Pods - Green",
-        "category": "exact_en",
-        "expected": [["cardamom"]]
-    },
-    {
-        "query": "Pistachios - Roasted Salted",
-        "category": "exact_en",
-        "expected": [["pistachios"]]
-    },
-    {
-        "query": "Cashews - Raw Organic",
-        "category": "exact_en",
-        "expected": [["cashews"]]
-    },
-    {
-        "query": "Black Seed Oil",
-        "category": "exact_en",
-        "expected": [["black", "seed"]]
-    },
-    {
-        "query": "Cinnamon Sticks - Ceylon",
-        "category": "exact_en",
-        "expected": [["cinnamon"]]
-    },
-    {
-        "query": "Sumac - Ground",
-        "category": "exact_en",
-        "expected": [["sumac"]]
-    },
-    {
-        "query": "Tahini - Sesame Paste",
-        "category": "exact_en",
-        "expected": [["tahini"]]
-    },
+DEFAULT_LAT = 32.0385
+DEFAULT_LON = 35.7275
 
-    # ── 3. Typo / Misspellings (Arabic & English) ──────────────────
-    {
-        "query": "عسير برتغال",
-        "category": "misspelling_ar",
-        "expected": [["عصير", "برتقال"]]
-    },
-    {
-        "query": "شاهي اخضر",
-        "category": "misspelling_ar",
-        "expected": [["شاي", "أخضر"]]
-    },
-    {
-        "query": "قهوه تركي",
-        "category": "misspelling_ar",
-        "expected": [["قهوة", "تركية"], ["turkish", "coffee"]]
-    },
-    {
-        "query": "هيل اخضر فاخر",
-        "category": "misspelling_ar",
-        "expected": [["هيل", "أخضر"]]
-    },
-    {
-        "query": "فستك حلبي",
-        "category": "misspelling_ar",
-        "expected": [["فستق", "حلبي"]]
-    },
-    {
-        "query": "زيت حبت البركه",
-        "category": "misspelling_ar",
-        "expected": [["زيت", "البركة"]]
-    },
-    {
-        "query": "عرفه سيلانيه",
-        "category": "misspelling_ar",
-        "expected": [["قرفة", "سيلانية"]]
-    },
-    {
-        "query": "سماك مطحون",
-        "category": "misspelling_ar",
-        "expected": [["سماق", "مطحون"]]
-    },
-    {
-        "query": "طحينه فاخره",
-        "category": "misspelling_ar",
-        "expected": [["طحينة"]]
-    },
-    {
-        "query": "شاي بابونج عضو",
-        "category": "misspelling_ar",
-        "expected": [["بابونج"]]
-    },
-    {
-        "query": "زيت جوز هنيد بكر",
-        "category": "misspelling_ar",
-        "expected": [["جوز", "هند"]]
-    },
-    {
-        "query": "عسل ازهار بريه",
-        "category": "misspelling_ar",
-        "expected": [["عسل", "أزهار"]]
-    },
-    {
-        "query": "شاي احمر تركيي",
-        "category": "misspelling_ar",
-        "expected": [["شاي", "أحمر", "تركي"]]
-    },
-    {
-        "query": "تمر عجوه المدينه",
-        "category": "misspelling_ar",
-        "expected": [["عجوة"]]
-    },
-    {
-        "query": "زيت زتون بلدي",
-        "category": "misspelling_ar",
-        "expected": [["زيت", "زيتون", "بلدي"]]
-    },
-    {
-        "query": "pepsii can",
-        "category": "misspelling_en",
-        "expected": [["pepsi"]]
-    },
-    {
-        "query": "aryel powder",
-        "category": "misspelling_en",
-        "expected": [["ariel"]]
-    },
-    {
-        "query": "downi softener",
-        "category": "misspelling_en",
-        "expected": [["downy"]]
-    },
-    {
-        "query": "sonflower oil",
-        "category": "misspelling_en",
-        "expected": [["sunflower", "oil"]]
-    },
-    {
-        "query": "powdred milk",
-        "category": "misspelling_en",
-        "expected": [["powdered", "milk"], ["milk", "powder"]]
-    },
 
-    # ── 4. Arabizi Queries ────────────────────────────────────────
-    {
-        "query": "7aleeb",
-        "category": "arabizi",
-        "expected": [["حليب"], ["milk"]]
-    },
-    {
-        "query": "3aseer",
-        "category": "arabizi",
-        "expected": [["عصير"], ["juice"]]
-    },
-    {
-        "query": "khobz",
-        "category": "arabizi",
-        "expected": [["خبز"], ["bread"]]
-    },
-    {
-        "query": "shai",
-        "category": "arabizi",
-        "expected": [["شاي"], ["tea"]]
-    },
-    {
-        "query": "qahwah",
-        "category": "arabizi",
-        "expected": [["قهوة"], ["coffee"]]
-    },
-    {
-        "query": "3asal",
-        "category": "arabizi",
-        "expected": [["عسل"], ["honey"]]
-    },
-    {
-        "query": "zayt",
-        "category": "arabizi",
-        "expected": [["زيت"], ["oil"]]
-    },
-    {
-        "query": "mil7",
-        "category": "arabizi",
-        "expected": [["ملح"], ["salt"]]
-    },
-    {
-        "query": "sukkar",
-        "category": "arabizi",
-        "expected": [["سكر"], ["sugar"]]
-    },
-    {
-        "query": "tamr",
-        "category": "arabizi",
-        "expected": [["تمر"], ["dates"]]
-    },
+# ══════════════════════════════════════════════════════════════════
+# GOLDEN DATASET
+# ══════════════════════════════════════════════════════════════════
+GOLDEN_CASES = [
+    # ══ SPECIFIC PRODUCT ═════════════════════════════════════════
+    {"query": "بطيخ", "category": "specific",
+     "must_contain": ["بطيخ"],
+     "must_not": ["Hibiscus", "شاي", "لحم", "شامبو"],
+     "min_results": 1, "max_results": 5},
 
-    # ── 5. Semantic Queries (Arabic & English) ────────────────────
-    {
-        "query": "شيء حلو للشاي",
-        "category": "semantic_ar",
-        "expected": [["سكر"], ["عسل"], ["sugar"], ["honey"]]
-    },
-    {
-        "query": "منظفات ملابس",
-        "category": "semantic_ar",
-        "expected": [["غسيل"], ["اريال"], ["تايد"], ["laundry"], ["washing"]]
-    },
-    {
-        "query": "توابل للطبخ",
-        "category": "semantic_ar",
-        "expected": [["بهارات"], ["بهار"], ["كزبرة"], ["كمون"], ["spices"], ["spice"]]
-    },
-    {
-        "query": "مشروب غازي",
-        "category": "semantic_ar",
-        "expected": [["بيبسي"], ["pepsi"], ["cola"], ["كولا"]]
-    },
-    {
-        "query": "حليب مركز للحلويات",
-        "category": "semantic_ar",
-        "expected": [["مكثف"], ["condensed"]]
-    },
-    {
-        "query": "شيء مهدئ للاسترخاء",
-        "category": "semantic_ar",
-        "expected": [["بابونج"], ["لافندر"], ["أعشاب"], ["chamomile"], ["lavender"]]
-    },
-    {
-        "query": "مكسرات غنية بالسيلينيوم",
-        "category": "semantic_ar",
-        "expected": [["برازيلية"], ["brazil"]]
-    },
-    {
-        "query": "زيت للشعر والبشرة",
-        "category": "semantic_ar",
-        "expected": [["جوز هند"], ["لافندر"], ["coconut"], ["lavender"]]
-    },
-    {
-        "query": "مشروب منعش للصيف",
-        "category": "semantic_ar",
-        "expected": [["عصير"], ["orange juice"], ["apple juice"]]
-    },
-    {
-        "query": "something sweet for tea",
-        "category": "semantic_en",
-        "expected": [["sugar"], ["honey"], ["سكر"], ["عسل"]]
-    },
-    {
-        "query": "laundry detergent",
-        "category": "semantic_en",
-        "expected": [["ariel"], ["tide"], ["غسيل"], ["اريال"], ["تايد"]]
-    },
-    {
-        "query": "hot indian spices",
-        "category": "semantic_en",
-        "expected": [["curry"], ["madras"], ["masala"], ["كاري"], ["هندية"]]
-    },
-    {
-        "query": "carbonated soft drink",
-        "category": "semantic_en",
-        "expected": [["pepsi"], ["cola"], ["بيبسي"], ["كولا"]]
-    },
-    {
-        "query": "soothing herbal tea",
-        "category": "semantic_en",
-        "expected": [["chamomile"], ["lavender"], ["بابونج"], ["لافندر"], ["أعشاب"]]
-    },
-    {
-        "query": "hair and skin oil",
-        "category": "semantic_en",
-        "expected": [["coconut"], ["lavender"], ["tea tree"], ["جوز هند"], ["لافندر"]]
-    },
+    {"query": "مكنسة", "category": "specific",
+     "must_contain": ["مكنسة"],
+     "must_not": ["شاي", "لحم", "بطيخ", "دفتر"],
+     "min_results": 1, "max_results": 8},
 
-    # ── 6. Cross-Language Queries ─────────────────────────────────
-    {
-        "query": "green tea",
-        "category": "cross_lang",
-        "expected": [["شاي", "أخضر"], ["green", "tea"]]
-    },
-    {
-        "query": "turkish coffee",
-        "category": "cross_lang",
-        "expected": [["قهوة", "تركية"], ["turkish", "coffee"]]
-    },
-    {
-        "query": "green cardamom",
-        "category": "cross_lang",
-        "expected": [["هيل", "أخضر"], ["cardamom"]]
-    },
-    {
-        "query": "roasted pistachio",
-        "category": "cross_lang",
-        "expected": [["فستق", "حلبي"], ["pistachio"]]
-    },
-    {
-        "query": "black seed oil",
-        "category": "cross_lang",
-        "expected": [["زيت", "البركة"], ["black", "seed"]]
-    },
-    {
-        "query": "ceylon cinnamon",
-        "category": "cross_lang",
-        "expected": [["قرفة", "سيلانية"], ["cinnamon"]]
-    },
-    {
-        "query": "ground sumac",
-        "category": "cross_lang",
-        "expected": [["سماق"], ["sumac"]]
-    },
-    {
-        "query": "organic flax seeds",
-        "category": "cross_lang",
-        "expected": [["كتان"], ["flax"]]
-    },
-    {
-        "query": "wildflower honey",
-        "category": "cross_lang",
-        "expected": [["عسل", "أزهار"], ["honey"]]
-    },
-    {
-        "query": "turkish red tea",
-        "category": "cross_lang",
-        "expected": [["شاي", "أحمر", "تركي"], ["tea"]]
-    },
-    {
-        "query": "yemeni sidr honey",
-        "category": "cross_lang",
-        "expected": [["سدر"], ["sidr"]]
-    },
-    {
-        "query": "rose water",
-        "category": "cross_lang",
-        "expected": [["ماء", "ورد"], ["rose"]]
-    },
-    {
-        "query": "orange blossom water",
-        "category": "cross_lang",
-        "expected": [["ماء", "زهر"], ["blossom"]]
-    },
-    {
-        "query": "tahini sesame",
-        "category": "cross_lang",
-        "expected": [["طحينة"], ["tahini"]]
-    },
-    {
-        "query": "acacia honey",
-        "category": "cross_lang",
-        "expected": [["أكاسيا"], ["acacia"]]
-    },
-    # ── 7. Numeric Attribute Ranges ────────────────────────────────
-    {
-        "query": "كرسي بين 50 و 70 سم",
-        "category": "numeric_attr",
-        "expected": [["60cm"]]
-    },
-    {
-        "query": "شاي 200 جرام",
-        "category": "numeric_attr",
-        "expected": [["200g"]]
-    },
-    {
-        "query": "عصير اكثر من 1 لتر",
-        "category": "numeric_attr",
-        "expected": [["2000ml"], ["2l"]]
-    },
-    {
-        "query": "عصير اقل من 500 مل",
-        "category": "numeric_attr",
-        "expected": [["250ml"]]
-    },
-    {
-        "query": "كرسي مكتب فوق 50 سم",
-        "category": "numeric_attr",
-        "expected": [["60cm"], ["80cm"], ["120cm"]]
-    },
-    {
-        "query": "كرسي تحت 50 سم",
-        "category": "numeric_attr",
-        "expected": [["45cm"]]
-    }
+    {"query": "مجرود حديد", "category": "specific",
+     "must_contain": ["مجرود", "حديد"],
+     "must_not": ["شاي", "حليب", "شامبو", "بطيخ"],
+     "min_results": 1, "max_results": 8},
+
+    {"query": "طقم فناجين", "category": "specific",
+     "must_contain": ["فناجين", "طقم"],
+     "must_not": ["لحم", "شاي أخضر", "حديد"],
+     "min_results": 1, "max_results": 8},
+
+    {"query": "دفتر", "category": "specific",
+     "must_contain": ["دفتر"],
+     "must_not": ["شاي", "لحم", "حديد", "شامبو"],
+     "min_results": 1, "max_results": 8},
+
+    {"query": "بطارية سيارة", "category": "specific",
+     "must_contain": ["بطارية"],
+     "must_not": ["شاي", "خبز", "شامبو"],
+     "min_results": 1, "max_results": 8},
+
+    {"query": "لحم", "category": "specific",
+     "must_contain": ["لحم"],
+     "must_not": ["جبنة", "حليب", "شاي", "حديد"],
+     "min_results": 1, "max_results": 10},
+
+    {"query": "حليب", "category": "specific",
+     "must_contain": ["حليب", "Milk"],
+     "must_not": ["لحم", "حديد", "شامبو"],
+     "min_results": 1, "max_results": 10},
+
+    # ══ BRAND RECOGNITION ════════════════════════════════════════
+    {"query": "شامبو هيد اند شولدرز", "category": "brand",
+     "must_contain": ["هيد اند شولدرز", "Head"],
+     "must_not": ["لحم", "حديد", "بطيخ"],
+     "min_results": 1, "max_results": 8},
+
+    {"query": "Head and Shoulders", "category": "brand",
+     "must_contain": ["هيد اند شولدرز", "Head"],
+     "must_not": ["لحم", "حديد"],
+     "min_results": 1, "max_results": 8},
+
+    {"query": "بانتين", "category": "brand",
+     "must_contain": ["بانتين", "Pantene"],
+     "must_not": ["لحم", "حديد", "شاي"],
+     "min_results": 1, "max_results": 8},
+
+    {"query": "تيفال", "category": "brand",
+     "must_contain": ["تيفال", "Tefal"],
+     "must_not": ["شاي", "لحم", "حديد"],
+     "min_results": 1, "max_results": 8},
+
+    {"query": "بنادول", "category": "brand",
+     "must_contain": ["بنادول", "Panadol"],
+     "must_not": ["شاي", "لحم", "حديد"],
+     "min_results": 1, "max_results": 8},
+
+    # ══ CONDITION / STATE ════════════════════════════════════════
+    {"query": "تلفون مستعمل", "category": "condition",
+     "must_contain": ["مستعمل", "تلفون", "آيفون", "شاومي"],
+     "must_not": ["شاي", "لحم", "حديد", "شامبو"],
+     "min_results": 1, "max_results": 10},
+
+    {"query": "آيفون مستعمل", "category": "condition",
+     "must_contain": ["آيفون", "iPhone"],
+     "must_not": ["شاي", "لحم", "حديد"],
+     "min_results": 1, "max_results": 8},
+
+    {"query": "تلفون جديد", "category": "condition",
+     "must_contain": ["جديد", "سامسونج", "Samsung"],
+     "must_not": ["شاي", "لحم", "حديد"],
+     "min_results": 1, "max_results": 10},
+
+    # ══ VARIANT TOLERANCE ════════════════════════════════════════
+    {"query": "بطيخ اصفر", "category": "variant",
+     "must_contain": ["بطيخ"],
+     "must_not": ["شاي", "لحم", "حديد"],
+     "min_results": 1, "max_results": 5},
+
+    {"query": "مجرود حديد 14 مم", "category": "variant",
+     "must_contain": ["مجرود", "حديد"],
+     "must_not": ["شاي", "شامبو", "بطيخ"],
+     "min_results": 1, "max_results": 8},
+
+    {"query": "شنطة ظهر", "category": "variant",
+     "must_contain": ["شنطة"],
+     "must_not": ["شاي", "لحم", "حديد"],
+     "min_results": 1, "max_results": 8},
+
+    # ══ SPEC / SIZE ══════════════════════════════════════════════
+    {"query": "مكنسة 2000 واط", "category": "spec",
+     "must_contain": ["مكنسة"],
+     "must_not": ["شاي", "لحم", "بطيخ"],
+     "min_results": 1, "max_results": 8},
+
+    {"query": "زيت محرك 5W-30", "category": "spec",
+     "must_contain": ["زيت محرك", "5W-30"],
+     "must_not": ["شاي", "بطيخ", "شامبو"],
+     "min_results": 1, "max_results": 8},
+
+    {"query": "شامبو 400 مل", "category": "spec",
+     "must_contain": ["شامبو"],
+     "must_not": ["لحم", "حديد", "بطيخ"],
+     "min_results": 1, "max_results": 10},
+
+    # ══ FINE-GRAINED ═════════════════════════════════════════════
+    {"query": "شاي أخضر", "category": "fine_grained",
+     "must_contain": ["شاي أخضر"],
+     "must_not": ["لحم", "حديد", "شامبو"],
+     "min_results": 1, "max_results": 15},
+
+    {"query": "فلتر زيت", "category": "fine_grained",
+     "must_contain": ["فلتر زيت"],
+     "must_not": ["شاي", "خبز", "شامبو"],
+     "min_results": 1, "max_results": 8},
+
+    {"query": "فلتر هواء", "category": "fine_grained",
+     "must_contain": ["فلتر هواء"],
+     "must_not": ["شاي", "خبز", "شامبو"],
+     "min_results": 1, "max_results": 8},
+
+    # ══ INTENT / USE-CASE ════════════════════════════════════════
+    {"query": "حاجات للفطور", "category": "intent",
+     "must_contain": ["خبز", "بيض", "جبنة", "لبنة", "زيتون"],
+     "must_not": ["حديد", "شامبو", "بطارية"],
+     "min_results": 2, "max_results": 20},
+
+    {"query": "مستلزمات مدرسية", "category": "intent",
+     "must_contain": ["دفتر", "أقلام", "شنطة", "ألوان", "حاسبة"],
+     "must_not": ["لحم", "حديد", "بطارية سيارة"],
+     "min_results": 2, "max_results": 20},
+
+    {"query": "شي لتنظيف البيت", "category": "intent",
+     "must_contain": ["مكنسة", "ممسحة", "فرشاة", "تنظيف"],
+     "must_not": ["لحم", "بطيخ", "بنادول"],
+     "min_results": 1, "max_results": 20},
+
+    {"query": "شي لوجع الراس", "category": "intent",
+     "must_contain": ["بنادول", "Panadol", "مسكن"],
+     "must_not": ["لحم", "حديد", "شاي أخضر"],
+     "min_results": 1, "max_results": 15},
+
+    {"query": "أشياء للعناية بالشعر", "category": "intent",
+     "must_contain": ["شامبو", "بلسم", "زيت شعر"],
+     "must_not": ["لحم", "حديد", "دفتر"],
+     "min_results": 1, "max_results": 15},
+
+    {"query": "فواكه ممكن اعصرها", "category": "intent",
+     "must_contain": ["برتقال", "تفاح", "عصير", "مانجا", "بطيخ"],
+     "must_not": ["لحم", "حديد", "شامبو"],
+     "min_results": 1, "max_results": 20},
+
+    {"query": "حاجات للسيارة", "category": "intent",
+     "must_contain": ["فلتر", "زيت محرك", "بطارية", "مساحات"],
+     "must_not": ["خبز", "شاي أخضر", "دفتر"],
+     "min_results": 1, "max_results": 20},
+
+    # ══ COLLOQUIAL JORDANIAN ═════════════════════════════════════
+    {"query": "بدي شاي", "category": "colloquial",
+     "must_contain": ["شاي", "Tea"],
+     "must_not": ["لحم", "حديد", "شامبو"],
+     "min_results": 1, "max_results": 15},
+
+    {"query": "عندكم خبز", "category": "colloquial",
+     "must_contain": ["خبز"],
+     "must_not": ["حديد", "شامبو", "بطارية"],
+     "min_results": 1, "max_results": 10},
+
+    {"query": "بدي شاحن تلفون", "category": "colloquial",
+     "must_contain": ["شاحن"],
+     "must_not": ["لحم", "خبز", "بطيخ"],
+     "min_results": 1, "max_results": 10},
+
+    {"query": "في عندكم مكنسة", "category": "colloquial",
+     "must_contain": ["مكنسة"],
+     "must_not": ["لحم", "شاي", "بطيخ"],
+     "min_results": 1, "max_results": 10},
+
+    # ══ CROSS-LANGUAGE ═══════════════════════════════════════════
+    {"query": "tea", "category": "cross_lang",
+     "must_contain": ["شاي", "Tea"],
+     "must_not": ["لحم", "حديد"],
+     "min_results": 1, "max_results": 20},
+
+    {"query": "vacuum cleaner", "category": "cross_lang",
+     "must_contain": ["مكنسة", "Vacuum"],
+     "must_not": ["شاي", "لحم", "بطيخ"],
+     "min_results": 1, "max_results": 10},
+
+    {"query": "shampoo", "category": "cross_lang",
+     "must_contain": ["شامبو", "Shampoo"],
+     "must_not": ["لحم", "حديد", "بطيخ"],
+     "min_results": 1, "max_results": 10},
+
+    {"query": "used phone", "category": "cross_lang",
+     "must_contain": ["مستعمل", "Used", "تلفون", "iPhone"],
+     "must_not": ["شاي", "لحم", "خبز"],
+     "min_results": 1, "max_results": 10},
+
+    {"query": "screwdriver", "category": "cross_lang",
+     "must_contain": ["مفكات", "Screwdriver"],
+     "must_not": ["شاي", "لحم", "بطيخ"],
+     "min_results": 1, "max_results": 8},
+
+    # ══ ARABIZI ══════════════════════════════════════════════════
+    {"query": "chai", "category": "arabizi",
+     "must_contain": ["شاي", "Tea", "Chai"],
+     "must_not": ["لحم", "حديد"],
+     "min_results": 1, "max_results": 20},
+
+    {"query": "7aleeb", "category": "arabizi",
+     "must_contain": ["حليب", "Milk"],
+     "must_not": ["لحم", "حديد"],
+     "min_results": 0, "max_results": 15},
+
+    # ══ NEGATIVE ═════════════════════════════════════════════════
+    {"query": "سيارة فيراري", "category": "negative",
+     "must_contain": [],
+     "must_not": ["شاي", "خبز", "شامبو", "دفتر"],
+     "min_results": 0, "max_results": 3},
+
+    {"query": "طائرة هليكوبتر", "category": "negative",
+     "must_contain": [],
+     "must_not": ["شاي", "لحم", "حديد", "شامبو"],
+     "min_results": 0, "max_results": 3},
+
+    {"query": "تذكرة سفر", "category": "negative",
+     "must_contain": [],
+     "must_not": ["شاي", "لحم", "مكنسة"],
+     "min_results": 0, "max_results": 3},
 ]
 
-extra_cases = [
-    {"query": "organic quinoa", "category": "exact_en", "expected": [["quinoa"]]},
-    {"query": "pumpkin seeds", "category": "exact_en", "expected": [["pumpkin"]]},
-    {"query": "avocado oil", "category": "exact_en", "expected": [["avocado"]]},
-    {"query": "almond butter", "category": "exact_en", "expected": [["almond", "butter"]]},
-    {"query": "vanilla beans", "category": "exact_en", "expected": [["vanilla"]]},
-    
-    {"query": "كزبرة مطحونة", "category": "exact_ar", "expected": [["كزبرة"]]},
-    {"query": "بذور عباد الشمس", "category": "exact_ar", "expected": [["عباد", "الشمس"]]},
-    {"query": "حلاوة طحينية بالفستق", "category": "exact_ar", "expected": [["حلاوة"]]},
-    {"query": "مكسرات مشكلة", "category": "exact_ar", "expected": [["مكسرات"]]},
-    {"query": "لوز أخضر طازج", "category": "exact_ar", "expected": [["لوز", "أخضر"]]},
-    
-    {"query": "كاجو ممص", "category": "misspelling_ar", "expected": [["كاجو"]]},
-    {"query": "مشمش مجففف", "category": "misspelling_ar", "expected": [["مشمش"]]},
-    {"query": "دبس رمان طبيعيي", "category": "misspelling_ar", "expected": [["دبس", "رمان"]]},
-    {"query": "كمون مطحونن", "category": "misspelling_ar", "expected": [["كمون"]]},
-    {"query": "يانسون نجميي", "category": "misspelling_ar", "expected": [["يانسون"]]},
 
-    {"query": "almond buter", "category": "misspelling_en", "expected": [["almond", "butter"]]},
-    {"query": "pumpkin sedes", "category": "misspelling_en", "expected": [["pumpkin"]]},
-    {"query": "avocato oil", "category": "misspelling_en", "expected": [["avocado"]]},
-    {"query": "quinua organic", "category": "misspelling_en", "expected": [["quinoa"]]},
-    {"query": "vanila beans", "category": "misspelling_en", "expected": [["vanilla"]]},
-]
+# ══════════════════════════════════════════════════════════════════
+# METRICS
+# ══════════════════════════════════════════════════════════════════
 
-for ec in extra_cases:
-    if len(TEST_CASES) < 100:
-        TEST_CASES.append(ec)
+def _matches_any(text: str, patterns: List[str]) -> bool:
+    t = text.lower()
+    return any(p.lower() in t for p in patterns)
 
-print(f"Total test cases in benchmark dataset: {len(TEST_CASES)}")
 
-# API URL
-API_URL = "http://localhost:8000/api/v1/os-search/hybrid"
-LAT = 32.0388
-LON = 35.7255
+def reciprocal_rank(results: List[str], must_contain: List[str]) -> float:
+    if not must_contain:
+        return 1.0 if not results else 0.0
+    for i, name in enumerate(results):
+        if _matches_any(name, must_contain):
+            return 1.0 / (i + 1)
+    return 0.0
 
-def evaluate_hit(hit, expected_clauses):
-    name_ar = hit.get("name_ar", "").lower()
-    name_en = hit.get("name_en", "").lower()
-    combined_name = f"{name_ar} | {name_en}"
-    
-    for clause in expected_clauses:
-        clause_match = True
-        for keyword in clause:
-            if keyword.lower() not in combined_name:
-                clause_match = False
-                break
-        if clause_match:
-            return True
-    return False
 
-def run_benchmark():
-    category_stats = {}
-    total_latency = 0.0
-    latencies = []
-    
-    overall_p1 = 0
-    overall_p3 = 0
-    overall_p5 = 0
-    overall_mrr = 0.0
-    
-    results_detailed = []
+def ndcg_at_k(results: List[str], must_contain: List[str], k: int = 5) -> float:
+    if not must_contain:
+        return 1.0 if not results else 0.0
+    gains = [1.0 if _matches_any(n, must_contain) else 0.0 for n in results[:k]]
+    dcg = sum(g / math.log2(i + 2) for i, g in enumerate(gains))
+    n_rel = min(int(sum(gains)), k)
+    idcg = sum(1.0 / math.log2(i + 2) for i in range(n_rel))
+    return dcg / idcg if idcg > 0 else 0.0
 
-    for idx, case in enumerate(TEST_CASES, 1):
+
+def precision_at_k(results: List[str], must_contain: List[str], k: int = 3) -> float:
+    if not must_contain:
+        return 1.0 if not results else 0.0
+    top = results[:k]
+    if not top:
+        return 0.0
+    return sum(1 for n in top if _matches_any(n, must_contain)) / len(top)
+
+
+def recall_coverage(results: List[str], must_contain: List[str]) -> float:
+    if not must_contain:
+        return 1.0
+    found = sum(1 for p in must_contain
+                if any(p.lower() in n.lower() for n in results))
+    return found / len(must_contain)
+
+
+def noise_rate(results: List[str], must_not: List[str]) -> float:
+    if not results or not must_not:
+        return 0.0
+    return sum(1 for n in results if _matches_any(n, must_not)) / len(results)
+
+
+def overall_score(s: Dict) -> float:
+    return 10.0 * (
+        0.40 * s["ndcg@5"]
+        + 0.25 * s["mrr"]
+        + 0.20 * (1.0 - s["noise"])
+        + 0.15 * s["recall"]
+    )
+
+
+# ══════════════════════════════════════════════════════════════════
+# RUNNER
+# ══════════════════════════════════════════════════════════════════
+
+def run_benchmark(base_url: str, only_category: str = None,
+                  verbose: bool = True) -> Dict:
+    cases = GOLDEN_CASES
+    if only_category:
+        cases = [c for c in cases if c["category"] == only_category]
+        if not cases:
+            cats = sorted({c["category"] for c in GOLDEN_CASES})
+            print(f"Unknown category '{only_category}'. Available: {', '.join(cats)}")
+            return {}
+
+    client = httpx.Client(base_url=base_url, timeout=90)
+    out = []
+
+    if verbose:
+        print(f"\nBenchmark → {base_url}   ({len(cases)} cases)")
+        print("=" * 84)
+
+    current_cat = None
+    for case in cases:
+        if verbose and case["category"] != current_cat:
+            current_cat = case["category"]
+            print(f"\n  [{current_cat}]")
+
         q = case["query"]
-        cat = case["category"]
-        expected = case["expected"]
-        
-        if cat not in category_stats:
-            category_stats[cat] = {
-                "count": 0, "p1": 0, "p3": 0, "p5": 0, "mrr": 0.0, "latency": []
-            }
-            
-        payload = {
-            "q": q,
-            "lat": LAT,
-            "lon": LON,
-            "radius_km": 10.0
-        }
-        
-        t0 = time.perf_counter()
         try:
-            resp = requests.post(API_URL, json=payload, timeout=20)
-            t1 = time.perf_counter()
-            latency_ms = (t1 - t0) * 1000.0
-            
-            if resp.status_code == 200:
-                data = resp.json()
-                hits = data.get("results", [])
-            else:
-                print(f"Request failed with status code {resp.status_code} for query: {q}")
-                hits = []
+            resp = client.post("/api/v1/search/hybrid", json={
+                "query_text": q,
+                "latitude": DEFAULT_LAT,
+                "longitude": DEFAULT_LON,
+            })
+            names = [r.get("name", "") for r in resp.json().get("results", [])]
         except Exception as e:
-            latency_ms = (time.perf_counter() - t0) * 1000.0
-            print(f"Exception for query '{q}': {e}")
-            hits = []
-            
-        latencies.append(latency_ms)
-        category_stats[cat]["latency"].append(latency_ms)
-        category_stats[cat]["count"] += 1
-        
-        match_rank = 0
-        for rank, hit in enumerate(hits[:5], 1):
-            if evaluate_hit(hit, expected):
-                match_rank = rank
-                break
-                
-        p1 = 1 if match_rank == 1 else 0
-        p3 = 1 if 1 <= match_rank <= 3 else 0
-        p5 = 1 if 1 <= match_rank <= 5 else 0
-        mrr = 1.0 / match_rank if match_rank > 0 else 0.0
-        
-        overall_p1 += p1
-        overall_p3 += p3
-        overall_p5 += p5
-        overall_mrr += mrr
-        
-        category_stats[cat]["p1"] += p1
-        category_stats[cat]["p3"] += p3
-        category_stats[cat]["p5"] += p5
-        category_stats[cat]["mrr"] += mrr
-        
-        results_detailed.append({
-            "idx": idx,
-            "query": q,
-            "category": cat,
-            "latency_ms": latency_ms,
-            "match_rank": match_rank if match_rank > 0 else "N/A",
-            "top_hits": [f"{h.get('name_ar')} ({h.get('name_en')})" for h in hits[:3]]
+            if verbose:
+                print(f"    ERROR {q}: {e}")
+            names = []
+
+        mrr = reciprocal_rank(names, case["must_contain"])
+        ndcg = ndcg_at_k(names, case["must_contain"], 5)
+        p3 = precision_at_k(names, case["must_contain"], 3)
+        rec = recall_coverage(names, case["must_contain"])
+        noise = noise_rate(names, case["must_not"])
+        count_ok = case["min_results"] <= len(names) <= case["max_results"]
+
+        out.append({
+            "query": q, "category": case["category"],
+            "result_count": len(names), "count_ok": count_ok,
+            "mrr": mrr, "ndcg@5": ndcg, "p@3": p3,
+            "recall": rec, "noise": noise,
+            "top_results": names[:5],
         })
 
-    total_cases = len(TEST_CASES)
-    avg_latency = sum(latencies) / total_cases
-    p95_latency = sorted(latencies)[int(total_cases * 0.95)]
-    
-    report_md = f"""# Search Pipeline Benchmark Results
+        if verbose:
+            ok = mrr > 0 and noise == 0 and count_ok
+            mark = "✓" if ok else "✗"
+            print(f"    {mark} {q[:30]:32s} n={len(names):2d} "
+                  f"MRR={mrr:.2f} NDCG={ndcg:.2f} P@3={p3:.2f} "
+                  f"Rec={rec:.2f} Noise={noise:.2f}")
 
-This report evaluates the accuracy, relevance, and performance of the OpenSearch hybrid search pipeline over 100 sample query test cases.
+    client.close()
 
-## Core Aggregates
+    n = len(out)
+    summary = {
+        "timestamp": datetime.now().isoformat(),
+        "base_url": base_url,
+        "n_cases": n,
+        "mrr": sum(c["mrr"] for c in out) / n,
+        "ndcg@5": sum(c["ndcg@5"] for c in out) / n,
+        "p@3": sum(c["p@3"] for c in out) / n,
+        "recall": sum(c["recall"] for c in out) / n,
+        "noise": sum(c["noise"] for c in out) / n,
+        "count_ok_rate": sum(1 for c in out if c["count_ok"]) / n,
+    }
 
-* **Total Test Queries**: {total_cases}
-* **Mean Reciprocal Rank (MRR)**: {overall_mrr / total_cases:.4f}
-* **Overall Precision @ 1**: {overall_p1 / total_cases * 100.0:.1f}% ({overall_p1}/{total_cases})
-* **Overall Precision @ 3**: {overall_p3 / total_cases * 100.0:.1f}% ({overall_p3}/{total_cases})
-* **Overall Precision @ 5**: {overall_p5 / total_cases * 100.0:.1f}% ({overall_p5}/{total_cases})
-* **Average Latency**: {avg_latency:.2f} ms
-* **95th Percentile Latency**: {p95_latency:.2f} ms
+    by_cat = {}
+    for c in out:
+        by_cat.setdefault(c["category"], []).append(c)
+    summary["by_category"] = {
+        cat: {
+            "n": len(v),
+            "mrr": sum(x["mrr"] for x in v) / len(v),
+            "ndcg@5": sum(x["ndcg@5"] for x in v) / len(v),
+            "recall": sum(x["recall"] for x in v) / len(v),
+            "noise": sum(x["noise"] for x in v) / len(v),
+        }
+        for cat, v in by_cat.items()
+    }
 
----
+    if verbose:
+        print("\n" + "=" * 84)
+        print(f"\n  SCORE: {overall_score(summary):.1f}/10\n")
+        print(f"  MRR      {summary['mrr']:.3f}    first relevant result position")
+        print(f"  NDCG@5   {summary['ndcg@5']:.3f}    ranking quality")
+        print(f"  P@3      {summary['p@3']:.3f}    top-3 precision")
+        print(f"  Recall   {summary['recall']:.3f}    expected items found")
+        print(f"  Noise    {summary['noise']:.3f}    irrelevant results (lower better)")
+        print(f"  CountOK  {summary['count_ok_rate']:.3f}    result count within range")
+        print("\n  By category:")
+        for cat, m in sorted(summary["by_category"].items(),
+                             key=lambda kv: -kv[1]["ndcg@5"]):
+            print(f"    {cat:14s} n={m['n']:2d}  MRR={m['mrr']:.2f}  "
+                  f"NDCG={m['ndcg@5']:.2f}  Rec={m['recall']:.2f}  "
+                  f"Noise={m['noise']:.2f}")
+        print()
 
-## Category-wise Performance breakdown
+    return {"summary": summary, "cases": out}
 
-| Category | Query Count | Precision@1 | Precision@3 | Precision@5 | MRR | Avg Latency (ms) |
-|---|---|---|---|---|---|---|
-"""
-    for cat_name, stats in category_stats.items():
-        count = stats["count"]
-        p1_rate = (stats["p1"] / count) * 100.0 if count > 0 else 0
-        p3_rate = (stats["p3"] / count) * 100.0 if count > 0 else 0
-        p5_rate = (stats["p5"] / count) * 100.0 if count > 0 else 0
-        mrr_rate = stats["mrr"] / count if count > 0 else 0
-        avg_cat_latency = sum(stats["latency"]) / count if count > 0 else 0
-        
-        report_md += f"| {cat_name} | {count} | {p1_rate:.1f}% | {p3_rate:.1f}% | {p5_rate:.1f}% | {mrr_rate:.4f} | {avg_cat_latency:.1f} |\n"
-        
-    report_md += """
----
 
-## Detailed Test Logs (All cases)
+def compare(current: Dict, baseline_path: Path):
+    with open(baseline_path, encoding="utf-8") as f:
+        base = json.load(f)
+    bs, cs = base["summary"], current["summary"]
 
-| # | Query | Category | Match Rank | Top 3 Hits | Latency |
-|---|---|---|---|---|---|
-"""
-    for res in results_detailed:
-        hits_str = ", ".join(res["top_hits"])
-        report_md += f"| {res['idx']} | {res['query']} | {res['category']} | {res['match_rank']} | {hits_str} | {res['latency_ms']:.1f} ms |\n"
-        
-    artifact_report_path = r"C:\Users\alisa\.gemini\antigravity\brain\20b90a2d-c83a-4750-8458-bc015c3202b1\benchmark_results.md"
-    
-    with open(artifact_report_path, "w", encoding="utf-8") as f:
-        f.write(report_md)
-        
-    print(f"Benchmark finished successfully! Report written to {artifact_report_path}")
+    print("\n" + "=" * 84)
+    print(f"  COMPARE vs {baseline_path.name}   (recorded {bs['timestamp'][:19]})")
+    print("=" * 84)
+
+    def row(label, key, higher_better=True):
+        b, c = bs[key], cs[key]
+        d = c - b
+        arrow = "→"
+        if abs(d) > 0.001:
+            arrow = "▲" if (d > 0) == higher_better else "▼"
+        print(f"  {label:12s} {b:.3f}  {arrow}  {c:.3f}   ({d:+.3f})")
+
+    row("MRR", "mrr")
+    row("NDCG@5", "ndcg@5")
+    row("P@3", "p@3")
+    row("Recall", "recall")
+    row("Noise", "noise", False)
+    print()
+    b_sc, c_sc = overall_score(bs), overall_score(cs)
+    d = c_sc - b_sc
+    arrow = "▲" if d > 0.05 else ("▼" if d < -0.05 else "→")
+    print(f"  SCORE        {b_sc:.1f}/10  {arrow}  {c_sc:.1f}/10   ({d:+.1f})")
+
+    print("\n  Category movement:")
+    moved = False
+    for cat in sorted(cs.get("by_category", {})):
+        b = bs.get("by_category", {}).get(cat)
+        c = cs["by_category"][cat]
+        if not b:
+            continue
+        d = c["ndcg@5"] - b["ndcg@5"]
+        if abs(d) > 0.02:
+            moved = True
+            arrow = "▲" if d > 0 else "▼"
+            print(f"    {arrow} {cat:14s} {b['ndcg@5']:.2f} → {c['ndcg@5']:.2f}  ({d:+.2f})")
+    if not moved:
+        print("    (no category moved beyond threshold)")
+
+    base_by_q = {c["query"]: c for c in base["cases"]}
+    ups, downs = [], []
+    for c in current["cases"]:
+        b = base_by_q.get(c["query"])
+        if not b:
+            continue
+        d = c["ndcg@5"] - b["ndcg@5"]
+        if d < -0.05:
+            downs.append((c["query"], b["ndcg@5"], c["ndcg@5"]))
+        elif d > 0.05:
+            ups.append((c["query"], b["ndcg@5"], c["ndcg@5"]))
+
+    if ups:
+        print("\n  Improved:")
+        for q, b, c in ups:
+            print(f"    ▲ {q[:34]:36s} {b:.2f} → {c:.2f}")
+    if downs:
+        print("\n  REGRESSED:")
+        for q, b, c in downs:
+            print(f"    ▼ {q[:34]:36s} {b:.2f} → {c:.2f}")
+    if not ups and not downs:
+        print("\n  No per-query changes beyond threshold.")
+    print()
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Lamba search quality benchmark")
+    ap.add_argument("--url", default="http://localhost:8000")
+    ap.add_argument("--save", metavar="NAME")
+    ap.add_argument("--compare", metavar="NAME")
+    ap.add_argument("--category", metavar="CAT",
+                    help="Run only one category (specific, brand, intent, ...)")
+    ap.add_argument("--json", action="store_true")
+    args = ap.parse_args()
+
+    results = run_benchmark(args.url, args.category, verbose=not args.json)
+    if not results:
+        return
+
+    if args.json:
+        print(json.dumps(results, indent=2, ensure_ascii=False))
+        return
+
+    out_dir = Path(__file__).parent / "benchmarks"
+    out_dir.mkdir(exist_ok=True)
+
+    if args.compare:
+        p = out_dir / f"{args.compare}.json"
+        if p.exists():
+            compare(results, p)
+        else:
+            print(f"  No baseline '{args.compare}' in {out_dir}")
+
+    if args.save:
+        p = out_dir / f"{args.save}.json"
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(results, f, indent=2, ensure_ascii=False)
+        print(f"  Saved → {p}")
+
 
 if __name__ == "__main__":
-    run_benchmark()
+    main()

@@ -53,3 +53,6 @@ ehthumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Search Benchmarks
+backend/scripts/benchmarks/
