@@ -999,17 +999,22 @@ async def _run_search(
     candidates = _dedup_candidates(candidates, max_unique=50)
     logger.debug(f"[DEDUP PRE-RERANK] After: {len(candidates)} unique products")
 
-    # Choose the most canonical search term for cross-encoder reranking:
-    # 1. If the query had dialect synonyms (e.g. "جاج" -> "دجاج", "عيش" -> "خبز"),
-    #    pass the formal synonym so the cross-encoder scores product relevance accurately.
-    # 2. If the query was Arabizi (e.g. "7aleeb"), pass the transliterated Arabic ("حليب").
-    # 3. Otherwise use normalized_query or query_text.
-    if synonym_variants and synonym_variants[0]:
+    # Build the rerank query. For descriptive/intent queries, the LLM expansion
+    # produces concrete product terms — include them so the reranker judges
+    # candidates against what the user actually wants, not the colloquial phrasing.
+    expansion_variants = variants
+    if expansion_variants and len(expansion_variants) > 0:
+        # Descriptive query expanded into product terms — rerank against both
+        expanded_terms = " ".join(expansion_variants[:5])
+        rerank_query = f"{normalized_input or query_text} ({expanded_terms})"
+    elif synonym_variants and synonym_variants[0]:
         rerank_query = synonym_variants[0]
     elif arabicized and arabicized.strip() and arabicized.lower() != query_text.lower() and norm_arabicized:
         rerank_query = norm_arabicized
     else:
         rerank_query = normalized_input or query_text
+
+    logger.info(f"[RERANK QUERY] Using: {rerank_query[:80]}")
 
     # 4. Cross-encode + language-aware ordering on the 30 unique products.
     scored = await _rerank_and_finalize(rerank_query, candidates, query_script)
