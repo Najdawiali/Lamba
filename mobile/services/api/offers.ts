@@ -61,6 +61,7 @@ export interface CustomerSpecialOfferResponse {
   product_name_en?: string | null;
   product_description: string | null;
   price: number | null;
+  discounted_price?: number | null;
   category: string | null;
   category_name_ar?: string | null;
   category_name_en?: string | null;

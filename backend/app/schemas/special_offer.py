@@ -57,6 +57,7 @@ class CustomerSpecialOfferResponse(BaseModel):
     product_name: str
     product_description: Optional[str] = None
     price: Optional[float] = None
+    discounted_price: Optional[float] = None
     category: Optional[str] = None
     category_name_ar: Optional[str] = None
     category_name_en: Optional[str] = None

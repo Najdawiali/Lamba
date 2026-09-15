@@ -557,13 +557,13 @@ export default function CustomerOffersScreen() {
 
           {item.price != null && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginTop: 4 }}>
-              <Text style={styles.priceText}>
-                {formatPrice(item.price)}
-              </Text>
-              {item.discount_percentage != null && item.discount_percentage > 0 && item.discount_percentage < 100 && (
-                <Text style={styles.originalPriceText}>
-                  {formatPrice(item.price / (1 - item.discount_percentage / 100))}
-                </Text>
+              {item.discounted_price != null ? (
+                <>
+                  <Text style={styles.priceText}>{formatPrice(item.discounted_price)}</Text>
+                  <Text style={styles.originalPriceText}>{formatPrice(item.price)}</Text>
+                </>
+              ) : (
+                <Text style={styles.priceText}>{formatPrice(item.price)}</Text>
               )}
             </View>
           )}

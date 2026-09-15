@@ -572,6 +572,24 @@ async def get_customer_offers(
             return config.get('percent')
         return None
 
+    def _compute_discounted_price(offer_type: str, config: dict, price: Optional[float]) -> Optional[float]:
+        """
+        Return the effective price after the offer is applied.
+        None means the offer does not change the unit price
+        (e.g. buy_x_get_y, quantity_price).
+        """
+        if price is None or not config:
+            return None
+        if offer_type == 'percentage':
+            pct = config.get('percent')
+            if pct and 0 < float(pct) < 100:
+                return round(float(price) * (1 - float(pct) / 100), 2)
+        elif offer_type == 'fixed_amount':
+            amt = config.get('amount')
+            if amt and 0 < float(amt) < float(price):
+                return round(float(price) - float(amt), 2)
+        return None
+
     def _offer_summary(offer_type: str, config: dict) -> str:
         """Human-readable offer summary."""
         if not config:
@@ -679,6 +697,7 @@ async def get_customer_offers(
                     product_name=gi.name,
                     product_description=gi.description,
                     price=mi.price,
+                    discounted_price=_compute_discounted_price(offer.offer_type, config, mi.price),
                     category=gi.category,
                     category_name_ar=cat.name_ar if cat else None,
                     category_name_en=cat.name_en if cat else None,
