@@ -31,6 +31,16 @@ async def start_conversation(
     db: AsyncSession = Depends(get_db),
 ):
     """Start a new conversation or return existing one, send first message."""
+    # Prevent merchant from chatting with their own store
+    market = await db.get(Market, body.market_id)
+    if not market:
+        raise HTTPException(status_code=404, detail="Store not found")
+    if market.merchant_id == user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot start a conversation with your own store / لا يمكنك بدء محادثة مع متجرك",
+        )
+
     # Check if conversation already exists
     result = await db.execute(
         select(Conversation).where(
@@ -92,10 +102,6 @@ async def start_conversation(
     # Send push notification to merchant only if a message was sent
     if msg_id:
         try:
-            market_result = await db.execute(
-                select(Market).where(Market.id == body.market_id)
-            )
-            market = market_result.scalar_one_or_none()
             if market and market.merchant_id:
                 owner_result = await db.execute(
                     select(User).where(User.id == market.merchant_id)
