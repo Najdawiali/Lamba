@@ -177,7 +177,7 @@ export default function WelcomeScreen() {
           activeOpacity={0.7}
         >
           <Text style={{ color: Colors.textPrimary, fontSize: 14, fontWeight: '600' }}>
-            {i18n.locale?.startsWith('ar') ? 'EN' : 'ع'}
+            {i18n.locale?.startsWith('ar') ? 'EN' : 'AR'}
           </Text>
         </TouchableOpacity>
       </View>
