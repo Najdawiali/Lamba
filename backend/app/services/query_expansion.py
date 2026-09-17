@@ -75,12 +75,15 @@ class QueryExpansionService:
                 {"role": "user", "content": f"Expand this search query for cross-lingual retail search: {query.strip()}"},
             ]
             try:
-                full_resp = await llm_adapter.complete_chat_full(
-                    messages=messages,
-                    temperature=0.1,
-                    max_tokens=200,
-                    timeout=getattr(settings, "expansion_timeout_sec", 10.0),
-                    chat_template_kwargs={"enable_thinking": False},
+                full_resp = await asyncio.wait_for(
+                    llm_adapter.complete_chat_full(
+                        messages=messages,
+                        temperature=0.1,
+                        max_tokens=200,
+                        timeout=getattr(settings, "expansion_timeout_sec", 10.0),
+                        chat_template_kwargs={"enable_thinking": False},
+                    ),
+                    timeout=8.0,
                 )
                 logger.debug(
                     f"[EXPANSION RESPONSE DUMP] {json.dumps(full_resp, ensure_ascii=False, default=str)[:2000]}"

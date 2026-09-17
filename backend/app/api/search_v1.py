@@ -532,17 +532,6 @@ async def _rerank_and_finalize(
     return _deduplicate_by_product(out)
 
 
-def _filter_top_five_unless_accuracy_above_80(
-    results: List[HybridSearchResultItem],
-) -> List[HybridSearchResultItem]:
-    """
-    Legacy 0.80-gated top-5 cap. Kept as a thin shim over the new
-    `_filter_with_guards` so legacy call sites keep working during the
-    guard rollout. Defaults to lenient mode with empty query tokens.
-    """
-    return _filter_with_guards(results, query_text="", lenient=True)
-
-
 def _is_valid_query(query: str) -> bool:
     """
     A valid query must contain at least one:
@@ -616,6 +605,7 @@ def _filter_with_guards(
     results: List[HybridSearchResultItem],
     query_text: str = "",
     lenient: bool = True,
+    min_score_override: Optional[float] = None,
 ) -> List[HybridSearchResultItem]:
     """
     Three-stage post-rerank guard applied to the top-N candidates.
@@ -668,7 +658,8 @@ def _filter_with_guards(
 
     for r in sorted_results:
         # Stage C — absolute floor
-        if r.semantic_score < settings.reranker_min_keep_score:
+        effective_min = min_score_override if min_score_override is not None else settings.reranker_min_keep_score
+        if r.semantic_score < effective_min:
             continue
 
         # Stage B — gap + overlap demotion
@@ -1012,13 +1003,21 @@ async def _run_search(
     expansion_variants = variants if variants else []
 
     if expansion_variants and len(expansion_variants) >= 2:
-        # Descriptive/intent query — rerank per variant, merge by max score
+        # Descriptive/intent query — rerank per variant IN PARALLEL, merge by max score
         import copy
-        best_by_id = {}
 
-        for variant in expansion_variants[:5]:
-            variant_candidates = copy.deepcopy(candidates)
-            variant_scored = await _rerank_and_finalize(variant, variant_candidates, query_script)
+        async def _rerank_one_variant(variant, cands, script):
+            vc = copy.deepcopy(cands)
+            return await _rerank_and_finalize(variant, vc, script)
+
+        tasks = [_rerank_one_variant(v, candidates, query_script) for v in expansion_variants[:5]]
+        all_variant_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        best_by_id = {}
+        for variant_scored in all_variant_results:
+            if isinstance(variant_scored, Exception):
+                logger.warning(f"Multi-rerank variant failed: {variant_scored}")
+                continue
             for r in variant_scored:
                 key = str(r.market_item_id)
                 if key not in best_by_id or r.semantic_score > best_by_id[key].semantic_score:
@@ -1026,7 +1025,7 @@ async def _run_search(
 
         scored = sorted(best_by_id.values(), key=lambda r: r.semantic_score, reverse=True)
         scored = scored[: settings.reranker_final_k]
-        logger.info(f"[MULTI-RERANK] Merged {len(expansion_variants)} variants → {len(scored)} results")
+        logger.info(f"[MULTI-RERANK] Merged {len(expansion_variants)} variants → {len(scored)} results (parallel)")
     else:
         scored = await _rerank_and_finalize(rerank_query, candidates, query_script)
 
@@ -1034,7 +1033,8 @@ async def _run_search(
     logger.info(f"[TIMING] Reranker + Finalize: {(t5-t4)*1000:.0f}ms")
     logger.info(f"[TIMING] TOTAL _run_search: {(t5-t0)*1000:.0f}ms")
 
-    return scored, primary_raw
+    was_intent_query = bool(expansion_variants and len(expansion_variants) >= 2) or should_expand
+    return scored, primary_raw, was_intent_query
 
 
 # ── POST /hybrid ────────────────────────────────────────────────
@@ -1072,7 +1072,7 @@ async def hybrid_search(
             logger.info("[SEARCH] Returning L2 cached result — reranker skipped")
             return cached
 
-        scored, primary_vec = await _run_search(
+        scored, primary_vec, was_intent_query = await _run_search(
             query_text=search_request.query_text,
             latitude=search_request.latitude,
             longitude=search_request.longitude,
@@ -1087,16 +1087,26 @@ async def hybrid_search(
         # final_score includes 0.3*proximity, which let nearby-but-irrelevant
         # items (e.g. tea for "كرسي مريح") pass the exact tier. Proximity
         # only influences ORDERING within a tier, not whether an item is shown.
-        exact = [r for r in scored if r.semantic_score >= settings.exact_tier_threshold]
+        # Intent queries (expansion produced 2+ variants) get relaxed thresholds —
+        # showing best-available beats empty results for discovery searches.
+        # The mobile app renders these as "suggestions" instead of "exact_matches".
+        if was_intent_query:
+            exact_threshold = 0.15
+            rec_threshold = 0.10
+        else:
+            exact_threshold = settings.exact_tier_threshold
+            rec_threshold = settings.recommendation_tier_threshold
+
+        exact = [r for r in scored if r.semantic_score >= exact_threshold]
         logger.debug(
             "[HYBRID SEARCH] query=%r  total_scored=%d  exact_tier_count=%d (threshold=%.2f)",
-            search_request.query_text, len(scored), len(exact), settings.exact_tier_threshold,
+            search_request.query_text, len(scored), len(exact), exact_threshold,
         )
 
         response_obj: Optional[HybridSearchResponse] = None
 
         if len(exact) >= 3:
-            guarded_exact = _filter_with_guards(exact, query_text=search_request.query_text)
+            guarded_exact = _filter_with_guards(exact, query_text=search_request.query_text, min_score_override=0.05 if was_intent_query else None)
             logger.debug(
                 "[HYBRID SEARCH RETURN] query=%r  exact_returning=%d",
                 search_request.query_text, len(guarded_exact),
@@ -1104,33 +1114,33 @@ async def hybrid_search(
             response_obj = HybridSearchResponse(
                 found=True,
                 action=None,
-                search_mode="exact_matches",
+                search_mode="suggestions" if was_intent_query else "exact_matches",
                 results=guarded_exact,
             )
         else:
             # Not enough exact matches (< 3) — include recommendation tier items as well
             recommendations = [
                 r for r in scored
-                if r.semantic_score >= settings.recommendation_tier_threshold
+                if r.semantic_score >= rec_threshold
             ]
             logger.debug(
                 "[HYBRID SEARCH] query=%r  recommendations_tier_count=%d (threshold=%.2f)",
-                search_request.query_text, len(recommendations), settings.recommendation_tier_threshold,
+                search_request.query_text, len(recommendations), rec_threshold,
             )
             if recommendations:
-                guarded_recs = _filter_with_guards(recommendations, query_text=search_request.query_text)
+                guarded_recs = _filter_with_guards(recommendations, query_text=search_request.query_text, min_score_override=0.05 if was_intent_query else None)
                 response_obj = HybridSearchResponse(
                     found=True,
-                    action=None if exact else "recommendations",
-                    search_mode="exact_matches" if exact else "recommendations",
+                    action=None if exact else ("suggestions" if was_intent_query else "recommendations"),
+                    search_mode="suggestions" if was_intent_query else ("exact_matches" if exact else "recommendations"),
                     results=guarded_recs,
                 )
             elif exact:
-                guarded_exact = _filter_with_guards(exact, query_text=search_request.query_text)
+                guarded_exact = _filter_with_guards(exact, query_text=search_request.query_text, min_score_override=0.05 if was_intent_query else None)
                 response_obj = HybridSearchResponse(
                     found=True,
                     action=None,
-                    search_mode="exact_matches",
+                    search_mode="suggestions" if was_intent_query else "exact_matches",
                     results=guarded_exact,
                 )
 
@@ -1231,7 +1241,7 @@ async def double_check_search(
             f"{search_request.user_refined_details.strip()}"
         )
 
-        scored, _ = await _run_search(
+        scored, _, _intent = await _run_search(
             query_text=refined_query,
             latitude=search_request.latitude,
             longitude=search_request.longitude,

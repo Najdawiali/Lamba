@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     )
 
     # ── PostgreSQL ──────────────────────────────────────────────
-    database_url: str = "postgresql+asyncpg://eagle:eagle_secret@localhost:5432/eagle_vision"
+    database_url: str = ""
 
     # ── JWT ─────────────────────────────────────────────────────
     jwt_secret: str = "INSECURE-CHANGE-ME-set-JWT_SECRET-in-env"
@@ -185,6 +185,7 @@ class Settings(BaseSettings):
     # ── Redis Cache Configuration ───────────────────────────────
     redis_host: str = "redis"
     redis_port: int = 6379
+    redis_password: str = ""
     cache_expansion_ttl: int = 7200    # 2 hours — expansion results are stable
     cache_search_ttl: int = 300        # 5 minutes — results may change with new products
 

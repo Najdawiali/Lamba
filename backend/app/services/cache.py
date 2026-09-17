@@ -20,6 +20,7 @@ async def get_redis() -> Any:
             r = redis.Redis(
                 host=settings.redis_host,
                 port=settings.redis_port,
+                password=settings.redis_password or None,
                 decode_responses=True,
                 socket_timeout=0.5,
                 socket_connect_timeout=0.5,
@@ -34,6 +35,7 @@ async def get_redis() -> Any:
                 _redis = redis.Redis(
                     host=settings.redis_host,
                     port=settings.redis_port,
+                password=settings.redis_password or None,
                     decode_responses=True,
                     socket_timeout=0.5,
                     socket_connect_timeout=0.5,

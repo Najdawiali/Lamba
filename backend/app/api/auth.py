@@ -99,4 +99,5 @@ def require_customer(user: User = Depends(get_current_user)) -> User:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Customer access required",
         )
+    return user
     return user

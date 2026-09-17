@@ -8,7 +8,7 @@ Endpoints:
 """
 
 import logging
-import random
+import secrets
 import string
 import uuid
 from datetime import datetime, timezone
@@ -51,7 +51,7 @@ class ResetPasswordRequest(BaseModel):
 
 def _generate_code(length: int = 6) -> str:
     """Generate a random numeric verification code."""
-    return "".join(random.choices(string.digits, k=length))
+    return "".join(secrets.choice(string.digits) for _ in range(length))
 
 
 # ── POST /signup ────────────────────────────────────────────────
@@ -80,7 +80,7 @@ async def signup(request: Request, data: SignUpRequest, db: AsyncSession = Depen
             )
         else:
             # Unverified account — regenerate OTP and resend
-            code = f"{random.randint(0, 999999):06d}"
+            code = _generate_code()
             existing_user.password_hash = hash_password(data.password)
             existing_user.verification_code = code
             existing_user.verification_code_created_at = datetime.now(timezone.utc)
@@ -242,7 +242,7 @@ async def resend_code(request: Request, data: ResendCodeRequest, db: AsyncSessio
     if user.verified:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Account is already verified")
 
-    code = f"{random.randint(0, 999999):06d}"
+    code = _generate_code()
     user.verification_code = code
     user.verification_code_created_at = datetime.now(timezone.utc)
     user.verification_attempts = 0
@@ -271,7 +271,7 @@ async def forgot_password(request: Request, data: ForgotPasswordRequest, db: Asy
     user = result.scalar_one_or_none()
 
     if user and user.verified:
-        code = f"{random.randint(0, 999999):06d}"
+        code = _generate_code()
         user.verification_code = code
         user.verification_code_created_at = datetime.now(timezone.utc)
         user.verification_attempts = 0

@@ -56,3 +56,7 @@ ehthumbs.db
 
 # Search Benchmarks
 backend/scripts/benchmarks/
+
+# Server backups
+backups/
+docker-compose.yml.bak

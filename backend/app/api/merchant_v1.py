@@ -1006,7 +1006,6 @@ async def upload_items_csv(
 
     created_count = 0
     linked_count = 0
-    es_indexed = 0
 
     for idx, row in enumerate(reader, start=2):
         def _get(key: str) -> str:
@@ -1057,26 +1056,20 @@ async def upload_items_csv(
 
             text_vector = None
             try:
-                text = row_name
+                doc_text = row_name
                 if description_val:
-                    text = f"{row_name}. {description_val}"
-                text_vector = embedding_service.encode_text_384(text)
+                    doc_text = f"{row_name}. {description_val}"
+                text_vec_raw = await embedding_service.encode_text_async(doc_text, text_type="document")
+                text_vector = text_vec_raw.tolist() if hasattr(text_vec_raw, "tolist") else text_vec_raw
             except Exception as e:
-                logger.error(f"MiniLM encoding failed for CSV row {idx}: {e}")
-
-            image_vector = None
-            try:
-                image_vector = embedding_service.encode_product(row_name, description_val)
-            except Exception as e:
-                logger.error(f"CLIP encoding failed for CSV row {idx}: {e}")
+                logger.warning(f"Embedding failed for CSV row {idx}: {e}")
 
             gi = GlobalItem(
                 name=row_name,
                 description=description_val,
                 barcode=barcode_val,
                 category_id=cat.id,
-                text_embedding=text_vector.tolist() if text_vector is not None else None,
-                image_embedding=image_vector.tolist() if image_vector is not None else None,
+                text_embedding=text_vector,
                 created_by=user.id,
             )
             db.add(gi)
@@ -1119,10 +1112,9 @@ async def upload_items_csv(
         "success": True,
         "created": created_count,
         "linked": linked_count,
-        "indexed": es_indexed,
         "message": (
             f"CSV import complete: {created_count} new item(s) created, "
-            f"{linked_count} existing item(s) linked, {es_indexed} indexed to search."
+            f"{linked_count} existing item(s) linked."
         ),
     }
 
@@ -1344,6 +1336,11 @@ async def pos_checkout(
     alerts = []
 
     for item in data.items:
+        if item.quantity <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Quantity must be positive (got {item.quantity}).",
+            )
         # Fetch the market item
         mi_result = await db.execute(
             select(MarketItem)

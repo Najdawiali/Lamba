@@ -4,6 +4,7 @@ extraction with needs_llm gatekeeper.
 """
 
 from __future__ import annotations
+import asyncio
 
 import logging
 import json
@@ -168,15 +169,20 @@ class QueryUnderstandingService:
             return default_intent
 
         try:
-            res = await llm_adapter.complete_chat(
-                messages=[
-                    {"role": "system", "content": _QU_SYSTEM_PROMPT},
-                    {"role": "user", "content": f"Query: {query_text}"},
-                ],
-                temperature=0.0,
-                max_tokens=250,
-                timeout=5.0,  # Strict 5s timeout to prevent latency spikes
-                chat_template_kwargs={"enable_thinking": False},
+            # Hard 6s deadline — if the LLM+retries exceed this, bail out
+            # rather than letting the user wait 17s for 3 failed retries.
+            res = await asyncio.wait_for(
+                llm_adapter.complete_chat(
+                    messages=[
+                        {"role": "system", "content": _QU_SYSTEM_PROMPT},
+                        {"role": "user", "content": f"Query: {query_text}"},
+                    ],
+                    temperature=0.0,
+                    max_tokens=250,
+                    timeout=5.0,
+                    chat_template_kwargs={"enable_thinking": False},
+                ),
+                timeout=6.0,
             )
 
             if res:

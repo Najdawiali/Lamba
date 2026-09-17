@@ -77,3 +77,9 @@ async def close_client():
         await _client.aclose()
         _client = None
 
+
+# Per-service circuit breakers — failures in one service
+# don't block the others
+deepinfra_llm_breaker = CircuitBreaker(failure_threshold=3, cooldown_seconds=30)
+deepinfra_embedding_breaker = CircuitBreaker(failure_threshold=3, cooldown_seconds=30)
+deepinfra_reranker_breaker = CircuitBreaker(failure_threshold=3, cooldown_seconds=30)

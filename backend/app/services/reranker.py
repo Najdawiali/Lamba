@@ -12,7 +12,7 @@ from typing import Optional, List, Dict, Any
 
 from app.config import settings
 from app.services.local_reranker import local_reranker_provider
-from app.services.http_pool import get_client, deepinfra_breaker
+from app.services.http_pool import get_client, deepinfra_reranker_breaker
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ class RerankerService:
                 di, len(doc), doc[:200],
             )
 
-        if deepinfra_breaker.should_skip():
+        if deepinfra_reranker_breaker.should_skip():
             logger.warning("DeepInfra circuit breaker is OPEN. Skipping reranker API call.")
             raise RuntimeError("DeepInfra circuit breaker is OPEN.")
 
@@ -91,13 +91,13 @@ class RerankerService:
         client = get_client()
         last_error = None
         for attempt in range(max_retries):
-            if deepinfra_breaker.should_skip():
+            if deepinfra_reranker_breaker.should_skip():
                 logger.warning("DeepInfra circuit breaker tripped during reranker retries. Aborting.")
                 break
             try:
                 resp = await client.post(url, headers=headers, json=payload)
                 if resp.status_code in (429, 500, 502, 503, 504):
-                    deepinfra_breaker.record_failure()
+                    deepinfra_reranker_breaker.record_failure()
                     raise Exception(f"Retryable HTTP {resp.status_code}")
                 resp.raise_for_status()
                 data = resp.json()
@@ -131,13 +131,13 @@ class RerankerService:
                     result.append({"index": i, "score": score})
 
                 logger.info(f"[RERANKER] Scored {len(raw_scores)} documents via DeepInfra")
-                deepinfra_breaker.record_success()
+                deepinfra_reranker_breaker.record_success()
                 return result
             except Exception as e:
                 last_error = e
                 if "Retryable HTTP" not in str(e):
-                    deepinfra_breaker.record_failure()
-                if attempt < max_retries - 1 and not deepinfra_breaker.should_skip():
+                    deepinfra_reranker_breaker.record_failure()
+                if attempt < max_retries - 1 and not deepinfra_reranker_breaker.should_skip():
                     backoff = 0.5 * (2 ** attempt)
                     logger.warning(
                         f"Reranker API attempt {attempt + 1}/{max_retries} failed: {e}. "
@@ -197,7 +197,7 @@ class RerankerService:
                 )
                 k = top_k or getattr(settings, "reranker_final_k", 15)
                 for c in candidates:
-                    c["rerank_score"] = 0.0
+                    c["rerank_score"] = c.get("cosine_sim", c.get("semantic_score", 0.5))
                     c["reranker_available"] = False
                     c["reranker_fallback"] = True
                 return candidates[:k]
@@ -208,7 +208,7 @@ class RerankerService:
             )
             k = top_k or getattr(settings, "reranker_final_k", 15)
             for c in candidates:
-                c["rerank_score"] = 0.0
+                c["rerank_score"] = c.get("cosine_sim", c.get("semantic_score", 0.5))
                 c["reranker_available"] = False
                 c["reranker_fallback"] = True
             return candidates[:k]

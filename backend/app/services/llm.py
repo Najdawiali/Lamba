@@ -10,7 +10,7 @@ import re
 import httpx
 from typing import Optional, Dict, Any, List
 from app.config import settings
-from app.services.http_pool import get_client, deepinfra_breaker
+from app.services.http_pool import get_client, deepinfra_llm_breaker
 
 logger = logging.getLogger(__name__)
 
@@ -58,34 +58,34 @@ class LLMAdapter:
             "Content-Type": "application/json",
         }
 
-        if deepinfra_breaker.should_skip():
+        if deepinfra_llm_breaker.should_skip():
             logger.warning("DeepInfra circuit breaker is OPEN. Skipping LLM API call.")
             return None
 
         client = get_client()
         for attempt in range(max_retries):
-            if deepinfra_breaker.should_skip():
+            if deepinfra_llm_breaker.should_skip():
                 logger.warning("DeepInfra circuit breaker tripped during LLM retries. Aborting.")
                 break
             try:
                 resp = await client.post(url, json=payload, headers=headers, timeout=timeout)
                 resp.raise_for_status()
-                deepinfra_breaker.record_success()
+                deepinfra_llm_breaker.record_success()
                 return resp.json()
             except httpx.HTTPStatusError as e:
-                deepinfra_breaker.record_failure()
+                deepinfra_llm_breaker.record_failure()
                 logger.warning(
                     f"LLMAdapter HTTP error (attempt {attempt + 1}/{max_retries}): "
                     f"{e.response.status_code} - {e.response.text}"
                 )
-                if e.response.status_code in (429, 500, 502, 503, 504) and attempt < max_retries - 1 and not deepinfra_breaker.should_skip():
+                if e.response.status_code in (429, 500, 502, 503, 504) and attempt < max_retries - 1 and not deepinfra_llm_breaker.should_skip():
                     await asyncio.sleep(0.5 * (2 ** attempt))
                     continue
                 return None
             except Exception as e:
-                deepinfra_breaker.record_failure()
+                deepinfra_llm_breaker.record_failure()
                 logger.warning(f"LLMAdapter API call failed (attempt {attempt + 1}/{max_retries}): {e}")
-                if attempt < max_retries - 1 and not deepinfra_breaker.should_skip():
+                if attempt < max_retries - 1 and not deepinfra_llm_breaker.should_skip():
                     await asyncio.sleep(0.5 * (2 ** attempt))
                     continue
                 return None
