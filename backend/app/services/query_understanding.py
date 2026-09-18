@@ -179,7 +179,7 @@ class QueryUnderstandingService:
                     ],
                     temperature=0.0,
                     max_tokens=250,
-                    timeout=4.0,
+                    timeout=5.5,
                     max_retries=1,
                     chat_template_kwargs={"enable_thinking": False},
                 ),

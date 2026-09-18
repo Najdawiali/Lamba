@@ -80,7 +80,7 @@ class QueryExpansionService:
                         messages=messages,
                         temperature=0.1,
                         max_tokens=200,
-                        timeout=5.0,
+                        timeout=7.0,
                         max_retries=1,
                         chat_template_kwargs={"enable_thinking": False},
                     ),
