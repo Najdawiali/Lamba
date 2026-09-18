@@ -442,6 +442,7 @@ async def _rerank_and_finalize(
     query_text: str,
     fused: List[dict],
     query_script: str,
+    skip_score_gap: bool = False,
 ) -> List[HybridSearchResultItem]:
     """
     Cross-encode the fused candidates (always on), then blend:
@@ -508,8 +509,9 @@ async def _rerank_and_finalize(
     # ── Score-gap filter: remove results after a significant relevance drop ──
     # Standard IR technique: if there's a >15% relative drop between consecutive
     # results, the items below the gap are likely irrelevant.
-    # Only applies when we have a clear top result (score > 0.5)
-    if len(out) >= 2 and out[0].semantic_score > 0.5:
+    # Skipped for intent queries where diverse results at different score levels
+    # are all valid (e.g. mansaf ingredients: bread, rice, yogurt).
+    if not skip_score_gap and len(out) >= 2 and out[0].semantic_score > 0.5:
         filtered = [out[0]]
         for i in range(1, len(out)):
             prev_score = out[i - 1].semantic_score
@@ -1008,7 +1010,7 @@ async def _run_search(
 
         async def _rerank_one_variant(variant, cands, script):
             vc = copy.deepcopy(cands)
-            return await _rerank_and_finalize(variant, vc, script)
+            return await _rerank_and_finalize(variant, vc, script, skip_score_gap=True)
 
         tasks = [_rerank_one_variant(v, candidates, query_script) for v in expansion_variants[:5]]
         all_variant_results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -1027,13 +1029,22 @@ async def _run_search(
         scored = scored[: settings.reranker_final_k]
         logger.info(f"[MULTI-RERANK] Merged {len(expansion_variants)} variants → {len(scored)} results (parallel)")
     else:
-        scored = await _rerank_and_finalize(rerank_query, candidates, query_script)
+        scored = await _rerank_and_finalize(rerank_query, candidates, query_script, skip_score_gap=should_expand)
 
     t5 = time.time()
     logger.info(f"[TIMING] Reranker + Finalize: {(t5-t4)*1000:.0f}ms")
     logger.info(f"[TIMING] TOTAL _run_search: {(t5-t0)*1000:.0f}ms")
 
     was_intent_query = bool(expansion_variants and len(expansion_variants) >= 2) or should_expand
+
+    # If results are strong enough to pass the strict exact-match threshold,
+    # don't label them as "suggestions" — high-confidence results are exact
+    # matches regardless of how the query was classified structurally.
+    if was_intent_query and scored:
+        strong_results = [r for r in scored if r.semantic_score >= settings.exact_tier_threshold]
+        if len(strong_results) >= 3:
+            was_intent_query = False
+
     return scored, primary_raw, was_intent_query
 
 
