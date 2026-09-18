@@ -1323,6 +1323,22 @@ export default function SearchScreen() {
               </View>
             )}
 
+            {/* ── Suggestions Banner (intent queries) ── */}
+            {searchMode === 'suggestions' && results.length > 0 && (
+              <View style={styles.recBannerAr}>
+                <Text style={styles.recBannerTitle}>
+                  {t('search.suggestions_title')}
+                </Text>
+                <Text style={styles.recBannerSubtitle}>
+                  {t('search.suggestions_subtitle')}
+                </Text>
+                <TouchableOpacity onPress={handleNotifyMe} style={styles.notifyBtn}>
+                  <Ionicons name="notifications-outline" size={16} color={Colors.primary} />
+                  <Text style={styles.notifyBtnText}>{t('search.suggestions_notify')}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
             {/* ── Results List ────────────────────────────────────── */}
             <FlatList
               data={results}
