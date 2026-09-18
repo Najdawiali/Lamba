@@ -147,6 +147,7 @@ class LLMAdapter:
         max_tokens: int = 300,
         timeout: float = 15.0,
         model: Optional[str] = None,
+        max_retries: int = 3,
         **kwargs: Any,
     ) -> Optional[Dict[str, Any]]:
         """Send chat completion request and return the entire parsed JSON response payload."""
@@ -159,7 +160,7 @@ class LLMAdapter:
             "max_tokens": max_tokens,
         }
         payload.update(kwargs)
-        return await self._post_with_retry(url, payload, timeout=timeout)
+        return await self._post_with_retry(url, payload, timeout=timeout, max_retries=max_retries)
 
     async def complete_chat_raw(
         self,
@@ -168,6 +169,7 @@ class LLMAdapter:
         max_tokens: int = 300,
         timeout: float = 15.0,
         model: Optional[str] = None,
+        max_retries: int = 3,
         **kwargs: Any,
     ) -> Optional[str]:
         """Send chat completion request and return the raw message.content string without cleaning."""
@@ -177,6 +179,7 @@ class LLMAdapter:
             max_tokens=max_tokens,
             timeout=timeout,
             model=model,
+            max_retries=max_retries,
             **kwargs,
         )
         if not data or not data.get("choices"):
@@ -192,6 +195,7 @@ class LLMAdapter:
         max_tokens: int = 300,
         timeout: float = 15.0,
         model: Optional[str] = None,
+        max_retries: int = 3,
         **kwargs: Any,
     ) -> Optional[str]:
         """Send a chat completion request to DeepInfra API and return cleaned response text."""
@@ -201,6 +205,7 @@ class LLMAdapter:
             max_tokens=max_tokens,
             timeout=timeout,
             model=model,
+            max_retries=max_retries,
             **kwargs,
         )
         if raw_content is None:
