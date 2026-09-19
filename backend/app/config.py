@@ -160,7 +160,7 @@ class Settings(BaseSettings):
     # ── LLM Query Expansion (multi-query retrieval) ─────────────
     enable_query_expansion: bool = False
     expansion_provider: str = "disabled"  # "disabled", "local_transformers", "api"
-    expansion_model: str = "google/gemma-4-E4B-it"
+    expansion_model: str = "google/gemma-4-26B-A4B-it"
     expansion_max_variants: int = 5
     expansion_timeout_sec: float = 20.0
     expansion_cache_size: int = 4096

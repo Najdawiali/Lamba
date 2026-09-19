@@ -80,7 +80,7 @@ class QueryExpansionService:
                 full_resp = await asyncio.wait_for(
                     llm_adapter.complete_chat_full(
                         messages=messages,
-                        model=settings.query_llm_fallback_model,
+                        model=settings.expansion_model,
                         temperature=0.1,
                         max_tokens=200,
                         timeout=3.0,
