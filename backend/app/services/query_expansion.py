@@ -34,6 +34,8 @@ Rules:
    Example: "شي لوجع الراس" → ["بنادول", "مسكن ألم", "أدوية صداع"]
    Example: "مستلزمات مدرسية" → ["دفاتر", "أقلام", "حقيبة مدرسية", "قرطاسية"]
    Example: "حاجات للفطور" → ["خبز", "لبنة", "زيتون", "جبنة", "بيض"]
+   Example: "بدي اعمل كبسة" → ["أرز", "دجاج", "بهارات كبسة", "طماطم", "زيت"]
+   Example: "بدي اسوي كيكة" → ["طحين", "سكر", "بيض", "زبدة", "بيكنغ باودر"]
 
 3. Keep brand names intact (Nike, Nescafe, Almarai) — do not translate proper nouns.
 4. Output 2 to 5 concrete product search terms.
