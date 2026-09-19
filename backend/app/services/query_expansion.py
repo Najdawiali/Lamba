@@ -78,13 +78,14 @@ class QueryExpansionService:
                 full_resp = await asyncio.wait_for(
                     llm_adapter.complete_chat_full(
                         messages=messages,
+                        model=settings.query_llm_fallback_model,
                         temperature=0.1,
                         max_tokens=200,
-                        timeout=7.0,
-                        max_retries=1,
+                        timeout=3.0,
+                        max_retries=2,
                         chat_template_kwargs={"enable_thinking": False},
                     ),
-                    timeout=8.0,
+                    timeout=4.0,
                 )
                 logger.debug(
                     f"[EXPANSION RESPONSE DUMP] {json.dumps(full_resp, ensure_ascii=False, default=str)[:2000]}"

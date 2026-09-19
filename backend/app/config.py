@@ -160,7 +160,7 @@ class Settings(BaseSettings):
     # ── LLM Query Expansion (multi-query retrieval) ─────────────
     enable_query_expansion: bool = False
     expansion_provider: str = "disabled"  # "disabled", "local_transformers", "api"
-    expansion_model: str = "Qwen/Qwen2.5-7B-Instruct"
+    expansion_model: str = "google/gemma-4-E4B-it"
     expansion_max_variants: int = 5
     expansion_timeout_sec: float = 20.0
     expansion_cache_size: int = 4096
@@ -170,7 +170,7 @@ class Settings(BaseSettings):
     # ── LLM Models (Real-time & Offline) ──────────────────────
     # Real-time LLM (fast, used during search)
     query_llm_model: str = "Qwen/Qwen3.6-35B-A3B"
-    query_llm_fallback_model: str = "Qwen/Qwen2.5-7B-Instruct"
+    query_llm_fallback_model: str = "google/gemma-4-E4B-it"
 
     # Offline LLM (smarter, used for enrichment and batch processing)
     offline_llm_model: str = "google/gemma-4-31B-it"

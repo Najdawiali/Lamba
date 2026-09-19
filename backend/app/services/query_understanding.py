@@ -12,6 +12,7 @@ import re
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
 
+from app.config import settings
 from app.services.llm import llm_adapter
 from app.services.arabic_norm import normalize_query
 
@@ -177,13 +178,14 @@ class QueryUnderstandingService:
                         {"role": "system", "content": _QU_SYSTEM_PROMPT},
                         {"role": "user", "content": f"Query: {query_text}"},
                     ],
+                    model=settings.query_llm_fallback_model,
                     temperature=0.0,
                     max_tokens=250,
-                    timeout=5.5,
-                    max_retries=1,
+                    timeout=3.0,
+                    max_retries=2,
                     chat_template_kwargs={"enable_thinking": False},
                 ),
-                timeout=6.0,
+                timeout=4.0,
             )
 
             if res:
