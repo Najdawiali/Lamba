@@ -728,8 +728,13 @@ def needs_expansion(query: str, script: str = "ar", has_synonym: bool = False) -
     if any(m in q_lower for m in intent_markers):
         return True
 
-    # Single word queries don't need expansion — enrichment covers dialects
+    # Single word queries that are known product names don't need expansion.
+    # Category-level terms ("اكل", "مطبخ", "حلويات") DO need expansion
+    # to generate concrete searchable product terms.
     if len(words) <= 1:
+        from app.services.query_understanding import _SIMPLE_PRODUCT_TERMS, _CATEGORY_TERMS
+        if q_lower in _CATEGORY_TERMS:
+            return True
         return False
 
     # Two-word queries that look like product names (Arabic script) — skip expansion

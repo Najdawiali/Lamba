@@ -45,6 +45,34 @@ _ATTRIBUTE_INDICATORS = {
     "iced", "organic", "fresh", "low", "free",  # English attributes
 }
 
+# Category-level terms that need LLM processing — broad discovery queries
+# like "food", "kitchen", "sweets" that must be expanded into concrete products.
+_CATEGORY_TERMS = {
+    # Food & grocery categories
+    "اكل", "أكل", "طعام", "مأكولات", "طبخ", "مطبخ", "بقالة", "سوبرماركت",
+    "فواكه", "فاكهة", "خضار", "خضروات", "لحوم", "لحمة", "دواجن",
+    "ألبان", "حليب", "أجبان", "مشروبات", "عصائر",
+    "حلويات", "سكاكر", "شوكولاتة", "معجنات", "مخبوزات", "خبز",
+    "بهارات", "توابل", "أعشاب", "زيوت",
+    "تسالي", "سناكات", "مكسرات", "مجمدات", "معلبات",
+    # Cooking / recipes
+    "طبخة", "طبخات", "وصفة", "وصفات", "أكلة", "اكلة",
+    # Kitchen & household
+    "أواني", "صحون", "أدوات", "أثاث", "منظفات", "مواعين",
+    # Electronics & tech
+    "إلكترونيات", "الكترونيات", "أجهزة", "اجهزة", "موبايلات", "جوالات", "شواحن", "اكسسوارات",
+    # Personal care & beauty
+    "تجميل", "مكياج", "عطور", "عناية", "كريمات", "شامبو",
+    # Services
+    "خدمات", "صيانة", "تصليح", "تنظيف", "توصيل",
+    # General retail
+    "هدايا", "هدية", "قرطاسية", "مدرسية", "ملابس", "أحذية", "شنط",
+    # Arabizi equivalents
+    "akl", "tabkh", "matbakh", "5odra", "la7meh", "7alawiyyat",
+    "makaroona", "snacks", "drinks", "food", "kitchen", "grocery",
+    "cleaning", "electronics", "gifts", "beauty",
+}
+
 
 def needs_llm(query_text: str | None) -> bool:
     """
@@ -73,6 +101,10 @@ def needs_llm(query_text: str | None) -> bool:
     # Known simple single/two-word product queries skip LLM
     if q in _SIMPLE_PRODUCT_TERMS or (len(word_list) <= 2 and all(w in _SIMPLE_PRODUCT_TERMS for w in word_list)):
         return False
+
+    # Category-level terms need LLM to classify intent and detect category
+    if q in _CATEGORY_TERMS or any(w in _CATEGORY_TERMS for w in word_list):
+        return True
 
     # 2-word queries with a non-simple modifier (e.g., "جبنة حلوم", "جنط مرسيدس")
     # likely carry type/brand info that needs structured extraction.
