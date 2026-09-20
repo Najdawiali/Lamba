@@ -1,3 +1,0 @@
-      PID    PPID    PGID     WINPID   TTY         UID    STIME COMMAND
-     2460    1734    2460      15808  cons0     197609 01:23:13 /usr/bin/PS
-     1734       1    1734       8676  cons0     197609 01:20:22 /usr/bin/bash

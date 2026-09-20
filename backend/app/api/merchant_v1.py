@@ -46,11 +46,6 @@ from app.schemas.merchant_v1 import (
     MarketItemDashboardResponse, StockToggleRequest,
     ItemUpdateRequest, BarcodeLookupResponse, CheckoutRequest
 )
-from app.schemas.special_offer import (
-    SpecialOfferCreate,
-    SpecialOfferUpdate,
-    SpecialOfferResponse
-)
 from app.schemas.offer import OfferCreate, OfferUpdate, OfferResponse
 from app.schemas.market_profile import MarketProfileUpdate, EmployeesUpdate, MarketProfileResponse
 from app.services.embedding import embedding_service

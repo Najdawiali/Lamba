@@ -1,0 +1,17 @@
+.env
+.env.example
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+tests/
+scripts/
+data/
+models/
+*.md
+Dockerfile
+Dockerfile.postgres
+.mypy_cache
+.pytest_cache
+.ruff_cache
+uploads/

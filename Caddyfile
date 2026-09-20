@@ -1,0 +1,17 @@
+# Production reverse proxy config for api.lambajo.com
+# This is a VERSION-CONTROLLED COPY. The live file is on the server.
+# After editing, scp this to the server and reload Caddy:
+#   scp Caddyfile root@167.233.213.93:/etc/caddy/Caddyfile
+#   ssh root@167.233.213.93 "systemctl reload caddy"
+
+api.lambajo.com {
+    reverse_proxy 127.0.0.1:8000
+
+    header {
+        Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+}
