@@ -73,7 +73,7 @@ async function registerForPushNotifications() {
       projectId,
     });
     const token = tokenData.data;
-    console.log('Push token:', token);
+    // Token registered with backend (not logged for security)
 
     // Send token to backend
     await api.post('/api/v1/chat/push-token', { token });

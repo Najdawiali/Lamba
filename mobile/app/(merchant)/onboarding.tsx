@@ -113,40 +113,21 @@ export default function OnboardingScreen() {
       setLatitude(latStr);
       setLongitude(lngStr);
 
-      // Use Google Maps Geocoding for precise Arabic address
+      // Reverse geocode using expo-location (no API key needed)
       try {
-        const GOOGLE_API_KEY = 'AIzaSyBE961k1OZH9eyXXuPbwCrr3aGulb_pWIo';
-        const geoUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${coords.latitude},${coords.longitude}&language=ar&key=${GOOGLE_API_KEY}`;
-        const geoResp = await fetch(geoUrl);
-        const geoData = await geoResp.json();
-        
-        if (geoData.status === 'OK' && geoData.results?.length > 0) {
-          // Use the first result — most precise street-level address
-          const fullAddress = geoData.results[0].formatted_address;
-          setAddress(fullAddress);
-        } else {
-          // Fallback to expo-location if Google fails
-          const geocode = await Location.reverseGeocodeAsync({
-            latitude: coords.latitude,
-            longitude: coords.longitude,
-          });
-          if (geocode && geocode.length > 0) {
-            const place = geocode[0];
-            const parts = [place.street, place.city, place.region].filter(Boolean);
-            setAddress(parts.join(', ') || `${place.city} (${place.region})`);
-          }
-        }
-      } catch (geoErr) {
-        // Fallback to expo-location
         const geocode = await Location.reverseGeocodeAsync({
           latitude: coords.latitude,
           longitude: coords.longitude,
         });
         if (geocode && geocode.length > 0) {
           const place = geocode[0];
-          const parts = [place.street, place.city, place.region].filter(Boolean);
-          setAddress(parts.join(', ') || `${place.city} (${place.region})`);
+          const parts = [place.street, place.district, place.city, place.region].filter(Boolean);
+          if (parts.length > 0 && !address.trim()) {
+            setAddress(parts.join(', '));
+          }
         }
+      } catch (geoErr) {
+        // Geocoding is optional — coordinates are what matter
       }
 
       Alert.alert(

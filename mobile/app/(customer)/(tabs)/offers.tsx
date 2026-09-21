@@ -24,8 +24,6 @@ import { getCurrencyCode, formatPrice } from '../../../services/currency';
 import { resolveImageUrl, formatDistanceKm } from '../../../services/utils';
 import { useLocation } from '../../../hooks/useLocation';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
-
 export default function CustomerOffersScreen() {
   const Colors = useThemeColors();
   const styles = useMemo(() => StyleSheet.create({

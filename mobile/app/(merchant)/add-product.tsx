@@ -27,8 +27,6 @@ import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
 import { resolveImageUrl } from '../../services/utils';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
-
 export default function AddProductScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
