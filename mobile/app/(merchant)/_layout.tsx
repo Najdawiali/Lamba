@@ -13,7 +13,6 @@
  */
 
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../../context/ThemeContext';
@@ -23,8 +22,7 @@ export default function MerchantLayout() {
   const Colors = useThemeColors();
 
   return (
-    <View style={styles.wrapper}>
-      <Tabs
+    <Tabs
         backBehavior="history"
         screenOptions={{
           headerShown: false,
@@ -110,10 +108,5 @@ export default function MerchantLayout() {
           }}
         />
       </Tabs>
-    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  wrapper: { flex: 1 },
-});

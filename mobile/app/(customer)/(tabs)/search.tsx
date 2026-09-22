@@ -122,6 +122,18 @@ export default function SearchScreen() {
   const [exploreDeals, setExploreDeals] = useState<CustomerSpecialOfferResponse[]>([]);
   const [nearbyProducts, setNearbyProducts] = useState<NearbyItemResponse[]>([]);
 
+  const resetToExplore = useCallback(() => {
+    setQuery('');
+    setResults([]);
+    setHasSearched(false);
+    setSearchError(false);
+    setSuggestion(null);
+    setActiveImageUri(null);
+    setSearchMode('exact_matches');
+    setSearchType('text');
+    Keyboard.dismiss();
+  }, []);
+
   // Load user profile & categories once on mount
   useEffect(() => {
     (async () => {
@@ -594,39 +606,6 @@ export default function SearchScreen() {
     secondaryBtn: { paddingVertical: Spacing.sm },
     secondaryBtnText: { ...Typography.body, color: Colors.textSecondary, textDecorationLine: 'underline' },
 
-    // History Dropdown
-    historyDropdown: {
-      position: 'absolute',
-      top: 60,
-      left: Spacing.lg,
-      right: Spacing.lg,
-      backgroundColor: Colors.surface,
-      borderRadius: BorderRadius.md,
-      ...Shadows.medium,
-      zIndex: 1000,
-      elevation: 10,
-      overflow: 'hidden',
-    },
-    historyDropdownItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: Spacing.md,
-      borderBottomWidth: 1,
-      borderBottomColor: Colors.border,
-    },
-    historyDropdownText: {
-      ...Typography.body,
-      color: Colors.textPrimary,
-    },
-    historyDropdownEmpty: {
-      padding: Spacing.xl,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    historyDropdownEmptyText: {
-      ...Typography.body,
-      color: Colors.textMuted,
-    },
 
     // Modal Styles
     modalOverlay: { flex: 1, justifyContent: 'flex-end' },
@@ -923,17 +902,32 @@ export default function SearchScreen() {
   }), [Colors]);
 
   // ── Rendering components ──────────────────────────────────
-  const renderHeader = () => (
-    <View style={styles.header}>
-      <View style={{ width: 40 }} />
-      <Image
-        source={require('../../../assets/images/lamba-icon.png')}
-        style={{ width: 36, height: 36 }}
-        resizeMode="contain"
-      />
-      <View style={{ width: 40 }} />
-    </View>
-  );
+  const renderHeader = () => {
+    const isAr = !i18n.locale || i18n.locale.includes('ar');
+    const showBack = hasSearched || searchError;
+
+    return (
+      <View style={styles.header}>
+        {showBack ? (
+          <TouchableOpacity onPress={resetToExplore} style={styles.iconButton}>
+            <Ionicons
+              name={isAr ? 'arrow-forward' : 'arrow-back'}
+              size={24}
+              color={Colors.textPrimary}
+            />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 40 }} />
+        )}
+        <Image
+          source={require('../../../assets/images/lamba-icon.png')}
+          style={{ width: 36, height: 36 }}
+          resizeMode="contain"
+        />
+        <View style={{ width: 40 }} />
+      </View>
+    );
+  };
 
   const renderSearchBar = () => (
     <View style={styles.searchContainer}>
@@ -968,13 +962,15 @@ export default function SearchScreen() {
           onSubmitEditing={() => { if (query.trim()) executeSearch(query); setSearchFocused(false); }}
           returnKeyType="search"
           editable={!activeImageUri}
+          numberOfLines={1}
+          scrollEnabled={false}
           onFocus={() => setSearchFocused(true)}
           onBlur={() => {
             setTimeout(() => setSearchFocused(false), 200);
           }}
         />
         {query.length > 0 && (
-          <TouchableOpacity onPress={() => { setQuery(''); setResults([]); setHasSearched(false); }} style={styles.clearIcon}>
+          <TouchableOpacity onPress={resetToExplore} style={styles.clearIcon}>
             <Ionicons name="close-circle" size={20} color={Colors.textMuted} />
           </TouchableOpacity>
         )}
@@ -982,36 +978,6 @@ export default function SearchScreen() {
       <TouchableOpacity style={styles.filterButton} onPress={() => setShowFilters(true)}>
         <Ionicons name="options-outline" size={22} color={showFilters ? Colors.primary : Colors.textPrimary} />
       </TouchableOpacity>
-      
-      {/* History Dropdown Overlay */}
-      {searchFocused && !query && (
-        <View style={styles.historyDropdown}>
-          <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 250 }}>
-            {historyList.length > 0 ? (
-              historyList.slice(0, 4).map(item => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={styles.historyDropdownItem}
-                  onPress={() => {
-                    setSearchFocused(false);
-                    Keyboard.dismiss();
-                    setQuery(item.query_text);
-                    executeSearch(item.query_text);
-                  }}
-                >
-                  <Ionicons name="time-outline" size={20} color={Colors.textSecondary} style={{ marginRight: Spacing.sm }} />
-                  <Text style={styles.historyDropdownText}>{item.query_text}</Text>
-                </TouchableOpacity>
-              ))
-            ) : (
-              <View style={styles.historyDropdownEmpty}>
-                <Ionicons name="search-outline" size={24} color={Colors.textMuted} style={{ marginBottom: 8 }} />
-                <Text style={styles.historyDropdownEmptyText}>No recent searches</Text>
-              </View>
-            )}
-          </ScrollView>
-        </View>
-      )}
     </View>
   );
 
