@@ -31,49 +31,44 @@ export default function MerchantLayout() {
             borderTopColor: Colors.border,
             borderTopWidth: 1,
           },
-          tabBarItemStyle: {
-            paddingHorizontal: 4,
-            paddingVertical: 4,
-          },
           tabBarActiveTintColor: Colors.tabActive,
           tabBarInactiveTintColor: Colors.tabInactive,
-          tabBarLabelStyle: { fontSize: 11, fontWeight: '600', marginTop: 2 },
-          tabBarIconStyle: { marginBottom: 0 },
+          tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
         }}
       >
         <Tabs.Screen
           name="dashboard"
           options={{
             title: t('tabs.dashboard'),
-            tabBarIcon: ({ color, size }) => <Ionicons name="grid-outline" size={size} color={color} />,
+            tabBarIcon: ({ color }) => <Ionicons name="grid-outline" size={24} color={color} />,
           }}
         />
         <Tabs.Screen
           name="cashier"
           options={{
             title: t('tabs.cashier'),
-            tabBarIcon: ({ color, size }) => <Ionicons name="card-outline" size={size} color={color} />,
+            tabBarIcon: ({ color }) => <Ionicons name="card-outline" size={24} color={color} />,
           }}
         />
         <Tabs.Screen
           name="offers"
           options={{
             title: t('tabs.offers'),
-            tabBarIcon: ({ color, size }) => <Ionicons name="pricetag-outline" size={size} color={color} />,
+            tabBarIcon: ({ color }) => <Ionicons name="pricetag-outline" size={24} color={color} />,
           }}
         />
         <Tabs.Screen
           name="inbox"
           options={{
             title: t('tabs.inbox'),
-            tabBarIcon: ({ color, size }) => <Ionicons name="chatbubbles-outline" size={size} color={color} />,
+            tabBarIcon: ({ color }) => <Ionicons name="chatbubbles-outline" size={24} color={color} />,
           }}
         />
         <Tabs.Screen
           name="profile"
           options={{
             title: t('tabs.profile'),
-            tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} />,
+            tabBarIcon: ({ color }) => <Ionicons name="person-outline" size={24} color={color} />,
           }}
         />
         <Tabs.Screen
