@@ -2,7 +2,7 @@
  * Map Screen — Google Maps with nearby shop markers and interactive carousel.
  */
 
-import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo, memo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
   FlatList, Image, Platform, Alert, useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent
@@ -41,6 +41,34 @@ const regionDeltasForRadius = (radiusKm: number, latitude: number) => {
   return { latitudeDelta, longitudeDelta };
 };
 
+// Pre-rendered pin images (1x–4x densities). Image markers are drawn natively
+// by Google Maps, with no view snapshot, so they can't clip and stay cheap at any scale.
+const MARKER_DEFAULT = require('../../../assets/images/markers/marker-store.png');
+const MARKER_SELECTED = require('../../../assets/images/markers/marker-store-selected.png');
+// The pin tip sits at 60/64 of the image height, so the tip points exactly at the store.
+const MARKER_ANCHOR = { x: 0.5, y: 0.9375 };
+
+const StoreMarker = memo(function StoreMarker({
+  coordinate,
+  isSelected,
+  onPress,
+}: {
+  coordinate: { latitude: number; longitude: number };
+  isSelected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Marker
+      coordinate={coordinate}
+      onPress={onPress}
+      zIndex={isSelected ? 10 : 1}
+      anchor={MARKER_ANCHOR}
+      image={isSelected ? MARKER_SELECTED : MARKER_DEFAULT}
+      tracksViewChanges={false}
+    />
+  );
+});
+
 export default function MapScreen() {
   const { colors: Colors, scheme } = useTheme();
   const mapStyle = useMemo(() => getMapStyle(scheme), [scheme]);
@@ -64,12 +92,6 @@ export default function MapScreen() {
 
   recenterBtn: { position: 'absolute', bottom: 150, right: Spacing.xl, width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.surfaceElevated, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border, ...Shadows.medium, zIndex: 10 },
   
-  markerWrapper: { padding: 8, alignItems: 'center' },
-  markerPin: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.surface, borderWidth: 2, borderColor: Colors.primary, justifyContent: 'center', alignItems: 'center' },
-  markerPinSelected: { backgroundColor: Colors.primary, borderColor: Colors.textOnPrimary },
-  markerArrow: { width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 8, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: Colors.primary, alignSelf: 'center', marginTop: -1 },
-  markerArrowSelected: { borderTopColor: Colors.primary },
-
   loadingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(10,10,26,0.3)' },
   
   emptyOverlay: { position: 'absolute', bottom: 100, left: Spacing.xl, right: Spacing.xl },
@@ -202,20 +224,12 @@ export default function MapScreen() {
           const lng = Number(market.longitude);
           if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) return null;
           return (
-            <Marker
+            <StoreMarker
               key={market.id}
               coordinate={{ latitude: lat, longitude: lng }}
+              isSelected={isSelected}
               onPress={() => handleMarkerPress(index)}
-              zIndex={isSelected ? 10 : 1}
-              tracksViewChanges={true}
-            >
-              <View style={styles.markerWrapper}>
-                <View style={[styles.markerPin, isSelected && styles.markerPinSelected]}>
-                  <Ionicons name="storefront" size={20} color={isSelected ? Colors.textOnPrimary : Colors.primary} />
-                </View>
-                <View style={[styles.markerArrow, isSelected && styles.markerArrowSelected]} />
-              </View>
-            </Marker>
+            />
           );
         })}
       </MapView>
