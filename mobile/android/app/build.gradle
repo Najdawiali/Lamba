@@ -105,10 +105,12 @@ android {
             keyPassword 'android'
         }
         release {
-            storeFile file('release.keystore')
-            storePassword 'lamba2026'
-            keyAlias 'lamba'
-            keyPassword 'lamba2026'
+            if (project.hasProperty('LAMBA_UPLOAD_STORE_FILE')) {
+                storeFile file(LAMBA_UPLOAD_STORE_FILE)
+                storePassword LAMBA_UPLOAD_STORE_PASSWORD
+                keyAlias LAMBA_UPLOAD_KEY_ALIAS
+                keyPassword LAMBA_UPLOAD_KEY_PASSWORD
+            }
         }
     }
     buildTypes {

@@ -18,9 +18,8 @@ from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 from app.rate_limit import limiter
 
-from sqlalchemy import text
 from app.config import settings
-from app.database import engine, Base
+from app.database import engine
 from app.services.embedding import embedding_service
 from app.services.reranker import reranker_service
 from app.services.http_pool import close_client
@@ -43,12 +42,7 @@ async def lifespan(app: FastAPI):
     # ── Startup ─────────────────────────────────────────────
     logger.info("Starting Lamba API...")
 
-    # 1. Create database tables and ensure extensions
-    async with engine.begin() as conn:
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
-        await conn.run_sync(Base.metadata.create_all)
-    logger.info("Database tables ensured")
+    # Schema is managed by Alembic. On deploy run: alembic upgrade head
 
     # 2. Load Qwen3 text encoder
     embedding_service.load_model()
