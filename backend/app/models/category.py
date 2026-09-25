@@ -3,7 +3,7 @@ Category model representing a hierarchical tree structure of product categories 
 """
 
 import uuid
-from sqlalchemy import String, ForeignKey, Text
+from sqlalchemy import String, ForeignKey, Text, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,10 +17,14 @@ class Category(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    icon: Mapped[str | None] = mapped_column(String(64), nullable=True)
     parent_category_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("categories.id", ondelete="CASCADE"),
         nullable=True,
+        index=True,
     )
     
     name_ar: Mapped[str | None] = mapped_column(Text, nullable=True)

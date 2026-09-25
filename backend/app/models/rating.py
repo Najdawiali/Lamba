@@ -25,6 +25,7 @@ class Rating(Base):
         UUID(as_uuid=True),
         ForeignKey("markets.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     customer_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

@@ -4,7 +4,7 @@ Supports strict categories and multi-image galleries while preserving backward c
 """
 
 import uuid
-from sqlalchemy import String, ForeignKey, Text, Computed, Integer, DateTime
+from sqlalchemy import String, ForeignKey, Text, Computed, Integer, DateTime, Index
 from sqlalchemy.dialects.postgresql import UUID, TSVECTOR, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -16,6 +16,9 @@ from app.config import settings
 
 class GlobalItem(Base):
     __tablename__ = "global_items"
+    __table_args__ = (
+        Index("ix_global_items_search_tsv", "search_tsv", postgresql_using="gin"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -38,11 +41,16 @@ class GlobalItem(Base):
     embedding_status: Mapped[str | None] = mapped_column(
         Text, nullable=True, server_default="pending"
     )
+    moderation_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="approved", server_default="approved"
+    )
+    restricted_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     category_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("categories.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     
     # pgvector columns for high-performance similarity searches

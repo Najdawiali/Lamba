@@ -11,6 +11,7 @@ from app.models.special_offer import SpecialOffer
 from app.models.offer import Offer
 from app.models.pos_receipt import POSReceipt, POSReceiptItem
 from app.models.conversation import Conversation, Message
+from app.models.product_report import ProductReport
 
 __all__ = [
     "User",
@@ -28,4 +29,5 @@ __all__ = [
     "POSReceiptItem",
     "Conversation",
     "Message",
+    "ProductReport",
 ]

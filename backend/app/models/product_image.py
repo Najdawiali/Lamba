@@ -21,6 +21,7 @@ class ProductImage(Base):
         UUID(as_uuid=True),
         ForeignKey("global_items.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     image_url: Mapped[str] = mapped_column(String(500), nullable=False)
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

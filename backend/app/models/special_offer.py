@@ -22,6 +22,7 @@ class SpecialOffer(Base):
         UUID(as_uuid=True),
         ForeignKey("market_items.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     offer_type: Mapped[str] = mapped_column(
         String(50), nullable=False  # 'BOGO', 'DISCOUNT', 'OTHER'

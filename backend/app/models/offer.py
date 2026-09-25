@@ -13,8 +13,8 @@ class Offer(Base):
     __tablename__ = "offers"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    market_id = Column(UUID(as_uuid=True), ForeignKey("markets.id", ondelete="CASCADE"), nullable=False)
-    market_item_id = Column(UUID(as_uuid=True), ForeignKey("market_items.id", ondelete="CASCADE"), nullable=False)
+    market_id = Column(UUID(as_uuid=True), ForeignKey("markets.id", ondelete="CASCADE"), nullable=False, index=True)
+    market_item_id = Column(UUID(as_uuid=True), ForeignKey("market_items.id", ondelete="CASCADE"), nullable=False, index=True)
     offer_type = Column(String(20), nullable=False)
     config = Column(JSONB, nullable=False)
     description = Column(Text, nullable=True)

@@ -24,6 +24,7 @@ class SearchAlert(Base):
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     query_text: Mapped[str] = mapped_column(String(255), nullable=False)
     
