@@ -175,6 +175,9 @@ class Settings(BaseSettings):
     # Offline LLM (smarter, used for enrichment and batch processing)
     offline_llm_model: str = "google/gemma-4-31B-it"
 
+    # Classifier: restriction check + category for items entering the catalog
+    classifier_model: str = "google/gemma-4-26B-A4B-it"
+
     # ── Hybrid fusion (RRF) & tiering ───────────────────────────
     rrf_k: int = 60
     retrieval_per_branch: int = 200
