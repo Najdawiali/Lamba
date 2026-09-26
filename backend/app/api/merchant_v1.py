@@ -8,11 +8,12 @@ Endpoints:
   PATCH /api/v1/merchant/market/items/{id}/stock — Toggle stock status
   POST /api/v1/merchant/items/check          — Case-insensitive fuzzy name search
   POST /api/v1/merchant/items/link           — Link catalog item to merchant market
-  POST /api/v1/merchant/items/new            — Ingest brand-new item via CLIP/MiniLM AI
+  POST /api/v1/merchant/items/new            — Create a new catalog item (classified, enriched, embedded)
   POST /api/v1/merchant/items/upload-csv/{market_id}  — Bulk ingest/link via CSV
   GET  /api/v1/merchant/market/stats/value    — Total inventory assets value
 """
 
+import asyncio
 import os
 import uuid
 import csv
@@ -51,6 +52,10 @@ from app.schemas.market_profile import MarketProfileUpdate, EmployeesUpdate, Mar
 from app.services.embedding import embedding_service
 from app.services.alert_service import check_and_trigger_stock_alerts
 from app.services.storage import storage_service
+from sqlalchemy.exc import IntegrityError
+from app.services.item_classifier import classify_item_ensemble, restricted_reason_for
+from app.services.item_enrichment import enrich_and_embed
+from app.utils.barcode import normalize_barcode
 
 from app.config import settings
 from app.services.auth import create_access_token
@@ -410,13 +415,71 @@ async def get_market_profile(
     )
 
 
+# ── Catalog helpers (classification, categories, moderation) ────
+MAX_CSV_ROWS = 200
+CSV_CLASSIFY_CONCURRENCY = 6
+
+MSG_PENDING = "تمت إضافة المنتج وهو قيد المراجعة، وسيظهر للزبائن بعد الموافقة عليه."
+MSG_CATEGORY_REQUIRED = "تعذّر تحديد القسم تلقائياً. الرجاء اختيار القسم ثم المحاولة مرة أخرى."
+MSG_SHARED_RENAME = "هذا المنتج من الكتالوج المشترك ولا يمكن تغيير اسمه. يمكنك تعديل السعر والكمية فقط."
+
+
+async def _category_by_slug(db: AsyncSession, slug: str | None) -> Category | None:
+    if not slug:
+        return None
+    return (await db.execute(select(Category).where(Category.slug == slug))).scalar_one_or_none()
+
+
+async def _merchant_category(db: AsyncSession, category_id: uuid.UUID | None, listing_type: str) -> Category | None:
+    """The merchant's explicit choice, only if it is a real leaf category of the right type."""
+    if category_id is None:
+        return None
+    cat = (await db.execute(select(Category).where(Category.id == category_id))).scalar_one_or_none()
+    if cat is None or cat.parent_category_id is None:
+        return None
+    if cat.listing_type and cat.listing_type != listing_type:
+        return None
+    return cat
+
+
+async def _category_name(db: AsyncSession, category_id: uuid.UUID | None) -> str | None:
+    if category_id is None:
+        return None
+    row = (await db.execute(select(Category.name_en, Category.name).where(Category.id == category_id))).first()
+    return (row[0] or row[1]) if row else None
+
+
+async def _trigger_alerts_if_visible(db: AsyncSession, gi: GlobalItem, mi: MarketItem) -> None:
+    """Customer 'notify me' alerts only for products customers can actually see."""
+    if gi.moderation_status != "approved" or not mi.status:
+        return
+    try:
+        await check_and_trigger_stock_alerts(db, mi.id)
+    except Exception as e:
+        logger.warning(f"Stock alert check failed for {mi.id}: {e!r}")
+
+
+def _dashboard_row(mi: MarketItem, gi: GlobalItem) -> MarketItemDashboardResponse:
+    return MarketItemDashboardResponse(
+        id=mi.id,
+        item_id=gi.id,
+        name=gi.name,
+        description=gi.description,
+        category=gi.category,
+        image_url=gi.image_url,
+        stock_count=mi.stock_count,
+        in_stock=mi.status,
+        price=mi.price,
+        moderation_status=gi.moderation_status,
+    )
+
 # ── GET /market/items ───────────────────────────────────────────
 @router.get("/market/items", response_model=List[MarketItemDashboardResponse])
 async def get_market_items(
     user: User = Depends(get_merchant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Retrieve all global items stocked at the merchant's market."""
+    """Retrieve all global items stocked at the merchant's market (including ones under review)."""
     result = await db.execute(
         select(MarketItem, GlobalItem)
         .join(GlobalItem, MarketItem.item_id == GlobalItem.id)
@@ -424,23 +487,7 @@ async def get_market_items(
         .where(Market.merchant_id == user.id)
         .order_by(GlobalItem.name)
     )
-    
-    items = []
-    for row in result.unique().all():
-        mi, gi = row[0], row[1]
-        items.append(MarketItemDashboardResponse(
-            id=mi.id,
-            item_id=gi.id,
-            name=gi.name,
-            description=gi.description,
-            category=gi.category,
-            image_url=gi.image_url,
-            stock_count=mi.stock_count,
-            in_stock=mi.status,
-            price=mi.price,
-        ))
-    return items
-
+    return [_dashboard_row(row[0], row[1]) for row in result.unique().all()]
 
 # ── GET /market/stats/value ─────────────────────────────────────
 @router.get("/market/stats/value")
@@ -470,7 +517,7 @@ async def toggle_stock(
     user: User = Depends(get_merchant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Toggle stock availability status in database and Elasticsearch."""
+    """Toggle stock availability status."""
     result = await db.execute(
         select(MarketItem, GlobalItem)
         .join(GlobalItem, MarketItem.item_id == GlobalItem.id)
@@ -483,25 +530,14 @@ async def toggle_stock(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Market item not found.",
         )
-    
+
     mi, gi = row[0], row[1]
     mi.status = data.in_stock
     await db.flush()
-
     if data.in_stock:
-        await check_and_trigger_stock_alerts(db, mi.id)
-    
-    return MarketItemDashboardResponse(
-        id=mi.id,
-        item_id=gi.id,
-        name=gi.name,
-        description=gi.description,
-        category=gi.category,
-        image_url=gi.image_url,
-        stock_count=mi.stock_count,
-        in_stock=mi.status,
-        price=mi.price,
-    )
+        await _trigger_alerts_if_visible(db, gi, mi)
+    await db.commit()
+    return _dashboard_row(mi, gi)
 
 
 # ── PATCH /market/items/{item_id} ───────────────────────────────
@@ -512,11 +548,15 @@ async def update_market_item(
     user: User = Depends(get_merchant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update a market item's stock count, price/cost, or name in DB and Elasticsearch."""
+    """
+    Update a market item's stock count or price, or rename the product.
+
+    Renaming changes the shared catalog row, so it is only allowed for a product this
+    merchant created and no other store stocks. A renamed product is re-classified
+    (it may go to review) and re-embedded.
+    """
     result = await db.execute(
-        select(MarketItem, GlobalItem, Market,
-               func.ST_Y(Market.location.cast(Geometry)).label("lat"),
-               func.ST_X(Market.location.cast(Geometry)).label("lng"))
+        select(MarketItem, GlobalItem)
         .join(GlobalItem, MarketItem.item_id == GlobalItem.id)
         .join(Market, MarketItem.market_id == Market.id)
         .where(MarketItem.id == item_id, Market.merchant_id == user.id)
@@ -527,58 +567,39 @@ async def update_market_item(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Market item not found.",
         )
-    
-    mi, gi, market, lat, lng = row[0], row[1], row[2], row[3], row[4]
-    
-    name_changed = False
-    if data.name is not None and data.name.strip() and data.name.strip() != gi.name:
-        gi.name = data.name.strip()
-        name_changed = True
+    mi, gi = row[0], row[1]
+
+    new_name = data.name.strip() if data.name else None
+    if new_name and new_name != gi.name:
+        other_stores = (await db.execute(
+            select(func.count()).select_from(MarketItem)
+            .where(MarketItem.item_id == gi.id, MarketItem.market_id != mi.market_id)
+        )).scalar_one()
+        if gi.created_by != user.id or other_stores:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "shared_product", "message": MSG_SHARED_RENAME},
+            )
+        verdict = await classify_item_ensemble(new_name, gi.description, gi.listing_type)
+        gi.name = new_name
+        # A rename can send an approved product to review, but can never release a product
+        # that is under review for a restriction flag, a user report, or a human block.
+        if gi.moderation_status == "approved" or gi.restricted_reason == "classifier_unavailable":
+            gi.moderation_status = verdict.moderation_status
+            gi.restricted_reason = restricted_reason_for(verdict)
+        await enrich_and_embed(gi, await _category_name(db, gi.category_id), timeout=20.0)
 
     if data.stock_count is not None:
         mi.stock_count = data.stock_count
-        # Auto-update status based on stock count
-        if data.stock_count == 0:
-            mi.status = False
-        else:
-            mi.status = True
+        mi.status = data.stock_count > 0
 
     if data.price is not None:
         mi.price = data.price
 
-    # Re-compute embeddings ONLY if name actually changed
-    if name_changed:
-        try:
-            combined_text = gi.name
-            if gi.description:
-                combined_text = f"{gi.name}. {gi.description}"
-            # Re-generate text vector and image vector
-            text_vec = (await embedding_service.encode_text_async(combined_text)).tolist()
-            image_vec = (await embedding_service.encode_product_async(gi.name, gi.description)).tolist()
-            gi.text_embedding = text_vec
-            gi.image_embedding = image_vec
-        except Exception as e:
-            logger.warning(f"Re-embedding for item {gi.id} skipped due to error: {e}")
-
     await db.flush()
-    if mi.status:
-        try:
-            await check_and_trigger_stock_alerts(db, mi.id)
-        except Exception as alert_err:
-            logger.warning(f"Stock alert check failed: {alert_err}")
+    await _trigger_alerts_if_visible(db, gi, mi)
     await db.commit()
-
-    return MarketItemDashboardResponse(
-        id=mi.id,
-        item_id=gi.id,
-        name=gi.name,
-        description=gi.description,
-        category=gi.category,
-        image_url=gi.image_url,
-        stock_count=mi.stock_count,
-        in_stock=mi.status,
-        price=mi.price,
-    )
+    return _dashboard_row(mi, gi)
 
 
 # ── POST /items/check ───────────────────────────────────────────
@@ -588,7 +609,7 @@ async def check_item(
     user: User = Depends(get_merchant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Search for existing catalog items matching the search string (case-insensitive fuzzy)."""
+    """Search approved catalog items matching the search string (case-insensitive substring)."""
     # Escape LIKE wildcards so user-supplied % and _ are matched literally, not as glob chars
     escaped = (
         data.item_name
@@ -598,11 +619,14 @@ async def check_item(
     )
     result = await db.execute(
         select(GlobalItem)
-        .where(GlobalItem.name.ilike(f"%{escaped}%", escape="\\"))
+        .where(
+            GlobalItem.name.ilike(f"%{escaped}%", escape="\\"),
+            GlobalItem.moderation_status == "approved",
+        )
         .limit(10)
     )
     matches = result.unique().scalars().all()
-    
+
     return ItemCheckResponse(
         exists=len(matches) > 0,
         matches=[CatalogItemMatch.model_validate(gi) for gi in matches]
@@ -616,40 +640,30 @@ async def link_item(
     user: User = Depends(get_merchant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Link an existing catalog item to the merchant's physical market."""
-    # Verify market owner
-    market_result = await db.execute(
-        select(Market,
-               func.ST_Y(Market.location.cast(Geometry)).label("lat"),
-               func.ST_X(Market.location.cast(Geometry)).label("lng"))
-        .where(Market.id == data.market_id, Market.merchant_id == user.id)
-    )
-    market_row = market_result.first()
-    if not market_row:
+    """Link an existing (approved) catalog item to the merchant's physical market."""
+    market = (await db.execute(
+        select(Market).where(Market.id == data.market_id, Market.merchant_id == user.id)
+    )).scalar_one_or_none()
+    if market is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not your market.",
         )
-    market, lat, lng = market_row[0], market_row[1], market_row[2]
-    
-    # Get GlobalItem details
-    gi_result = await db.execute(select(GlobalItem).where(GlobalItem.id == data.item_id))
-    gi = gi_result.unique().scalar_one_or_none()
-    if not gi:
+
+    gi = (await db.execute(select(GlobalItem).where(GlobalItem.id == data.item_id))).unique().scalar_one_or_none()
+    if gi is None or gi.moderation_status != "approved":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Catalog item not found.",
         )
-        
-    # Check if already linked
-    existing = await db.execute(
+
+    mi = (await db.execute(
         select(MarketItem).where(
             MarketItem.market_id == data.market_id,
-            MarketItem.item_id == data.item_id
+            MarketItem.item_id == data.item_id,
         )
-    )
-    mi = existing.scalar_one_or_none()
-    
+    )).scalar_one_or_none()
+
     if mi:
         mi.stock_count += data.stock_count
         mi.status = True
@@ -659,111 +673,29 @@ async def link_item(
             market_id=data.market_id,
             item_id=data.item_id,
             stock_count=data.stock_count,
-            status=True
+            status=True,
         )
         db.add(mi)
         message = "New catalog item successfully linked to your market."
-        
-    await db.flush()
-    await check_and_trigger_stock_alerts(db, mi.id)
-    
+
+    try:
+        await db.flush()
+    except IntegrityError:
+        # Two quick taps: the unique (market_id, item_id) constraint caught a duplicate link
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Item is already linked to your market.")
+    await _trigger_alerts_if_visible(db, gi, mi)
+    await db.commit()
+
     return ItemLinkResponse(
         success=True,
         message=message,
         market_item_id=mi.id,
-        stock_count=mi.stock_count
+        stock_count=mi.stock_count,
+        moderation_status=gi.moderation_status,
     )
-
 
 # ── POST /items/new ─────────────────────────────────────────────
-OFFICIAL_CATEGORIES = [
-    "Fruits & Vegetables", "Dairy & Eggs", "Meat & Poultry", "Beverages",
-    "Snacks", "Bakery", "Frozen Food", "Cleaning & Detergents",
-    "Beauty & Personal Care", "Cooking Essentials", "Mobiles & Tech",
-    "Cookware & Kitchenware", "Electronics",
-    "Beauty & Personal Care Services", "Vehicle Maintenance & Care",
-    "Home & Maintenance Services", "Education & Tutoring",
-]
-
-
-def _classify_category_heuristic(name: str, description: str | None) -> str:
-    """Heuristic categorizer parsing product name and description into official categories."""
-    text = (name + " " + (description or "")).lower()
-    
-    # Services heuristic
-    if any(k in text for k in ["درس", "مدرسة", "تعليم", "توتور", "تدرس", "tutor", "school", "french", "math"]):
-        return "Education & Tutoring"
-    if any(k in text for k in ["غسيل سيار", "تلميع سيار", "صيانة سيار", "ميكانيك", "car wash", "oil change"]):
-        return "Vehicle Maintenance & Care"
-    if any(k in text for k in ["سباكة", "كهرباء منزل", "تنظيف منزل", "plumbing", "cleaning"]):
-        return "Home & Maintenance Services"
-    if any(k in text for k in ["حلاقة", "تجميل", "مساج", "علاج طبيعي", "barber", "salon"]):
-        return "Beauty & Personal Care Services"
-
-    # Products heuristic
-    if any(k in text for k in ["fruit", "vegetable", "tomato", "banana", "apple", "orange", "lemon", "potato", "onion", "mint", "lettuce", "garlic", "cucumber"]):
-        return "Fruits & Vegetables"
-    if any(k in text for k in ["milk", "egg", "eggs", "cheese", "yogurt", "butter", "dairy", "cream"]):
-        return "Dairy & Eggs"
-    if any(k in text for k in ["chicken", "meat", "beef", "lamb", "poultry", "turkey", "steak", "sausage"]):
-        return "Meat & Poultry"
-    if any(k in text for k in ["tea", "coffee", "espresso", "juice", "soda", "water", "drink", "beverage", "cola", "nescafe"]):
-        return "Beverages"
-    if any(k in text for k in ["snack", "chips", "chocolate", "biscuit", "cookie", "crisps", "nut", "nuts", "candy", "sweet"]):
-        return "Snacks"
-    if any(k in text for k in ["bread", "bakery", "croissant", "muffin", "cake", "toast", "bun"]):
-        return "Bakery"
-    if any(k in text for k in ["frozen", "ice cream", "nuggets"]):
-        return "Frozen Food"
-    if any(k in text for k in ["clean", "detergent", "soap", "dishwash", "laundry", "bleach", "shampoo"]):
-        return "Cleaning & Detergents"
-    if any(k in text for k in ["beauty", "personal care", "cream", "lotion", "cosmetic", "makeup", "perfume", "oil"]):
-        if "essential oil" in text or "skin" in text or "face" in text or "hair" in text:
-            return "Beauty & Personal Care"
-    if any(k in text for k in ["oil", "olive oil", "spice", "spices", "honey", "seed", "seeds", "salt", "sugar", "flour", "vinegar", "saffron", "turmeric", "cardamom", "spread", "peanut butter"]):
-        return "Cooking Essentials"
-    if any(k in text for k in ["phone", "mobile", "charger", "headphone", "earbuds", "cable", "screen protector"]):
-        return "Mobiles & Tech"
-    if any(k in text for k in ["pot", "pan", "cookware", "kitchenware", "plate", "spoon", "fork", "knife", "cup", "mug"]):
-        return "Cookware & Kitchenware"
-    if any(k in text for k in ["electric", "vacuum", "oven", "tv", "refrigerator", "fridge", "microwave", "appliance"]):
-        return "Electronics"
-        
-    return "Cooking Essentials"
-
-
-async def _classify_category(name: str, description: str | None) -> str:
-    """Classify item/service using LLMAdapter with heuristic fallback (Gemma 4 31B offline model)."""
-    from app.services.llm import llm_adapter
-    from app.config import settings
-
-    product_text = f"Name: {name}\nDescription: {description or ''}"
-    sys_prompt = (
-        "You are an expert catalog item and service categorizer. "
-        "Choose EXACTLY ONE category from this list that best fits the item/service:\n"
-        + ", ".join(OFFICIAL_CATEGORIES)
-        + "\nReturn ONLY the exact category name, with no punctuation, extra words, or markdown."
-    )
-    try:
-        res = await llm_adapter.generate(
-            system_prompt=sys_prompt,
-            user_prompt=f"Classify this product:\n{product_text}",
-            model=settings.offline_llm_model,  # Uses Gemma 4 31B — runs once per product creation
-            enable_thinking=False,
-            max_tokens=50,
-        )
-        if res:
-            clean_res = res.strip().strip('"').strip("'")
-            for cat in OFFICIAL_CATEGORIES:
-                if cat.lower() == clean_res.lower():
-                    return cat
-    except Exception as e:
-        logger.warning(f"LLM category classification failed: {e}")
-
-    return _classify_category_heuristic(name, description)
-
-
-
 @router.post("/items/new", response_model=ItemLinkResponse)
 async def create_new_item(
     market_id: uuid.UUID = Form(...),
@@ -780,180 +712,129 @@ async def create_new_item(
     user: User = Depends(get_merchant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Ingest a brand-new catalog product or service utilizing local CLIP/MiniLM/Qwen embedding models."""
-    # Verify market ownership
-    market_result = await db.execute(
-        select(Market,
-               func.ST_Y(Market.location.cast(Geometry)).label("lat"),
-               func.ST_X(Market.location.cast(Geometry)).label("lng"))
-        .where(Market.id == market_id, Market.merchant_id == user.id)
-    )
-    market_row = market_result.first()
-    if not market_row:
+    """
+    Create a brand-new catalog product or service and stock it in the merchant's market.
+
+    Order: validate -> classify (restriction + category) -> upload images -> save ->
+    enrich + embed. Nothing is uploaded for a request that fails validation.
+    """
+    market = (await db.execute(
+        select(Market).where(Market.id == market_id, Market.merchant_id == user.id)
+    )).scalar_one_or_none()
+    if market is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not your market.",
         )
-    market, lat, lng = market_row[0], market_row[1], market_row[2]
 
-    # Parse attributes if passed as JSON string
+    listing_type = (listing_type or "product").strip().lower()
+    if listing_type not in ("product", "service"):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="listing_type must be 'product' or 'service'.")
+    name = (name or "").strip()
+    description = (description or "").strip() or None
+    if not name:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Name is required.")
+
     parsed_attributes = {}
     if attributes:
         try:
             parsed_attributes = json.loads(attributes) if isinstance(attributes, str) else attributes
         except Exception:
             parsed_attributes = {}
-    
-    # Save Primary Upload Image (local or cloud, based on STORAGE_BACKEND)
+
+    effective_barcode = normalize_barcode(barcode) if listing_type == "product" else None
+    if effective_barcode:
+        existing = (await db.execute(
+            select(GlobalItem.id).where(GlobalItem.barcode == effective_barcode)
+        )).scalar_one_or_none()
+        if existing is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "barcode_exists",
+                    "message": "هذا الباركود موجود في الكتالوج. أضفه إلى متجرك من خلال مسح الباركود.",
+                    "global_item_id": str(existing),
+                },
+            )
+
+    # 1. Classify before storing anything
+    verdict = await classify_item_ensemble(name, description, listing_type)
+
+    # 2. Category: the merchant's explicit choice wins; otherwise the classifier's
+    cat = await _merchant_category(db, category_id, listing_type)
+    if cat is None:
+        cat = await _category_by_slug(db, verdict.category_slug)
+    if cat is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "category_required", "message": MSG_CATEGORY_REQUIRED},
+        )
+
+    # 3. Images (local or cloud, based on STORAGE_BACKEND)
     image_bytes = await image.read()
     primary_image_url = await storage_service.upload(
         file_bytes=image_bytes,
         original_filename=image.filename or "photo.jpg",
         subfolder="products",
     )
-
-    # Save Secondary Upload Images
     secondary_urls = []
     for sec_file in secondary_images:
         if sec_file.filename:
-            sec_bytes = await sec_file.read()
             sec_url = await storage_service.upload(
-                file_bytes=sec_bytes,
+                file_bytes=await sec_file.read(),
                 original_filename=sec_file.filename,
                 subfolder="products",
             )
             secondary_urls.append(sec_url)
-    
-    # Gemma VLM Extraction: refine name, description and auto-categorize from image
-    vlm_details = None
-    try:
-        vlm_details = embedding_service.extract_product_details_vlm(image_bytes, name, description)
-    except Exception as e:
-        logger.error(f"Gemma VLM inference failed: {e}")
-        
-    refined_name = name
-    refined_desc = description
-    category_name = None
-    
-    if vlm_details:
-        refined_name = vlm_details.get("name", name)
-        refined_desc = vlm_details.get("description", description)
-        category_name = vlm_details.get("category")
-        logger.info(f"VLM successfully extracted product details: name='{refined_name}', category='{category_name}'")
-        
-    if not category_name:
-        # Honor explicit category selection from the merchant when provided
-        cat: Category | None = None
-        if category_id is not None:
-            cat_result = await db.execute(
-                select(Category).where(Category.id == category_id)
-            )
-            cat = cat_result.scalar_one_or_none()
-        if cat is None:
-            # Fallback to Heuristic NLP Classification
-            category_name = await _classify_category(name, description)
-            cat_result = await db.execute(
-                select(Category).where(Category.name == category_name)
-            )
-            cat = cat_result.scalar_one_or_none()
-            if not cat:
-                cat = Category(name=category_name, listing_type=listing_type or "product")
-                db.add(cat)
-                await db.flush()
-    else:
-        cat_result = await db.execute(select(Category).where(Category.name == category_name))
-        cat = cat_result.scalar_one_or_none()
-        if not cat:
-            cat = Category(name=category_name, listing_type=listing_type or "product")
-            db.add(cat)
-            await db.flush()
-    
-    # Generate 512-d image vector (CLIP)
-    image_vector = None
-    try:
-        image_vector = embedding_service.encode_image_bytes(image_bytes)
-    except Exception as e:
-        logger.error(f"CLIP encoding failed: {e}")
-        
-    # Save GlobalItem (preserves original inputs for display, uses VLM/translated vectors)
-    effective_barcode = barcode if (listing_type == "product" and barcode) else None
+
+    # 4. Save
     gi = GlobalItem(
         name=name,
         description=description,
         barcode=effective_barcode,
-        listing_type=listing_type or "product",
+        listing_type=listing_type,
         attributes=parsed_attributes,
         category_id=cat.id,
-        text_embedding=None,
-        image_embedding=image_vector.tolist() if image_vector is not None else None,
-        created_by=user.id
+        created_by=user.id,
+        moderation_status=verdict.moderation_status,
+        restricted_reason=restricted_reason_for(verdict),
     )
     db.add(gi)
-    await db.flush()
-
-    # Save Primary Image Record
-    primary_img = ProductImage(
-        global_item_id=gi.id,
-        image_url=primary_image_url,
-        is_primary=True
-    )
-    db.add(primary_img)
-
-    # Save Secondary Image Records
-    for sec_url in secondary_urls:
-        sec_img = ProductImage(
-            global_item_id=gi.id,
-            image_url=sec_url,
-            is_primary=False
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "barcode_exists", "message": "هذا الباركود موجود في الكتالوج."},
         )
-        db.add(sec_img)
-    
-    await db.flush()
-    
-    # Link MarketItem
+
+    db.add(ProductImage(global_item_id=gi.id, image_url=primary_image_url, is_primary=True))
+    for sec_url in secondary_urls:
+        db.add(ProductImage(global_item_id=gi.id, image_url=sec_url, is_primary=False))
+
     mi = MarketItem(
         market_id=market_id,
         item_id=gi.id,
         stock_count=stock_count if listing_type == "product" else 99,
         price=price,
-        status=True
+        status=True,
     )
     db.add(mi)
     await db.flush()
-    await check_and_trigger_stock_alerts(db, mi.id)
-    
-    # Auto-enrich search terms & vector embedding on creation
-    try:
-        from app.services.arabic_norm import normalize_arabic
-        norm_name = normalize_arabic(gi.name)
-        terms = [norm_name] if norm_name else [gi.name]
-        try:
-            from scripts.enrich_search_terms import enrich_product
-            enriched_terms = await enrich_product(gi.name, gi.description, getattr(cat, "name", None))
-            if enriched_terms:
-                terms.append(enriched_terms)
-        except Exception as e:
-            logger.warning(f"LLM search terms enrichment skipped: {e}")
 
-        gi.search_terms = ", ".join([t for t in terms if t])
-        
-        # Build dense document text for Qwen3 / MiniLM
-        doc_text = f"{gi.name} {gi.description or ''} {gi.search_terms or ''}".strip()
-        doc_embedding = await embedding_service.encode_text_async(doc_text, text_type="document")
-        gi.text_embedding = doc_embedding.tolist()
-        gi.embedding_status = "completed"
-        gi.embedded_at = datetime.now(timezone.utc)
-        
-        await db.commit()
-    except Exception as e:
-        logger.warning(f"Auto-enrich/embed failed for item {gi.id}: {e}")
-        await db.commit()
+    # 5. Search terms + embedding (best effort: the product is saved either way)
+    await enrich_and_embed(gi, cat.name_en or cat.name, timeout=20.0)
+    await _trigger_alerts_if_visible(db, gi, mi)
+    await db.commit()
 
+    pending = gi.moderation_status != "approved"
     return ItemLinkResponse(
         success=True,
-        message=f"Brand-new {listing_type} ingested via AI pipeline and added to stock.",
+        message=MSG_PENDING if pending else f"Brand-new {listing_type} added to your store.",
         market_item_id=mi.id,
-        stock_count=mi.stock_count
+        stock_count=mi.stock_count,
+        moderation_status=gi.moderation_status,
     )
 
 
@@ -966,25 +847,22 @@ async def upload_items_csv(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Bulk ingest/link inventory via CSV. Required header: name. Optional: barcode,
-        description, stock_count, price. Rows are matched to existing catalog items
-    by barcode first, then by case-insensitive name; unmatched rows create new
-    GlobalItems (heuristic categorization + MiniLM/CLIP embeddings).
+    Bulk ingest/link inventory via CSV (max MAX_CSV_ROWS rows).
+    Required header: name. Optional: barcode, description, stock_count, price.
+
+    Rows match existing approved catalog items by barcode, then by exact name.
+    Unmatched rows are classified in parallel and created as new catalog items
+    (embedded from name + description; LLM search terms are filled later by the
+    batch enrichment job, so the request stays fast).
     """
-    # Verify market ownership
-    market_result = await db.execute(
-        select(Market,
-               func.ST_Y(Market.location.cast(Geometry)).label("lat"),
-               func.ST_X(Market.location.cast(Geometry)).label("lng"))
-        .where(Market.id == market_id, Market.merchant_id == user.id)
-    )
-    market_row = market_result.first()
-    if not market_row:
+    market = (await db.execute(
+        select(Market).where(Market.id == market_id, Market.merchant_id == user.id)
+    )).scalar_one_or_none()
+    if market is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not your market.",
         )
-    market, lat, lng = market_row[0], market_row[1], market_row[2]
 
     content = await file.read()
     try:
@@ -999,120 +877,134 @@ async def upload_items_csv(
             detail="CSV must include a 'name' column. Optional: barcode, description, stock_count, price.",
         )
 
-    created_count = 0
-    linked_count = 0
-
-    for idx, row in enumerate(reader, start=2):
-        def _get(key: str) -> str:
-            return (row.get(key) or row.get(key.lower()) or row.get(key.title()) or "").strip()
-
-        row_name = _get("name")
-        if not row_name:
+    # ── Parse ──
+    rows, truncated = [], 0
+    for idx, raw in enumerate(reader, start=2):
+        norm = {(k or "").strip().lower(): (v or "").strip() for k, v in raw.items()}
+        if not norm.get("name"):
             continue
-
-        barcode_val = _get("barcode") or None
-        description_val = _get("description") or None
+        if len(rows) >= MAX_CSV_ROWS:
+            truncated += 1
+            continue
         try:
-            stock_count = int(_get("stock_count") or 0)
+            stock = int(norm.get("stock_count") or 0)
         except ValueError:
-            stock_count = 0
+            stock = 0
         try:
-            price_val = float(_get("price")) if _get("price") else None
+            price_val = float(norm["price"]) if norm.get("price") else None
         except ValueError:
             price_val = None
+        rows.append({
+            "line": idx,
+            "name": norm["name"],
+            "barcode": normalize_barcode(norm.get("barcode")),
+            "description": norm.get("description") or None,
+            "stock": max(stock, 0),
+            "price": price_val,
+        })
 
-        gi: GlobalItem | None = None
-
-        # Match by barcode first
-        if barcode_val:
-            gi_result = await db.execute(
-                select(GlobalItem).where(GlobalItem.barcode == barcode_val)
-            )
-            gi = gi_result.unique().scalar_one_or_none()
-
-        # Fall back to a name match
+    # ── Match existing approved catalog items ──
+    for r in rows:
+        gi = None
+        if r["barcode"]:
+            gi = (await db.execute(
+                select(GlobalItem).where(GlobalItem.barcode == r["barcode"])
+            )).unique().scalar_one_or_none()
+            if gi is not None and gi.moderation_status != "approved":
+                r["skip"] = "barcode belongs to a product that is not available"
+                continue
         if gi is None:
-            gi_result = await db.execute(
-                select(GlobalItem).where(func.lower(GlobalItem.name) == row_name.lower())
-            )
-            gi = gi_result.unique().scalar_one_or_none()
+            gi = (await db.execute(
+                select(GlobalItem).where(
+                    func.lower(GlobalItem.name) == r["name"].lower(),
+                    GlobalItem.moderation_status == "approved",
+                ).limit(1)
+            )).unique().scalars().first()
+        r["gi"] = gi
 
+    # ── Classify unmatched rows in parallel ──
+    to_classify = [r for r in rows if r.get("gi") is None and "skip" not in r]
+    sem = asyncio.Semaphore(CSV_CLASSIFY_CONCURRENCY)
+
+    async def _classify(r):
+        async with sem:
+            r["verdict"] = await classify_item_ensemble(r["name"], r["description"], "product")
+
+    await asyncio.gather(*(_classify(r) for r in to_classify))
+
+    # ── Create / link ──
+    created, linked, held, skipped = 0, 0, [], []
+    created_by_barcode: dict[str, GlobalItem] = {}
+    for r in rows:
+        if "skip" in r:
+            skipped.append({"line": r["line"], "name": r["name"], "reason": r["skip"]})
+            continue
+        gi = r.get("gi") or (created_by_barcode.get(r["barcode"]) if r["barcode"] else None)
         if gi is None:
-            # Create a new catalog item with heuristic classification + text/image embeddings
-            category_name = await _classify_category(row_name, description_val)
-            cat_result = await db.execute(
-                select(Category).where(Category.name == category_name)
-            )
-            cat = cat_result.scalar_one_or_none()
-            if not cat:
-                cat = Category(name=category_name)
-                db.add(cat)
-                await db.flush()
-
-            text_vector = None
-            try:
-                doc_text = row_name
-                if description_val:
-                    doc_text = f"{row_name}. {description_val}"
-                text_vec_raw = await embedding_service.encode_text_async(doc_text, text_type="document")
-                text_vector = text_vec_raw.tolist() if hasattr(text_vec_raw, "tolist") else text_vec_raw
-            except Exception as e:
-                logger.warning(f"Embedding failed for CSV row {idx}: {e}")
-
+            verdict = r["verdict"]
+            cat = await _category_by_slug(db, verdict.category_slug)
+            if cat is None:
+                skipped.append({"line": r["line"], "name": r["name"], "reason": "category could not be determined"})
+                continue
             gi = GlobalItem(
-                name=row_name,
-                description=description_val,
-                barcode=barcode_val,
+                name=r["name"],
+                description=r["description"],
+                barcode=r["barcode"],
+                listing_type="product",
                 category_id=cat.id,
-                text_embedding=text_vector,
                 created_by=user.id,
+                moderation_status=verdict.moderation_status,
+                restricted_reason=restricted_reason_for(verdict),
             )
             db.add(gi)
             await db.flush()
-            created_count += 1
+            await enrich_and_embed(gi, cat.name_en or cat.name, use_llm=False)
+            if r["barcode"]:
+                created_by_barcode[r["barcode"]] = gi
+            created += 1
+            if gi.moderation_status != "approved":
+                held.append({"line": r["line"], "name": r["name"]})
         else:
-            linked_count += 1
+            linked += 1
 
-        # Check existing MarketItem linkage for this market
-        existing_mi_result = await db.execute(
-            select(MarketItem).where(
-                MarketItem.market_id == market_id,
-                MarketItem.item_id == gi.id,
-            )
-        )
-        mi = existing_mi_result.scalar_one_or_none()
+        mi = (await db.execute(
+            select(MarketItem).where(MarketItem.market_id == market_id, MarketItem.item_id == gi.id)
+        )).scalar_one_or_none()
         if mi:
-            mi.stock_count += stock_count
-            if stock_count > 0:
+            mi.stock_count += r["stock"]
+            if r["stock"] > 0:
                 mi.status = True
-            if price_val is not None:
-                mi.price = price_val
+            if r["price"] is not None:
+                mi.price = r["price"]
         else:
             mi = MarketItem(
                 market_id=market_id,
                 item_id=gi.id,
-                stock_count=stock_count,
-                price=price_val,
-                status=stock_count > 0,
+                stock_count=r["stock"],
+                price=r["price"],
+                status=r["stock"] > 0,
             )
             db.add(mi)
             await db.flush()
-
-        if mi.status:
-            await check_and_trigger_stock_alerts(db, mi.id)
+        await _trigger_alerts_if_visible(db, gi, mi)
 
     await db.commit()
 
     return {
         "success": True,
-        "created": created_count,
-        "linked": linked_count,
+        "created": created,
+        "linked": linked,
+        "held_for_review": held,
+        "skipped": skipped,
+        "truncated_rows": truncated,
         "message": (
-            f"CSV import complete: {created_count} new item(s) created, "
-            f"{linked_count} existing item(s) linked."
+            f"CSV import complete: {created} new item(s) created, {linked} existing item(s) linked"
+            + (f", {len(held)} held for review" if held else "")
+            + (f", {len(skipped)} skipped" if skipped else "")
+            + (f"; only the first {MAX_CSV_ROWS} rows were processed" if truncated else "")
+            + "."
         ),
     }
-
 
 # ── POST /offers ────────────────────────────────────────────────
 @router.post("/offers", response_model=OfferResponse, status_code=status.HTTP_201_CREATED)
@@ -1250,63 +1142,37 @@ async def lookup_item_by_barcode(
     user: User = Depends(get_merchant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Query GlobalItem by barcode, check if linked in merchant's branch, and return details."""
-    # Find merchant's market
-    market_result = await db.execute(
-        select(Market).where(Market.merchant_id == user.id)
-    )
-    market = market_result.scalar_one_or_none()
-    if market is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Market not found. Complete onboarding first.",
-        )
+    """Find a catalog item by barcode (normalized) and whether this branch already stocks it."""
+    market = await get_user_market(user, db)
 
-    # Find global item by barcode
-    gi_result = await db.execute(
-        select(GlobalItem).where(GlobalItem.barcode == barcode)
-    )
-    gi = gi_result.unique().scalar_one_or_none()
-    if gi is None:
+    code = normalize_barcode(barcode)
+    gi = None
+    if code:
+        gi = (await db.execute(select(GlobalItem).where(GlobalItem.barcode == code))).unique().scalar_one_or_none()
+    # Blocked products are never visible; products under review only to the merchant who created them
+    if gi is None or gi.moderation_status == "blocked" or (
+        gi.moderation_status != "approved" and gi.created_by != user.id
+    ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Product not found in global catalog.",
         )
 
-    # Check if a corresponding MarketItem exists for this branch
-    mi_result = await db.execute(
-        select(MarketItem).where(
-            MarketItem.market_id == market.id,
-            MarketItem.item_id == gi.id
-        )
+    mi = (await db.execute(
+        select(MarketItem).where(MarketItem.market_id == market.id, MarketItem.item_id == gi.id)
+    )).scalar_one_or_none()
+
+    return BarcodeLookupResponse(
+        exists_in_branch=mi is not None,
+        market_item_id=mi.id if mi else None,
+        global_item_id=gi.id,
+        name=gi.name,
+        category=gi.category,
+        image_url=gi.image_url,
+        price=float(mi.price) if (mi and mi.price is not None) else None,
+        stock_count=mi.stock_count if mi else None,
+        barcode=barcode,
     )
-    mi = mi_result.scalar_one_or_none()
-
-    if mi:
-        return BarcodeLookupResponse(
-            exists_in_branch=True,
-            market_item_id=mi.id,
-            global_item_id=gi.id,
-            name=gi.name,
-            category=gi.category,
-            image_url=gi.image_url,
-            price=float(mi.price) if mi.price is not None else None,
-            stock_count=mi.stock_count,
-            barcode=barcode
-        )
-    else:
-        return BarcodeLookupResponse(
-            exists_in_branch=False,
-            market_item_id=None,
-            global_item_id=gi.id,
-            name=gi.name,
-            category=gi.category,
-            image_url=gi.image_url,
-            price=None,
-            stock_count=None,
-            barcode=barcode
-        )
-
 
 @router.post("/checkout")
 async def pos_checkout(

@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     email_provider: str = "mock"  # "mock" or "resend"
     resend_api_key: str = ""
     email_from: str = "Lamba <noreply@lambajo.com>"
+    support_email: str = ""  # shown on /account-deletion; set SUPPORT_EMAIL in backend/.env
 
     # ── CLIP Model (image search — disabled in text-only phase) ──
     clip_model_name: str = "clip-ViT-B-32"
@@ -177,6 +178,7 @@ class Settings(BaseSettings):
 
     # Classifier: restriction check + category for items entering the catalog
     classifier_model: str = "google/gemma-4-26B-A4B-it"
+    classifier_secondary_model: str = "google/gemma-4-31B-it"
 
     # ── Hybrid fusion (RRF) & tiering ───────────────────────────
     rrf_k: int = 60

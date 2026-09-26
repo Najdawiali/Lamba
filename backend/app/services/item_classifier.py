@@ -20,6 +20,7 @@ like blocked ones, so routing every flag to review costs no safety.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -27,6 +28,7 @@ import time
 from dataclasses import dataclass
 
 from app.config import settings
+from app.services.http_pool import CircuitBreaker, deepinfra_catalog_breaker
 from app.services.llm import llm_adapter
 from app.taxonomy import CATEGORY_BY_SLUG, LEAF_CATEGORIES
 
@@ -129,8 +131,9 @@ async def classify_item(
     model: str | None = None,
     timeout: float = 12.0,
     max_retries: int = 2,
+    breaker: CircuitBreaker | None = None,
 ) -> ClassificationResult:
-    """Classify one product or service. Never raises; failures come back as `error`."""
+    """Classify one product or service with one model. Never raises; failures come back as `error`."""
     allowed = {c.slug for c in LEAF_CATEGORIES if not listing_type or c.listing_type == listing_type}
     user_msg = f"Name: {name.strip()}\nDescription: {(description or '').strip() or '-'}"
 
@@ -146,6 +149,7 @@ async def classify_item(
             max_tokens=60,
             timeout=timeout,
             max_retries=max_retries,
+            breaker=breaker,
         )
     except Exception as exc:  # defensive: the adapter should not raise, but never let it escape
         logger.warning("classify_item: LLM call raised for %r: %s", name[:40], exc)
@@ -159,3 +163,56 @@ async def classify_item(
     if error:
         logger.warning("classify_item: %s for %r: %r", error, name[:40], raw[:200])
     return ClassificationResult(restricted, slug, error, latency_ms, raw)
+
+
+# ── Production entry point: two-model ensemble ──────────────────────────────
+#
+# Evaluation (2026-09-26): each model alone missed 1 of 14 unseen restricted items
+# (26B: a gin brand; 31B: a sword), never the same one; together they missed 0 and
+# flagged 0 of 11 look-alikes. So an item is approved only when EVERY model returns
+# a valid "allowed" answer: any flag -> review, and any model failing to answer ->
+# review (fail closed; a single model's "allowed" is not trusted on its own).
+
+
+def combine_results(results: list[ClassificationResult]) -> ClassificationResult:
+    """Combine per-model results (primary model first). Pure, unit-testable."""
+    latency = max((r.latency_ms for r in results), default=0)
+    category = next((r.category_slug for r in results if r.category_slug), None)
+    flagged = next((r for r in results if r.restriction_known and r.restricted), None)
+    if flagged:
+        return ClassificationResult(flagged.restricted, category, None, latency, flagged.raw)
+    failed = next((r for r in results if not r.restriction_known), None)
+    if failed:
+        return ClassificationResult(None, category, failed.error, latency, failed.raw)
+    return ClassificationResult(None, category, None if category else "invalid_category", latency, results[0].raw)
+
+
+async def classify_item_ensemble(
+    name: str,
+    description: str | None = None,
+    listing_type: str | None = None,
+    *,
+    timeout: float = 15.0,
+) -> ClassificationResult:
+    """Classify with every configured model in parallel. Never raises."""
+    models = [m for m in (settings.classifier_model, settings.classifier_secondary_model) if m]
+    results = await asyncio.gather(*(
+        classify_item(name, description, listing_type, model=m, timeout=timeout,
+                      max_retries=1, breaker=deepinfra_catalog_breaker)
+        for m in models
+    ))
+    combined = combine_results(list(results))
+    logger.info(
+        "classify_item_ensemble %r -> %s (restricted=%s, category=%s, %dms)",
+        name[:40], combined.moderation_status, combined.restricted, combined.category_slug, combined.latency_ms,
+    )
+    return combined
+
+
+def restricted_reason_for(result: ClassificationResult) -> str | None:
+    """Value stored in global_items.restricted_reason (String(32))."""
+    if result.restricted:
+        return result.restricted
+    if not result.restriction_known:
+        return "classifier_unavailable"
+    return None

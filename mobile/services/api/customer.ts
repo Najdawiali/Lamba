@@ -220,6 +220,23 @@ export async function createSearchAlert(
   }
 }
 
+// ── Reports & account ─────────────────────────────────────────
+export type ReportReason = 'restricted_item' | 'wrong_info' | 'offensive' | 'spam' | 'other';
+
+/** Report a product listing. Resolves on success and when the user already reported it. */
+export async function reportProduct(
+  globalItemId: string, marketId: string | null, reason: ReportReason, details?: string,
+): Promise<void> {
+  await api.post('/api/v1/reports', {
+    global_item_id: globalItemId, market_id: marketId, reason, details,
+  });
+}
+
+/** Permanently delete the signed-in account (customer or merchant). */
+export async function deleteAccount(): Promise<void> {
+  await api.delete('/api/v1/account');
+}
+
 // ── Favorites (SecureStore) ────────────────────────────────────
 const FAVORITES_KEY = 'lamba_favorites';
 

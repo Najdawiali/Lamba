@@ -16,11 +16,19 @@ import { useThemeColors } from '../../../context/ThemeContext';
 import {
   getMarketItemDetails,
   MarketItemDetailsResponse, isFavorite, addFavorite, removeFavorite,
-  startConversation
+  startConversation, reportProduct, ReportReason
 } from '../../../services/api';
 import { t, i18n } from '../../../services/i18n';
 import { getCurrencyCode, formatPrice } from '../../../services/currency';
 import { resolveImageUrl, openMapDirections, calculateDistanceMeters, roundDistance } from '../../../services/utils';
+
+const REPORT_REASONS: { key: ReportReason; ar: string; en: string }[] = [
+  { key: 'restricted_item', ar: 'منتج ممنوع (تبغ، كحول، أدوية، أسلحة)', en: 'Prohibited item (tobacco, alcohol, drugs, weapons)' },
+  { key: 'wrong_info', ar: 'معلومات أو صورة خاطئة', en: 'Wrong information or photo' },
+  { key: 'offensive', ar: 'محتوى مسيء', en: 'Offensive content' },
+  { key: 'spam', ar: 'احتيال أو إعلان مضلل', en: 'Scam or misleading listing' },
+  { key: 'other', ar: 'سبب آخر', en: 'Something else' },
+];
 
 export default function ProductDetailScreen() {
   const Colors = useThemeColors();
@@ -99,6 +107,28 @@ export default function ProductDetailScreen() {
       });
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const [reportVisible, setReportVisible] = useState(false);
+  const [reportSending, setReportSending] = useState(false);
+
+  const submitReport = async (reason: ReportReason) => {
+    if (!product || reportSending) return;
+    setReportSending(true);
+    try {
+      await reportProduct(product.item_id, product.shop?.id ?? null, reason);
+      setReportVisible(false);
+      Alert.alert(isAr ? 'شكراً لك' : 'Thank you', isAr ? 'وصلنا بلاغك وسنراجعه في أقرب وقت.' : 'We received your report and will review it soon.');
+    } catch (err: any) {
+      setReportVisible(false);
+      if (err?.response?.status === 401) {
+        Alert.alert(isAr ? 'تنبيه' : 'Sign in required', isAr ? 'سجّل الدخول لتتمكن من الإبلاغ.' : 'Please sign in to report a listing.');
+      } else {
+        Alert.alert(isAr ? 'خطأ' : 'Error', isAr ? 'تعذّر إرسال البلاغ، حاول مرة أخرى.' : 'Could not send the report. Please try again.');
+      }
+    } finally {
+      setReportSending(false);
     }
   };
 
@@ -262,8 +292,48 @@ export default function ProductDetailScreen() {
               <TouchableOpacity onPress={handleShare} style={styles.overlayIconBtn}>
                 <Ionicons name="share-social-outline" size={20} color={Colors.textPrimary} />
               </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setReportVisible(true)}
+                style={styles.overlayIconBtn}
+                accessibilityLabel={isAr ? 'الإبلاغ عن المنتج' : 'Report listing'}
+              >
+                <Ionicons name="flag-outline" size={20} color={Colors.textPrimary} />
+              </TouchableOpacity>
             </View>
           </SafeAreaView>
+
+          {/* Report sheet */}
+          <Modal visible={reportVisible} transparent animationType="fade" onRequestClose={() => setReportVisible(false)}>
+            <TouchableOpacity
+              activeOpacity={1}
+              onPress={() => setReportVisible(false)}
+              style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}
+            >
+              <TouchableOpacity
+                activeOpacity={1}
+                style={{ backgroundColor: Colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 36 }}
+              >
+                <Text style={{ color: Colors.textPrimary, fontSize: 17, fontWeight: '700', textAlign: isAr ? 'right' : 'left', marginBottom: 8 }}>
+                  {isAr ? 'الإبلاغ عن هذا المنتج' : 'Report this listing'}
+                </Text>
+                {REPORT_REASONS.map(r => (
+                  <TouchableOpacity
+                    key={r.key}
+                    disabled={reportSending}
+                    onPress={() => submitReport(r.key)}
+                    style={{ paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.border, opacity: reportSending ? 0.5 : 1 }}
+                  >
+                    <Text style={{ color: Colors.textPrimary, fontSize: 15, textAlign: isAr ? 'right' : 'left' }}>
+                      {isAr ? r.ar : r.en}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity onPress={() => setReportVisible(false)} style={{ paddingTop: 16 }}>
+                  <Text style={{ color: Colors.textMuted, fontSize: 15, textAlign: 'center' }}>{isAr ? 'إلغاء' : 'Cancel'}</Text>
+                </TouchableOpacity>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </Modal>
 
           {/* Stock availability badge — coarse levels only, no exact counts, so
               competitors can't read merchant inventory levels from the customer app. */}

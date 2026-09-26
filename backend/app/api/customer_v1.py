@@ -181,6 +181,7 @@ async def get_nearby_items(
             .where(
                 MarketItem.status == True,
                 MarketItem.stock_count > 0,
+                GlobalItem.moderation_status == "approved",
                 func.ST_DWithin(geog_location, geog_point, radius_meters),
             )
             .order_by(MarketItem.id)
@@ -265,6 +266,7 @@ async def get_market_catalog(
         .where(
             MarketItem.market_id == market_id,
             MarketItem.status == True,
+            GlobalItem.moderation_status == "approved",
         )
         .order_by(GlobalItem.name)
     )
@@ -321,7 +323,7 @@ async def get_categories_tree(
     """
     from app.models.category import Category
     
-    result = await db.execute(select(Category).order_by(Category.name))
+    result = await db.execute(select(Category).order_by(Category.sort_order, Category.name))
     all_categories = result.scalars().all()
     
     # Build tree in memory
@@ -424,6 +426,11 @@ async def get_market_item_details(
         )
         
     mi, gi, market = row[0], row[1], row[2]
+    if gi.moderation_status != "approved":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product or Shop listing not found.",
+        )
     
     # Run dynamic schedule update to ensure freshness
     from app.utils.schedule import check_and_update_markets_schedule
@@ -634,6 +641,7 @@ async def get_customer_offers(
             .where(
                 Offer.is_active == True,
                 MarketItem.status == True,
+                GlobalItem.moderation_status == "approved",
                 or_(
                     Offer.expires_at.is_(None),
                     Offer.expires_at > datetime.now(timezone.utc),

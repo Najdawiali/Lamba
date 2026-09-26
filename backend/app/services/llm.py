@@ -10,7 +10,7 @@ import re
 import httpx
 from typing import Optional, Dict, Any, List
 from app.config import settings
-from app.services.http_pool import get_client, deepinfra_llm_breaker
+from app.services.http_pool import CircuitBreaker, get_client, deepinfra_llm_breaker
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +47,13 @@ class LLMAdapter:
         payload: Dict[str, Any],
         timeout: float = 15.0,
         max_retries: int = 3,
+        breaker: Optional[CircuitBreaker] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Post request to LLM endpoint with retries and exponential backoff."""
+        """Post request to LLM endpoint with retries and exponential backoff.
+
+        `breaker` isolates failure accounting per workload; defaults to the search LLM breaker.
+        """
+        br = breaker or deepinfra_llm_breaker
         if not self.api_key or "REPLACE" in self.api_key:
             logger.warning("DeepInfra API key missing for LLMAdapter.")
             return None
@@ -58,34 +63,34 @@ class LLMAdapter:
             "Content-Type": "application/json",
         }
 
-        if deepinfra_llm_breaker.should_skip():
+        if br.should_skip():
             logger.warning("DeepInfra circuit breaker is OPEN. Skipping LLM API call.")
             return None
 
         client = get_client()
         for attempt in range(max_retries):
-            if deepinfra_llm_breaker.should_skip():
+            if br.should_skip():
                 logger.warning("DeepInfra circuit breaker tripped during LLM retries. Aborting.")
                 break
             try:
                 resp = await client.post(url, json=payload, headers=headers, timeout=timeout)
                 resp.raise_for_status()
-                deepinfra_llm_breaker.record_success()
+                br.record_success()
                 return resp.json()
             except httpx.HTTPStatusError as e:
-                deepinfra_llm_breaker.record_failure()
+                br.record_failure()
                 logger.warning(
                     f"LLMAdapter HTTP error (attempt {attempt + 1}/{max_retries}): "
                     f"{e.response.status_code} - {e.response.text}"
                 )
-                if e.response.status_code in (429, 500, 502, 503, 504) and attempt < max_retries - 1 and not deepinfra_llm_breaker.should_skip():
+                if e.response.status_code in (429, 500, 502, 503, 504) and attempt < max_retries - 1 and not br.should_skip():
                     await asyncio.sleep(0.5 * (2 ** attempt))
                     continue
                 return None
             except Exception as e:
-                deepinfra_llm_breaker.record_failure()
-                logger.warning(f"LLMAdapter API call failed (attempt {attempt + 1}/{max_retries}): {e}")
-                if attempt < max_retries - 1 and not deepinfra_llm_breaker.should_skip():
+                br.record_failure()
+                logger.warning(f"LLMAdapter API call failed (attempt {attempt + 1}/{max_retries}): {e!r}")
+                if attempt < max_retries - 1 and not br.should_skip():
                     await asyncio.sleep(0.5 * (2 ** attempt))
                     continue
                 return None
@@ -100,6 +105,8 @@ class LLMAdapter:
         enable_thinking: bool = False,
         max_tokens: int = 300,
         timeout: float | None = None,
+        max_retries: int = 3,
+        breaker: Optional[CircuitBreaker] = None,
     ) -> str:
         """
         Generate completion for a given system and user prompt.
@@ -131,7 +138,7 @@ class LLMAdapter:
             else (30.0 if ("31B" in selected_model or "gemma" in selected_model.lower()) else 15.0)
         )
 
-        data = await self._post_with_retry(url, payload, timeout=eff_timeout)
+        data = await self._post_with_retry(url, payload, timeout=eff_timeout, max_retries=max_retries, breaker=breaker)
         if not data or not data.get("choices"):
             return ""
 
@@ -148,6 +155,7 @@ class LLMAdapter:
         timeout: float = 15.0,
         model: Optional[str] = None,
         max_retries: int = 3,
+        breaker: Optional[CircuitBreaker] = None,
         **kwargs: Any,
     ) -> Optional[Dict[str, Any]]:
         """Send chat completion request and return the entire parsed JSON response payload."""
@@ -160,7 +168,7 @@ class LLMAdapter:
             "max_tokens": max_tokens,
         }
         payload.update(kwargs)
-        return await self._post_with_retry(url, payload, timeout=timeout, max_retries=max_retries)
+        return await self._post_with_retry(url, payload, timeout=timeout, max_retries=max_retries, breaker=breaker)
 
     async def complete_chat_raw(
         self,
@@ -170,6 +178,7 @@ class LLMAdapter:
         timeout: float = 15.0,
         model: Optional[str] = None,
         max_retries: int = 3,
+        breaker: Optional[CircuitBreaker] = None,
         **kwargs: Any,
     ) -> Optional[str]:
         """Send chat completion request and return the raw message.content string without cleaning."""
@@ -180,6 +189,7 @@ class LLMAdapter:
             timeout=timeout,
             model=model,
             max_retries=max_retries,
+            breaker=breaker,
             **kwargs,
         )
         if not data or not data.get("choices"):
@@ -196,6 +206,7 @@ class LLMAdapter:
         timeout: float = 15.0,
         model: Optional[str] = None,
         max_retries: int = 3,
+        breaker: Optional[CircuitBreaker] = None,
         **kwargs: Any,
     ) -> Optional[str]:
         """Send a chat completion request to DeepInfra API and return cleaned response text."""
@@ -206,6 +217,7 @@ class LLMAdapter:
             timeout=timeout,
             model=model,
             max_retries=max_retries,
+            breaker=breaker,
             **kwargs,
         )
         if raw_content is None:

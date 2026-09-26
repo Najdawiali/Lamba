@@ -83,3 +83,6 @@ async def close_client():
 deepinfra_llm_breaker = CircuitBreaker(failure_threshold=3, cooldown_seconds=30)
 deepinfra_embedding_breaker = CircuitBreaker(failure_threshold=3, cooldown_seconds=30)
 deepinfra_reranker_breaker = CircuitBreaker(failure_threshold=3, cooldown_seconds=30)
+# Catalog work (item classification + search-term enrichment) gets its own breaker so
+# bulk jobs (CSV upload, catalog import) can never switch off search's LLM features.
+deepinfra_catalog_breaker = CircuitBreaker(failure_threshold=5, cooldown_seconds=30)

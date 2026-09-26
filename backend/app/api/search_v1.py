@@ -173,6 +173,7 @@ async def _retrieve_fused_candidates(
                 selectinload(GlobalItem.category_rel),
                 selectinload(GlobalItem.images),
             )
+            .where(GlobalItem.moderation_status == "approved")
         )
 
         if listing_type:

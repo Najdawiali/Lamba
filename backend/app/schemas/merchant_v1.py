@@ -88,6 +88,7 @@ class ItemLinkResponse(BaseModel):
     message: str
     market_item_id: uuid.UUID
     stock_count: int
+    moderation_status: Optional[str] = None  # approved | pending_review | blocked
 
 
 # ── Dashboard Item Listing Schemas ──────────────────────────────
@@ -101,6 +102,7 @@ class MarketItemDashboardResponse(BaseModel):
     stock_count: int
     in_stock: bool
     price: Optional[float] = None
+    moderation_status: Optional[str] = None  # approved | pending_review | blocked
 
 
 # ── Toggle Stock Schema ─────────────────────────────────────────

@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getUser, saveUser, logout, getCustomerAlerts, AlertResponse, getMyStore, updateProfile } from '../../../services/api';
+import { getUser, saveUser, logout, deleteAccount, getCustomerAlerts, AlertResponse, getMyStore, updateProfile } from '../../../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
 import { useTheme, useThemeColors, ThemeMode } from '../../../context/ThemeContext';
 import { t, i18n, toggleLanguage, changeLanguage } from '../../../services/i18n';
@@ -269,6 +269,32 @@ export default function CustomerProfileScreen() {
           onPress: async () => {
             await logout();
             router.replace('/(auth)/gateway');
+          },
+        },
+      ],
+    );
+  };
+
+  const handleDeleteAccount = () => {
+    const ar = i18n.locale?.includes('ar');
+    Alert.alert(
+      ar ? 'حذف الحساب نهائياً' : 'Delete account permanently',
+      ar
+        ? 'سيتم حذف حسابك وبياناتك (المحادثات، التقييمات، سجل البحث) نهائياً، ولا يمكن التراجع عن ذلك.'
+        : 'Your account and data (chats, ratings, search history) will be permanently deleted. This cannot be undone.',
+      [
+        { text: ar ? 'إلغاء' : 'Cancel', style: 'cancel' },
+        {
+          text: ar ? 'حذف الحساب' : 'Delete account',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteAccount();
+              await logout();
+              router.replace('/(auth)/gateway');
+            } catch {
+              Alert.alert(ar ? 'خطأ' : 'Error', ar ? 'تعذّر حذف الحساب، حاول مرة أخرى.' : 'Could not delete the account. Please try again.');
+            }
           },
         },
       ],
@@ -631,6 +657,11 @@ export default function CustomerProfileScreen() {
               {t('profile.logout', 'تسجيل الخروج')}
             </Text>
             <Ionicons name="log-out-outline" size={20} color={Colors.error} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleDeleteAccount} activeOpacity={0.7} style={{ alignItems: 'center', paddingVertical: 12, marginTop: 6 }}>
+            <Text style={{ color: Colors.textMuted, fontSize: 13, textDecorationLine: 'underline' }}>
+              {i18n.locale?.includes('ar') ? 'حذف الحساب' : 'Delete account'}
+            </Text>
           </TouchableOpacity>
         </View>
 
