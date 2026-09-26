@@ -48,12 +48,12 @@ def write_csv(path: str, rows: list[dict]) -> None:
         w.writerows(rows)
 
 
-async def classify_all(names: list[str], model: str, concurrency: int):
+async def classify_all(names: list[str], model: str, concurrency: int, timeout: float):
     sem = asyncio.Semaphore(concurrency)
 
     async def one(n: str):
         async with sem:
-            return await classify_item(n, model=model)
+            return await classify_item(n, model=model, timeout=timeout)
 
     return await asyncio.gather(*(one(n) for n in names))
 
@@ -69,19 +69,36 @@ def category_cols(slug: str | None) -> dict:
     return {"category_slug": slug, "category_ar": c.name_ar, "section_ar": CATEGORY_BY_SLUG[c.parent].name_ar}
 
 
-async def evaluate(model: str, split: str, data_dir: str, out_dir: str, concurrency: int) -> None:
+def load_prior_grades(path: str | None) -> dict[tuple[str, str], str]:
+    """(name_ar, category_slug) -> y/n from an earlier graded sheet."""
+    if not path:
+        return {}
+    grades = {}
+    for r in read_csv(path):
+        g = (r.get("grade_category") or "").strip().lower()
+        if g in ("y", "n") and r.get("category_slug"):
+            grades[(r["name_ar"], r["category_slug"])] = g
+    return grades
+
+
+async def evaluate(model: str, split: str, data_dir: str, out_dir: str, concurrency: int,
+                   timeout: float, prior: dict) -> None:
     short = model.split("/")[-1]
     cat_file, res_file = SPLITS[split]
     cat_rows = read_csv(os.path.join(data_dir, cat_file))
     res_rows = read_csv(os.path.join(data_dir, res_file))
 
-    cat_results = await classify_all([r["name_ar"] for r in cat_rows], model, concurrency)
-    res_results = await classify_all([r["name_ar"] for r in res_rows], model, concurrency)
+    cat_results = await classify_all([r["name_ar"] for r in cat_rows], model, concurrency, timeout)
+    res_results = await classify_all([r["name_ar"] for r in res_rows], model, concurrency, timeout)
     all_results = cat_results + res_results
 
-    # ── Grading sheet: categories (you fill grade_category with y / n) ──
-    sheet = []
+    # ── Grading sheet: categories (fill grade_category with y / n) ──
+    # Grades carry over when the product got the same category as in the prior sheet.
+    sheet, carried, to_grade = [], 0, 0
     for r, res in zip(cat_rows, cat_results):
+        g = prior.get((r["name_ar"], res.category_slug or ""), "")
+        carried += bool(g)
+        to_grade += not g
         sheet.append({
             "name_ar": r["name_ar"],
             "stratum": r.get("stratum", ""),
@@ -89,7 +106,7 @@ async def evaluate(model: str, split: str, data_dir: str, out_dir: str, concurre
             "moderation": res.moderation_status,
             "restricted": res.restricted or "",
             "error": res.error or "",
-            "grade_category": "",
+            "grade_category": g,
         })
     write_csv(os.path.join(out_dir, f"{split}_categories_{short}.csv"), sheet)
 
@@ -99,17 +116,14 @@ async def evaluate(model: str, split: str, data_dir: str, out_dir: str, concurre
     for r, res in zip(res_rows, res_results):
         expected = r["expected_restricted"]
         status = res.moderation_status
-        if expected == "none":
-            kind = {"approved": "correct_pass", "pending_review": "held_for_review", "blocked": "FALSE_BLOCK"}[status]
+        if not res.restriction_known:
+            kind = "held_llm_error"
+        elif expected == "none":
+            kind = "correct_pass" if status == "approved" else "FALSE_FLAG"
+        elif status == "approved":
+            kind = "MISSED"
         else:
-            if status == "approved":
-                kind = "MISSED"
-            elif status == "blocked" and res.restricted == expected:
-                kind = "correct_block"
-            elif status == "blocked":
-                kind = "blocked_wrong_class"
-            else:
-                kind = "held_for_review"
+            kind = "caught" if res.restricted == expected else "caught_wrong_class"
         outcome[(expected == "none", kind)] += 1
         res_sheet.append({
             "name_ar": r["name_ar"],
@@ -128,22 +142,25 @@ async def evaluate(model: str, split: str, data_dir: str, out_dir: str, concurre
     n_neg = len(res_rows) - n_pos
     lat = sorted(x.latency_ms for x in all_results)
     errors = Counter(x.error for x in all_results if x.error)
-    pending = sum(1 for x in cat_results if x.moderation_status == "pending_review")
-    blocked_in_catalog = [(r["name_ar"], x.restricted) for r, x in zip(cat_rows, cat_results) if x.moderation_status == "blocked"]
+    flagged_in_catalog = [(r["name_ar"], x.restricted or x.error) for r, x in zip(cat_rows, cat_results)
+                          if x.moderation_status != "approved"]
 
     print(f"\n══════ {model} — {split} ══════")
     print(f"calls: {len(all_results)}  errors: {dict(errors) or 'none'}")
     print(f"latency ms  p50={statistics.median(lat):.0f}  p95={lat[int(0.95 * (len(lat) - 1))]:.0f}  max={lat[-1]}")
-    print(f"\nRESTRICTED ITEMS ({n_pos} that must not be approved)")
-    for k in ("correct_block", "blocked_wrong_class", "held_for_review", "MISSED"):
+    print(f"\nRESTRICTED ITEMS ({n_pos} that must be held)")
+    for k in ("caught", "caught_wrong_class", "held_llm_error", "MISSED"):
         print(f"  {k:<20} {pct(outcome[(False, k)], n_pos)}")
     print(f"LOOK-ALIKES ({n_neg} that must pass)")
-    for k in ("correct_pass", "held_for_review", "FALSE_BLOCK"):
+    for k in ("correct_pass", "held_llm_error", "FALSE_FLAG"):
         print(f"  {k:<20} {pct(outcome[(True, k)], n_neg)}")
     print(f"\nCATALOG SAMPLE ({len(cat_rows)} real products)")
-    print(f"  held for review: {pct(pending, len(cat_rows))}")
-    print(f"  blocked: {len(blocked_in_catalog)} {blocked_in_catalog if blocked_in_catalog else ''}")
-    print(f"  no valid category: {sum(1 for x in cat_results if not x.category_slug and not x.restricted)}")
+    print(f"  flagged for review: {len(flagged_in_catalog)} {flagged_in_catalog if flagged_in_catalog else ''}")
+    print(f"  no valid category: {sum(1 for x in cat_results if not x.category_slug)}")
+    graded = [row for row in sheet if row["grade_category"] in ("y", "n")]
+    if graded:
+        ok = sum(row["grade_category"] == "y" for row in graded)
+        print(f"  category grades carried over: {carried}  (correct {ok}/{len(graded)})  -> still to grade: {to_grade}")
     print(f"  sheets: {split}_categories_{short}.csv, {split}_restricted_{short}.csv")
 
 
@@ -154,12 +171,15 @@ async def main() -> None:
     p.add_argument("--out", default=None, help="output folder (default: <data>/results)")
     p.add_argument("--models", nargs="+", default=DEFAULT_MODELS)
     p.add_argument("--concurrency", type=int, default=4)
+    p.add_argument("--timeout", type=float, default=12.0, help="per-call LLM timeout in seconds")
+    p.add_argument("--carry-grades", default=None, help="earlier graded categories CSV; unchanged predictions keep their grade")
     args = p.parse_args()
 
     out_dir = args.out or os.path.join(args.data, "results")
     os.makedirs(out_dir, exist_ok=True)
+    prior = load_prior_grades(args.carry_grades)
     for m in args.models:
-        await evaluate(m, args.split, args.data, out_dir, args.concurrency)
+        await evaluate(m, args.split, args.data, out_dir, args.concurrency, args.timeout, prior)
 
 
 if __name__ == "__main__":

@@ -7,14 +7,15 @@ barcode-catalog import. Pure function of the text: no DB access, so it can be
 evaluated offline (see backend/evals/eval_classifier.py).
 
 Moderation outcome (see ClassificationResult.moderation_status):
-    restricted + high confidence  -> "blocked"
-    restricted + low confidence   -> "pending_review"   (a human decides)
-    allowed    + low confidence   -> "pending_review"
-    allowed    + high confidence  -> "approved"
+    flagged as restricted         -> "pending_review"   (a human confirms or releases)
+    allowed                       -> "approved"
     LLM unavailable / bad output  -> "pending_review"   (fail closed)
+"blocked" is only ever set by a human reviewer.
 
-`confidence` refers to the restriction decision only. A wrong category is
-cheap (the merchant can fix it); a wrong restriction decision is not.
+Why no self-reported confidence: evaluation (2026-09-26, 164 items) showed the
+model answered "high" on every item, including the ones it got wrong, so the
+signal carried no information. Pending items are hidden from customers exactly
+like blocked ones, so routing every flag to review costs no safety.
 """
 
 from __future__ import annotations
@@ -34,14 +35,15 @@ logger = logging.getLogger(__name__)
 RESTRICTED_CLASSES: tuple[str, ...] = ("tobacco", "alcohol", "drugs", "weapons")
 
 _POLICY = """Lamba does NOT allow these products at all:
-- tobacco: cigarettes, cigars, hookah tobacco (معسل), vapes / e-cigarettes / e-liquids, nicotine pouches, and smoking accessories (hookah devices, hookah charcoal, hookah foil, hookah hoses, cigarette holders, rolling papers).
+- tobacco: cigarettes, cigars, hookah tobacco (معسل), vapes / e-cigarettes / e-liquids, nicotine pouches, and ANY product made specifically for smoking or hookah use (hookah devices, charcoal, foil, hoses, cleaners, cigarette holders, rolling papers).
 - alcohol: beer, wine, arak, spirits, cooking wine, any drink that contains alcohol.
 - drugs: narcotics, illegal substances, drug paraphernalia, and prescription-only medicines (antibiotics, opioids, sedatives, pregabalin, and similar).
 - weapons: firearms, blank guns, ammunition, air guns and pellets, combat knives, swords, brass knuckles, tasers, pepper spray, explosives, fireworks.
 
 These ARE allowed even though they can look similar: lighters, barbecue charcoal and charcoal lighters, air fresheners and odor removers, non-alcoholic beer and malt drinks, vinegar, medical/rubbing alcohol, hand sanitizer, over-the-counter painkillers and first-aid supplies, kitchen knives, tools (saws, axes, glue guns, spray guns), and toy guns.
 
-Judge what the product IS, not which words appear in its name. Brand names can resemble restricted words."""
+Judge what the product IS, not which words appear in its name. Brand names can resemble restricted words.
+Known brand collision in Jordan: "فيب" (VAPE) is also a major insecticide brand. Its sprays, mosquito mats, liquids and plug-in devices are insecticides, not vapes. Decide from the product type, not the brand name."""
 
 
 def _category_lines(listing_type: str | None) -> list[str]:
@@ -50,7 +52,8 @@ def _category_lines(listing_type: str | None) -> list[str]:
         if listing_type and c.listing_type != listing_type:
             continue
         section = CATEGORY_BY_SLUG[c.parent].name_ar
-        lines.append(f"- {c.slug}: {c.name_ar} ({c.name_en}) [{section}]")
+        hint = f" — includes: {c.hint}" if c.hint else ""
+        lines.append(f"- {c.slug}: {c.name_ar} ({c.name_en}) [{section}]{hint}")
     return lines
 
 
@@ -60,13 +63,11 @@ def build_system_prompt(listing_type: str | None = None) -> str:
         "marketplace. Names are often short cashier-style Arabic names with brand and size.\n\n"
         "Task 1 — restricted:\n"
         f"{_POLICY}\n\n"
-        "Task 2 — category: choose exactly one slug from this list:\n"
+        "Task 2 — category: choose exactly one slug from this list (always, even for restricted items):\n"
         + "\n".join(_category_lines(listing_type))
         + "\n\n"
-        "Task 3 — confidence about Task 1 only: \"high\" if you are certain whether the item "
-        "is restricted, \"low\" if it could plausibly be restricted or you do not recognize it.\n\n"
         "Respond with ONLY this JSON object, no other text:\n"
-        '{"restricted": "none|tobacco|alcohol|drugs|weapons", "category": "<slug>", "confidence": "high|low"}'
+        '{"restricted": "none|tobacco|alcohol|drugs|weapons", "category": "<slug>"}'
     )
 
 
@@ -74,34 +75,36 @@ def build_system_prompt(listing_type: str | None = None) -> str:
 class ClassificationResult:
     restricted: str | None  # None = allowed, else one of RESTRICTED_CLASSES
     category_slug: str | None  # a leaf slug from app.taxonomy, or None
-    confident: bool  # confidence about the restriction decision
     error: str | None = None  # llm_unavailable | unparseable | invalid_restricted | invalid_category
     latency_ms: int = 0
     raw: str = ""
 
     @property
+    def restriction_known(self) -> bool:
+        """False when we could not get a valid restriction decision (fail closed)."""
+        return self.error not in ("llm_unavailable", "unparseable", "invalid_restricted")
+
+    @property
     def moderation_status(self) -> str:
-        if self.error in ("llm_unavailable", "unparseable", "invalid_restricted"):
+        if not self.restriction_known or self.restricted:
             return "pending_review"
-        if self.restricted:
-            return "blocked" if self.confident else "pending_review"
-        return "approved" if self.confident else "pending_review"
+        return "approved"
 
 
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 
-def parse_response(raw: str, allowed_slugs: set[str]) -> tuple[str | None, str | None, bool, str | None]:
-    """Return (restricted, category_slug, confident, error). Pure, unit-testable."""
+def parse_response(raw: str, allowed_slugs: set[str]) -> tuple[str | None, str | None, str | None]:
+    """Return (restricted, category_slug, error). Pure, unit-testable."""
     match = _JSON_RE.search(raw or "")
     if not match:
-        return None, None, False, "unparseable"
+        return None, None, "unparseable"
     try:
         data = json.loads(match.group(0))
     except json.JSONDecodeError:
-        return None, None, False, "unparseable"
+        return None, None, "unparseable"
     if not isinstance(data, dict):
-        return None, None, False, "unparseable"
+        return None, None, "unparseable"
 
     restricted_raw = str(data.get("restricted", "")).strip().lower()
     if restricted_raw == "none":
@@ -109,17 +112,13 @@ def parse_response(raw: str, allowed_slugs: set[str]) -> tuple[str | None, str |
     elif restricted_raw in RESTRICTED_CLASSES:
         restricted = restricted_raw
     else:
-        return None, None, False, "invalid_restricted"
+        return None, None, "invalid_restricted"
 
-    confident = str(data.get("confidence", "")).strip().lower() == "high"
-
-    if restricted:
-        return restricted, None, confident, None
-
-    slug = str(data.get("category", "")).strip().lower()
+    slug = str(data.get("category") or "").strip().lower()
     if slug not in allowed_slugs:
-        return None, None, confident, "invalid_category"
-    return None, slug, confident, None
+        # A flagged item without a valid category is still a valid restriction decision
+        return restricted, None, None if restricted else "invalid_category"
+    return restricted, slug, None
 
 
 async def classify_item(
@@ -144,7 +143,7 @@ async def classify_item(
             ],
             model=model or settings.classifier_model,
             temperature=0.0,
-            max_tokens=80,
+            max_tokens=60,
             timeout=timeout,
             max_retries=max_retries,
         )
@@ -154,9 +153,9 @@ async def classify_item(
     latency_ms = int((time.monotonic() - started) * 1000)
 
     if raw is None:
-        return ClassificationResult(None, None, False, "llm_unavailable", latency_ms, "")
+        return ClassificationResult(None, None, "llm_unavailable", latency_ms, "")
 
-    restricted, slug, confident, error = parse_response(raw, allowed)
+    restricted, slug, error = parse_response(raw, allowed)
     if error:
         logger.warning("classify_item: %s for %r: %r", error, name[:40], raw[:200])
-    return ClassificationResult(restricted, slug, confident, error, latency_ms, raw)
+    return ClassificationResult(restricted, slug, error, latency_ms, raw)

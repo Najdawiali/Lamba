@@ -25,6 +25,7 @@ class CategoryDef:
     listing_type: str = "product"  # "product" | "service"
     icon: str | None = None  # Ionicons name, used for sections
     sort_order: int = 0
+    hint: str = ""  # what belongs here; shown to the classifier for ambiguous categories
 
 
 @dataclass(frozen=True)
@@ -41,10 +42,12 @@ def _section(slug, name_ar, name_en, icon, order, listing_type="product"):
 
 
 def _children(parent, listing_type, items):
-    return [
-        CategoryDef(slug, name_ar, name_en, parent, listing_type, None, (i + 1) * 10)
-        for i, (slug, name_ar, name_en) in enumerate(items)
-    ]
+    out = []
+    for i, item in enumerate(items):
+        slug, name_ar, name_en, *rest = item
+        out.append(CategoryDef(slug, name_ar, name_en, parent, listing_type, None, (i + 1) * 10,
+                               rest[0] if rest else ""))
+    return out
 
 
 CATEGORIES: list[CategoryDef] = [
@@ -67,19 +70,29 @@ CATEGORIES: list[CategoryDef] = [
         ("dairy_eggs", "ألبان وأجبان وبيض", "Dairy, Cheese & Eggs"),
         ("meat_poultry_fish", "لحوم ودواجن وأسماك", "Meat, Poultry & Fish"),
         ("bakery", "مخبوزات", "Bakery"),
-        ("frozen_food", "مجمدات", "Frozen Food"),
-        ("pantry_staples", "مواد تموينية", "Pantry Staples"),
-        ("canned_jarred", "معلبات ومحفوظات", "Canned & Jarred"),
-        ("spices_sauces", "بهارات وصلصات", "Spices & Sauces"),
+        ("frozen_food", "مجمدات", "Frozen Food",
+         "frozen vegetables, frozen meat and chicken products, frozen meals, frozen dough (not ice cream)"),
+        ("pantry_staples", "مواد تموينية", "Pantry Staples",
+         "rice, sugar, sweeteners, flour, cooking oil, ghee, margarine, pasta, lentils, dry beans, bulgur, salt, vinegar"),
+        ("honey_spreads", "عسل ومربيات ودهونات", "Honey, Jams & Spreads",
+         "honey, jam, halawa, date and grape molasses (dibs), chocolate and nut spreads, peanut butter"),
+        ("canned_jarred", "معلبات ومحفوظات", "Canned & Jarred",
+         "canned tuna and sardines, canned beans and vegetables, pickles, olives, tomato paste"),
+        ("spices_sauces", "بهارات وصلصات", "Spices & Sauces",
+         "spices, herbs, bouillon, ketchup, mayonnaise, mustard, hot sauce, dressings"),
     ]),
     *_children("beverages", "product", [
         ("drinks_juices", "مشروبات وعصائر", "Drinks & Juices"),
         ("coffee_tea", "قهوة وشاي", "Coffee & Tea"),
     ]),
     *_children("sweets_snacks", "product", [
-        ("chocolate_sweets", "شوكولاتة وحلويات", "Chocolate & Sweets"),
+        ("chocolate_sweets", "شوكولاتة وحلويات", "Chocolate & Sweets",
+         "chocolate bars, candy, gum, lollipops, packaged Arabic sweets"),
         ("chips_nuts", "شيبس ومكسرات", "Chips & Nuts"),
-        ("biscuits_cakes", "بسكويت وكيك", "Biscuits & Cakes"),
+        ("biscuits_cakes", "بسكويت وكيك", "Biscuits & Cakes",
+         "biscuits, cookies, wafers, packaged cakes and croissants"),
+        ("ice_cream", "بوظة وآيس كريم", "Ice Cream",
+         "ice cream, ice cream bars and cones, frozen desserts"),
     ]),
     *_children("baby", "product", [
         ("diapers_wipes", "حفاضات ومناديل أطفال", "Diapers & Wipes"),
@@ -98,11 +111,14 @@ CATEGORIES: list[CategoryDef] = [
         ("health_first_aid", "مستلزمات صحية وإسعافات أولية", "Health & First Aid"),
     ]),
     *_children("household", "product", [
-        ("detergents", "منظفات", "Detergents & Cleaners"),
-        ("cleaning_tools", "أدوات تنظيف", "Cleaning Tools"),
+        ("detergents", "منظفات", "Detergents & Cleaners",
+         "laundry and dish detergents, surface cleaners, bleach, air fresheners"),
+        ("cleaning_tools", "أدوات تنظيف", "Cleaning Tools",
+         "mops and mop refills, sponges, scourers, brushes, brooms, buckets, cleaning gloves"),
         ("tissues_paper", "محارم وورقيات", "Tissues & Paper"),
         ("bags_disposables", "أكياس ومستهلكات", "Bags & Disposables"),
-        ("insecticides", "مبيدات حشرية", "Insecticides"),
+        ("insecticides", "مبيدات حشرية", "Insecticides",
+         "insecticide sprays, mosquito repellent mats, liquids and plug-in devices"),
     ]),
     *_children("kitchen", "product", [
         ("cookware", "أواني الطبخ", "Cookware"),
