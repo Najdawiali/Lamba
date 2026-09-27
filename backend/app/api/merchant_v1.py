@@ -422,6 +422,8 @@ CSV_CLASSIFY_CONCURRENCY = 6
 MSG_PENDING = "تمت إضافة المنتج وهو قيد المراجعة، وسيظهر للزبائن بعد الموافقة عليه."
 MSG_CATEGORY_REQUIRED = "تعذّر تحديد القسم تلقائياً. الرجاء اختيار القسم ثم المحاولة مرة أخرى."
 MSG_SHARED_RENAME = "هذا المنتج من الكتالوج المشترك ولا يمكن تغيير اسمه. يمكنك تعديل السعر والكمية فقط."
+MAX_PHOTOS_PER_ITEM = 5
+MAX_PHOTO_BYTES = 8 * 1024 * 1024
 
 
 async def _category_by_slug(db: AsyncSession, slug: str | None) -> Category | None:
@@ -694,6 +696,63 @@ async def link_item(
         stock_count=mi.stock_count,
         moderation_status=gi.moderation_status,
     )
+
+# ── POST /items/{global_item_id}/photos ─────────────────────────
+@router.post("/items/{global_item_id}/photos")
+async def add_item_photo(
+    global_item_id: uuid.UUID,
+    image: UploadFile = File(...),
+    user: User = Depends(get_merchant),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Add a photo to a catalog product this merchant stocks (merchant-crowdsourced catalog photos).
+
+    The first photo of a product becomes its primary (catalog-wide) photo; later ones are
+    extras, up to MAX_PHOTOS_PER_ITEM. Stocking the product is required so merchants can
+    only photograph products they actually carry.
+    """
+    stocked = (await db.execute(
+        select(MarketItem.id)
+        .join(Market, MarketItem.market_id == Market.id)
+        .where(MarketItem.item_id == global_item_id, Market.merchant_id == user.id)
+        .limit(1)
+    )).scalar_one_or_none()
+    if stocked is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Add the product to your store first.")
+
+    gi = (await db.execute(select(GlobalItem).where(GlobalItem.id == global_item_id))).unique().scalar_one_or_none()
+    if gi is None or gi.moderation_status == "blocked":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Catalog item not found.")
+
+    if not (image.content_type or "").startswith("image/"):
+        raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Only image files are accepted.")
+    data = await image.read()
+    if not data:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Empty image.")
+    if len(data) > MAX_PHOTO_BYTES:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Image is larger than 8 MB.")
+
+    existing = (await db.execute(
+        select(func.count()).select_from(ProductImage).where(ProductImage.global_item_id == gi.id)
+    )).scalar_one()
+    if existing >= MAX_PHOTOS_PER_ITEM:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This product already has enough photos.")
+    has_primary = (await db.execute(
+        select(func.count()).select_from(ProductImage)
+        .where(ProductImage.global_item_id == gi.id, ProductImage.is_primary == True)  # noqa: E712
+    )).scalar_one() > 0
+
+    url = await storage_service.upload(
+        file_bytes=data,
+        original_filename=image.filename or "photo.jpg",
+        subfolder="products",
+    )
+    db.add(ProductImage(global_item_id=gi.id, image_url=url, is_primary=not has_primary))
+    await db.commit()
+    logger.info("Photo added to %s by merchant %s (primary=%s)", gi.id, user.id, not has_primary)
+    return {"image_url": url, "is_primary": not has_primary}
+
 
 # ── POST /items/new ─────────────────────────────────────────────
 @router.post("/items/new", response_model=ItemLinkResponse)

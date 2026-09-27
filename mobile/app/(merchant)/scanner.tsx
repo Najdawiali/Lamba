@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
@@ -14,6 +15,7 @@ import {
   lookupItemByBarcode,
   linkBarcodeToMarket,
   updateMarketItem,
+  uploadItemPhoto,
   checkoutPOS,
   getMarketItems,
   BarcodeLookupResponse,
@@ -634,6 +636,10 @@ const styles = useMemo(() => StyleSheet.create({
   const [stockCount, setStockCount] = useState('0');
   const [price, setPrice] = useState('0.00');
   const [savingForm, setSavingForm] = useState(false);
+  // Merchant-crowdsourced catalog photo: required when the product has none, optional otherwise
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const photoRequired = !!scanResult && !scanResult.image_url;
+  const isArUI = !!i18n.locale?.startsWith('ar');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   // Continuous scanning synchronous lock to prevent multiple triggers in parallel frames
@@ -830,8 +836,45 @@ const styles = useMemo(() => StyleSheet.create({
   };
 
   // Save stock / price updates
+  // Same camera / gallery chooser as add-product (reuses its translation keys)
+  const pickProductPhoto = () => {
+    Alert.alert(
+      t('addProduct.select_image', 'Select Image'),
+      t('addProduct.image_source', 'Choose image source'),
+      [
+        {
+          text: t('addProduct.camera', 'Take Photo'),
+          onPress: async () => {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert(t('common.error', 'Error'), t('addProduct.camera_permission', 'Camera permission is required'));
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.8 });
+            if (!result.canceled && result.assets?.length > 0) setPhotoUri(result.assets[0].uri);
+          },
+        },
+        {
+          text: t('addProduct.gallery', 'Choose from Gallery'),
+          onPress: async () => {
+            const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.8 });
+            if (!result.canceled && result.assets?.length > 0) setPhotoUri(result.assets[0].uri);
+          },
+        },
+        { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+      ],
+    );
+  };
+
   const handleSave = async () => {
     if (!scannedBarcode) return;
+    if (photoRequired && !photoUri) {
+      Alert.alert(
+        isArUI ? 'صورة المنتج مطلوبة' : 'Product photo required',
+        isArUI ? 'هذا المنتج بلا صورة. التقط صورة له ليظهر بشكل واضح للزبائن.' : 'This product has no photo yet. Take one so customers can recognise it.',
+      );
+      return;
+    }
     const stockVal = parseInt(stockCount, 10);
     const priceVal = parseFloat(price);
 
@@ -851,13 +894,23 @@ const styles = useMemo(() => StyleSheet.create({
           stock_count: stockVal,
           price: priceVal,
         });
-        Vibration.vibrate(50);
-        handleCloseDrawer();
       } else if (scanResult && !scanResult.exists_in_branch) {
         await linkBarcodeToMarket(scanResult.global_item_id, priceVal, stockVal);
-        Vibration.vibrate(50);
-        handleCloseDrawer();
       }
+      // Photo after the stock is saved: the backend only accepts photos for stocked products.
+      // If it fails, the stock stays saved and the next scan asks for the photo again.
+      if (scanResult && photoUri) {
+        try {
+          await uploadItemPhoto(scanResult.global_item_id, photoUri);
+        } catch {
+          Alert.alert(
+            isArUI ? 'تم الحفظ' : 'Saved',
+            isArUI ? 'تم حفظ الكمية والسعر، لكن تعذّر رفع الصورة. امسح الباركود مرة أخرى لإضافتها.' : 'Stock and price were saved, but the photo could not be uploaded. Scan the barcode again to add it.',
+          );
+        }
+      }
+      Vibration.vibrate(50);
+      handleCloseDrawer();
     } catch (err) {
       Alert.alert(t('common.error'), t('scanner.failed_save', 'Failed to save product adjustments.'));
     } finally {
@@ -872,6 +925,7 @@ const styles = useMemo(() => StyleSheet.create({
       isScanningRef.current = false;
       setScanResult(null);
       setScannedBarcode('');
+      setPhotoUri(null);
     }, 400);
   };
 
@@ -1205,19 +1259,24 @@ const styles = useMemo(() => StyleSheet.create({
               {scanResult ? (
                 <View style={{ width: '100%' }}>
                   <View style={styles.itemSummaryCard}>
-                    <View style={styles.thumbWrapper}>
-                      {scanResult.image_url ? (
+                    <TouchableOpacity
+                      style={[styles.thumbWrapper, photoRequired && !photoUri ? { borderWidth: 2, borderColor: Colors.error, borderStyle: 'dashed' } : null]}
+                      onPress={pickProductPhoto}
+                      activeOpacity={0.7}
+                      accessibilityLabel={isArUI ? 'إضافة صورة للمنتج' : 'Add product photo'}
+                    >
+                      {photoUri || scanResult.image_url ? (
                         <Image
-                          source={{ uri: resolveImageUrl(scanResult.image_url) }}
+                          source={{ uri: photoUri || resolveImageUrl(scanResult.image_url) }}
                           style={styles.thumbnail}
                           resizeMode="cover"
                         />
                       ) : (
                         <View style={styles.placeholderIcon}>
-                          <Ionicons name="cube-outline" size={24} color={Colors.textMuted} />
+                          <Ionicons name="camera-outline" size={24} color={Colors.error} />
                         </View>
                       )}
-                    </View>
+                    </TouchableOpacity>
 
                     <View style={styles.summaryText}>
                       <Text style={styles.itemName} numberOfLines={1}>
@@ -1238,6 +1297,21 @@ const styles = useMemo(() => StyleSheet.create({
                       </View>
                     </View>
                   </View>
+
+                  <Text
+                    style={{
+                      color: photoRequired && !photoUri ? Colors.error : Colors.textMuted,
+                      fontSize: 12,
+                      textAlign: isArUI ? 'right' : 'left',
+                      marginTop: 6,
+                    }}
+                  >
+                    {photoRequired && !photoUri
+                      ? (isArUI ? 'هذا المنتج بلا صورة: اضغط على المربع والتقط صورة (مطلوب).' : 'This product has no photo: tap the box and take one (required).')
+                      : photoUri
+                        ? (isArUI ? 'سيتم رفع الصورة عند الحفظ.' : 'The photo will be uploaded when you save.')
+                        : (isArUI ? 'اضغط على الصورة لإضافة صورة أخرى (اختياري).' : 'Tap the photo to add another one (optional).')}
+                  </Text>
 
                   <View style={styles.formContainer}>
                     <View style={styles.formRow}>
@@ -1282,12 +1356,23 @@ const styles = useMemo(() => StyleSheet.create({
                         <Text style={styles.btnTextCancel}>{t('common.cancel', 'Cancel')}</Text>
                       </TouchableOpacity>
 
-                      <TouchableOpacity style={[styles.btn, styles.btnSubmit]} onPress={handleSave} activeOpacity={0.8}>
-                        <Text style={styles.btnTextSubmit}>
-                          {scanResult.exists_in_branch 
-                            ? t('common.save', 'Save Adjustments')
-                            : t('addProduct.add_new', 'Add to My Store')}
-                        </Text>
+                      <TouchableOpacity
+                        style={[styles.btn, styles.btnSubmit, (savingForm || (photoRequired && !photoUri)) ? { opacity: 0.5 } : null]}
+                        onPress={handleSave}
+                        disabled={savingForm || (photoRequired && !photoUri)}
+                        activeOpacity={0.8}
+                      >
+                        {savingForm ? (
+                          <ActivityIndicator size="small" color={Colors.textOnPrimary} />
+                        ) : (
+                          <Text style={styles.btnTextSubmit}>
+                            {photoRequired && !photoUri
+                              ? (isArUI ? 'التقط صورة أولاً' : 'Take a photo first')
+                              : scanResult.exists_in_branch
+                                ? t('common.save', 'Save Adjustments')
+                                : t('addProduct.add_new', 'Add to My Store')}
+                          </Text>
+                        )}
                       </TouchableOpacity>
                     </View>
                   </View>

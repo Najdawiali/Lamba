@@ -82,6 +82,7 @@ export interface ItemLinkResponse {
   message: string;
   market_item_id: string;
   stock_count: number;
+  moderation_status?: 'approved' | 'pending_review' | 'blocked' | null;
 }
 
 export interface MarketItemDashboardResponse {
@@ -98,6 +99,7 @@ export interface MarketItemDashboardResponse {
   stock_count: number;
   in_stock: boolean;
   price?: number | null;
+  moderation_status?: 'approved' | 'pending_review' | 'blocked' | null;
 }
 
 export interface BarcodeLookupResponse {
@@ -293,6 +295,29 @@ export async function linkBarcodeToMarket(itemId: string, price: number, stock: 
     await updateMarketItem(linkResp.market_item_id, { price });
   }
   return linkResp;
+}
+
+export interface ItemPhotoResponse {
+  image_url: string;
+  is_primary: boolean;
+}
+
+/**
+ * Add a photo to a catalog product this merchant stocks. The first photo of a product
+ * becomes its catalog photo for every store; later ones are extras.
+ */
+export async function uploadItemPhoto(globalItemId: string, uri: string): Promise<ItemPhotoResponse> {
+  const filename = uri.split('/').pop() || 'photo.jpg';
+  const match = /\.(\w+)$/.exec(filename);
+  const type = match ? `image/${match[1]}` : 'image/jpeg';
+  const formData = new FormData();
+  formData.append('image', { uri, name: filename, type } as any);
+  const { data } = await api.post<ItemPhotoResponse>(
+    `/api/v1/merchant/items/${globalItemId}/photos`,
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  );
+  return data;
 }
 
 export async function checkoutPOS(items: POSCheckoutItem[]): Promise<POSCheckoutResponse> {
