@@ -39,6 +39,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.database import async_session, engine
+from app.services.http_pool import deepinfra_catalog_breaker
 from app.models.category import Category
 from app.models.global_item import GlobalItem
 from app.services.item_classifier import classify_item_ensemble, restricted_reason_for
@@ -50,6 +51,39 @@ log = logging.getLogger("import_catalog")
 log.setLevel(logging.INFO)
 
 CHUNK = 100
+ATTEMPTS = 3
+BATCH_CLASSIFY_TIMEOUT = 30.0  # nobody waits on a screen in a batch job
+
+
+async def breaker_gate() -> None:
+    """
+    Batch jobs must WAIT OUT an open circuit breaker, not race through their queue.
+    (The first full run deferred 7,472 products in 2 seconds: every call during one
+    30-second cooldown was skipped instantly.) should_skip() resets the breaker once
+    its cooldown has passed, so this loop ends by itself.
+    """
+    while deepinfra_catalog_breaker.should_skip():
+        await asyncio.sleep(2)
+
+
+async def classify_patiently(name: str):
+    verdict = None
+    for attempt in range(ATTEMPTS):
+        await breaker_gate()
+        verdict = await classify_item_ensemble(name, None, "product", timeout=BATCH_CLASSIFY_TIMEOUT)
+        if verdict.restriction_known:
+            return verdict
+        await asyncio.sleep(5 * (attempt + 1))
+    return verdict
+
+
+async def enrich_patiently(gi: GlobalItem, category_name: str, timeout: float = 60.0) -> bool:
+    for attempt in range(ATTEMPTS):
+        await breaker_gate()
+        if await enrich_and_embed(gi, category_name, use_llm=True, timeout=timeout):
+            return True
+        await asyncio.sleep(5 * (attempt + 1))
+    return False
 
 
 def read_rows(path: str) -> list[dict]:
@@ -67,7 +101,7 @@ def read_rows(path: str) -> list[dict]:
 async def build_item(row: dict, cats: dict, sem: asyncio.Semaphore, stats: Counter, unresolved: list,
                      enrich: bool) -> GlobalItem | None:
     async with sem:
-        verdict = await classify_item_ensemble(row["name"], None, "product")
+        verdict = await classify_patiently(row["name"])
         if not verdict.restriction_known:
             stats["retry_later (classifier unavailable)"] += 1
             return None
@@ -86,7 +120,10 @@ async def build_item(row: dict, cats: dict, sem: asyncio.Semaphore, stats: Count
             moderation_status=verdict.moderation_status,
             restricted_reason=restricted_reason_for(verdict),
         )
-        await enrich_and_embed(gi, cat[1], use_llm=enrich)
+        if enrich:
+            await enrich_patiently(gi, cat[1])
+        else:
+            await enrich_and_embed(gi, cat[1], use_llm=False)
         stats[gi.moderation_status] += 1
         stats[f"embedding: {gi.embedding_status}"] += 1
         if verdict.restricted:
@@ -167,7 +204,7 @@ async def run_retry_enrichment(concurrency: int, timeout: float) -> None:
 
         async def one(gi, en, n):
             async with sem:
-                await enrich_and_embed(gi, en or n, use_llm=True, timeout=timeout)
+                await enrich_patiently(gi, en or n, timeout=timeout)
                 stats[gi.embedding_status] += 1
 
         for i in range(0, len(rows), CHUNK):
