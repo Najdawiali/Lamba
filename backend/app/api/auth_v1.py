@@ -28,6 +28,7 @@ from app.schemas.auth_v1 import (
     SignInRequest, SignInResponse, SignInUserInfo,
 )
 from app.services.auth import hash_password, verify_password, create_access_token
+from app.services.password_policy import password_problem
 from app.services.email_service import send_verification_email
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,18 @@ class ResetPasswordRequest(BaseModel):
     new_password: str = Field(..., min_length=8, max_length=128)
 
 
+PHONE_SIGNUP_UNAVAILABLE = (
+    "التسجيل برقم الهاتف غير متاح حالياً، الرجاء التسجيل بالبريد الإلكتروني.\n"
+    "Sign-up with a phone number isn't available yet. Please sign up with your email."
+)
+
+
+def _reject_weak_password(password: str, **personal) -> None:
+    problem = password_problem(password, **personal)
+    if problem:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=problem[1])
+
+
 def _generate_code(length: int = 6) -> str:
     """Generate a random numeric verification code."""
     return "".join(secrets.choice(string.digits) for _ in range(length))
@@ -65,6 +78,11 @@ async def signup(request: Request, data: SignUpRequest, db: AsyncSession = Depen
     and dispatches it via the appropriate channel (Email or SMS).
     The account is stored as unverified until /verify is called.
     """
+    # SMS delivery isn't implemented yet: a phone-only account could never be verified.
+    if data.phone_number and not data.email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=PHONE_SIGNUP_UNAVAILABLE)
+    _reject_weak_password(data.password, email=data.email, name=data.full_name, phone=data.phone_number)
+
     # Check for existing account
     result = await db.execute(select(User).where(
         User.email == data.email if data.email else User.phone_number == data.phone_number
@@ -292,6 +310,8 @@ async def reset_password(request: Request, data: ResetPasswordRequest, db: Async
     """
     Reset password using the code sent to email.
     """
+    # Checked before the code, so a weak choice doesn't use up one of the 5 attempts
+    _reject_weak_password(data.new_password, email=data.email)
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
 
