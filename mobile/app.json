@@ -18,7 +18,7 @@
         "googleMapsApiKey": "AIzaSyBE961k1OZH9eyXXuPbwCrr3aGulb_pWIo"
       },
       "infoPlist": {
-        "NSCameraUsageDescription": "Lamba needs camera access for visual product search",
+        "NSCameraUsageDescription": "Lamba uses the camera to scan product barcodes and take product photos.",
         "NSLocationWhenInUseUsageDescription": "Lamba needs your location to find nearby shops"
       }
     },
@@ -36,14 +36,21 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ],
+      "blockedPermissions": [
         "android.permission.RECORD_AUDIO"
       ]
     },
     "plugins": [
       "expo-dev-client",
       "expo-router",
-      "expo-camera",
+      [
+        "expo-camera",
+        {
+          "recordAudioAndroid": false
+        }
+      ],
       "expo-image-picker",
       "expo-location",
       "expo-secure-store",

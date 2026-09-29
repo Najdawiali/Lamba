@@ -97,6 +97,7 @@ from app.api.search_v1 import router as search_v1_router
 from app.api.chat_v1 import router as chat_v1_router
 from app.api.reports_v1 import router as reports_v1_router
 from app.api.account_v1 import router as account_v1_router
+from app.api.legal_v1 import router as legal_v1_router
 
 app.include_router(auth_v1_router)
 app.include_router(merchant_v1_router)
@@ -105,6 +106,7 @@ app.include_router(search_v1_router)
 app.include_router(chat_v1_router)
 app.include_router(reports_v1_router)
 app.include_router(account_v1_router)
+app.include_router(legal_v1_router)
 
 
 @app.get("/health")

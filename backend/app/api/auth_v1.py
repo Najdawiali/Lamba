@@ -196,8 +196,8 @@ async def verify(request: Request, data: VerifyRequest, db: AsyncSession = Depen
                 detail="Verification code has expired. Please request a new one.",
             )
 
-    # Verify code
-    if user.verification_code != data.verification_code:
+    # Verify code (constant-time comparison)
+    if not secrets.compare_digest(user.verification_code, data.verification_code):
         user.verification_attempts += 1
         if user.verification_attempts >= MAX_VERIFICATION_ATTEMPTS:
             user.verification_code = None
@@ -304,12 +304,16 @@ async def reset_password(request: Request, data: ResetPasswordRequest, db: Async
             detail="No reset code pending. Please request a new one.",
         )
 
+    # State changes before an HTTPException must be COMMITTED: get_db() rolls back
+    # on any exception, so a flush() here would be undone and the attempt limit
+    # would never take effect (unlimited guessing of the 6-digit reset code).
+
     # Check attempts
-    if user.verification_attempts >= 5:
+    if user.verification_attempts >= MAX_VERIFICATION_ATTEMPTS:
         user.verification_code = None
         user.verification_code_created_at = None
         user.verification_attempts = 0
-        await db.flush()
+        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many attempts. Please request a new reset code.",
@@ -318,21 +322,21 @@ async def reset_password(request: Request, data: ResetPasswordRequest, db: Async
     # Check expiry (10 minutes)
     if user.verification_code_created_at:
         elapsed = datetime.now(timezone.utc) - user.verification_code_created_at
-        if elapsed.total_seconds() > 600:
+        if elapsed.total_seconds() > VERIFICATION_CODE_TTL_MINUTES * 60:
             user.verification_code = None
             user.verification_code_created_at = None
             user.verification_attempts = 0
-            await db.flush()
+            await db.commit()
             raise HTTPException(
                 status_code=status.HTTP_410_GONE,
                 detail="Reset code has expired. Please request a new one.",
             )
 
-    # Verify code
-    if user.verification_code != data.code:
+    # Verify code (constant-time comparison)
+    if not secrets.compare_digest(user.verification_code, data.code):
         user.verification_attempts += 1
-        await db.flush()
-        remaining = 5 - user.verification_attempts
+        await db.commit()
+        remaining = MAX_VERIFICATION_ATTEMPTS - user.verification_attempts
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid code. {remaining} attempts remaining.",
