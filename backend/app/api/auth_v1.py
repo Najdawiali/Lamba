@@ -29,7 +29,9 @@ from app.schemas.auth_v1 import (
 )
 from app.services.auth import hash_password, verify_password, create_access_token
 from app.services.password_policy import password_problem
+from app.config import settings
 from app.services.email_service import send_verification_email
+from app.services.whatsapp_service import normalize_jo_mobile, send_verification_code as send_whatsapp_code
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +58,44 @@ PHONE_SIGNUP_UNAVAILABLE = (
 )
 
 
+PHONE_INVALID = (
+    "رقم الهاتف غير صحيح. أدخل رقم هاتف أردني، مثل 0791234567.\n"
+    "Invalid phone number. Enter a Jordanian mobile number, like 0791234567."
+)
+CODE_SEND_FAILED = (
+    "تعذّر إرسال رمز التحقق عبر واتساب. تأكّد أن الرقم مسجّل على واتساب، أو سجّل بالبريد الإلكتروني.\n"
+    "We couldn't send the code on WhatsApp. Make sure this number uses WhatsApp, or sign up with your email."
+)
+RESEND_TOO_SOON = (
+    "الرجاء الانتظار دقيقة قبل طلب رمز جديد.\n"
+    "Please wait a minute before requesting a new code."
+)
+RESEND_COOLDOWN_SECONDS = 60  # each WhatsApp code costs money and counts toward Meta's daily limit
+
+
+def _within_cooldown(user: User) -> bool:
+    sent = user.verification_code_created_at
+    return bool(sent and (datetime.now(timezone.utc) - sent).total_seconds() < RESEND_COOLDOWN_SECONDS)
+
+
+def _identifier_filter(identifier: str):
+    """Match an account by email, or by phone in any typed form (0791..., +962 79..., ...)."""
+    identifier = identifier.strip()
+    phone = normalize_jo_mobile(identifier) if "@" not in identifier else None
+    return or_(User.email == identifier, User.phone_number == (phone or identifier))
+
+
+async def _deliver_code(user: User, code: str) -> str:
+    """Send a verification code on the account's channel. Returns the channel name.
+    Raises 503 when WhatsApp delivery fails, so the caller's transaction is rolled back."""
+    if user.email:
+        await send_verification_email(user.email, code)
+        return "email"
+    if not await send_whatsapp_code(user.phone_number, code):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=CODE_SEND_FAILED)
+    return "whatsapp"
+
+
 def _reject_weak_password(password: str, **personal) -> None:
     problem = password_problem(password, **personal)
     if problem:
@@ -75,17 +115,21 @@ async def signup(request: Request, data: SignUpRequest, db: AsyncSession = Depen
     Register a new customer or merchant.
 
     Accepts email OR phone_number. Generates a 6-digit verification code
-    and dispatches it via the appropriate channel (Email or SMS).
+    and dispatches it via the appropriate channel (email, or WhatsApp for phone numbers).
     The account is stored as unverified until /verify is called.
     """
-    # SMS delivery isn't implemented yet: a phone-only account could never be verified.
+    phone = None
     if data.phone_number and not data.email:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=PHONE_SIGNUP_UNAVAILABLE)
-    _reject_weak_password(data.password, email=data.email, name=data.full_name, phone=data.phone_number)
+        if not settings.phone_signup_enabled:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=PHONE_SIGNUP_UNAVAILABLE)
+        phone = normalize_jo_mobile(data.phone_number)
+        if not phone:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=PHONE_INVALID)
+    _reject_weak_password(data.password, email=data.email, name=data.full_name, phone=phone)
 
     # Check for existing account
     result = await db.execute(select(User).where(
-        User.email == data.email if data.email else User.phone_number == data.phone_number
+        User.email == data.email if data.email else User.phone_number == phone
     ))
     existing_user = result.scalar_one_or_none()
 
@@ -96,39 +140,33 @@ async def signup(request: Request, data: SignUpRequest, db: AsyncSession = Depen
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Account already exists. Please sign in.",
             )
-        else:
-            # Unverified account — regenerate OTP and resend
-            code = _generate_code()
-            existing_user.password_hash = hash_password(data.password)
-            existing_user.verification_code = code
-            existing_user.verification_code_created_at = datetime.now(timezone.utc)
-            existing_user.verification_attempts = 0
-            if data.full_name:
-                existing_user.full_name = data.full_name
-            await db.flush()
+        # Unverified account — regenerate the code and resend (with a cooldown)
+        if _within_cooldown(existing_user):
+            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=RESEND_TOO_SOON)
+        code = _generate_code()
+        existing_user.password_hash = hash_password(data.password)
+        existing_user.verification_code = code
+        existing_user.verification_code_created_at = datetime.now(timezone.utc)
+        existing_user.verification_attempts = 0
+        if data.full_name:
+            existing_user.full_name = data.full_name
+        await db.flush()
+        channel = await _deliver_code(existing_user, code)
+        return JSONResponse(
+            status_code=status.HTTP_201_CREATED,
+            content={
+                "user_id": str(existing_user.id),
+                "message": f"Verification code resent via {channel}.",
+                "channel": channel,
+            },
+        )
 
-            # Send new verification code
-            if data.email:
-                await send_verification_email(data.email, code)
-            elif data.phone_number:
-                logger.info(f"📱  MOCK SMS: Code {code} → {data.phone_number}")
-
-            return JSONResponse(
-                status_code=status.HTTP_201_CREATED,
-                content={
-                    "user_id": str(existing_user.id),
-                    "message": "Verification code resent. Please check your email.",
-                    "channel": "email" if data.email else "sms",
-                },
-            )
-
-    # Generate verification code
+    # Create the unverified user, then deliver the code. If WhatsApp delivery fails,
+    # _deliver_code raises and get_db rolls back, so no half-created account remains.
     code = _generate_code()
-
-    # Create unverified user
     user = User(
         email=data.email,
-        phone_number=data.phone_number,
+        phone_number=phone,
         password_hash=hash_password(data.password),
         user_type=data.user_type.value,
         full_name=data.full_name,
@@ -139,14 +177,7 @@ async def signup(request: Request, data: SignUpRequest, db: AsyncSession = Depen
     )
     db.add(user)
     await db.flush()
-
-    # Send verification code via configured provider (resend or mock)
-    channel = "email" if data.email else "sms"
-    if data.email:
-        await send_verification_email(data.email, code)
-    elif data.phone_number:
-        # SMS delivery not yet implemented — log to console
-        logger.info(f"📱  MOCK SMS: Code {code} → {data.phone_number}")
+    channel = await _deliver_code(user, code)
 
     return SignUpResponse(
         user_id=user.id,
@@ -259,22 +290,17 @@ async def resend_code(request: Request, data: ResendCodeRequest, db: AsyncSessio
 
     if user.verified:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Account is already verified")
+    if _within_cooldown(user):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=RESEND_TOO_SOON)
 
     code = _generate_code()
     user.verification_code = code
     user.verification_code_created_at = datetime.now(timezone.utc)
     user.verification_attempts = 0
     await db.flush()
+    channel = await _deliver_code(user, code)
 
-    if user.email:
-        await send_verification_email(user.email, code)
-    elif user.phone_number:
-        logger.info(f"📱  MOCK SMS: Code {code} → {user.phone_number}")
-
-    return {
-        "message": "Verification code resent",
-        "channel": "email" if user.email else "sms",
-    }
+    return {"message": "Verification code resent", "channel": channel}
 
 
 # ── POST /forgot-password ──────────────────────────────────────
@@ -282,25 +308,28 @@ async def resend_code(request: Request, data: ResendCodeRequest, db: AsyncSessio
 @limiter.limit("3/minute")
 async def forgot_password(request: Request, data: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
     """
-    Send a password reset code to the user's email.
-    Always returns success to prevent email enumeration.
+    Send a password reset code by email, or on WhatsApp for phone accounts.
+    The `email` field accepts an email address or a phone number.
+    Always returns the same response, so it can't be used to discover accounts.
     """
-    result = await db.execute(select(User).where(User.email == data.email))
+    result = await db.execute(select(User).where(_identifier_filter(data.email)))
     user = result.scalar_one_or_none()
 
-    if user and user.verified:
+    if user and user.verified and not _within_cooldown(user):
         code = _generate_code()
         user.verification_code = code
         user.verification_code_created_at = datetime.now(timezone.utc)
         user.verification_attempts = 0
         await db.flush()
-        await send_verification_email(user.email, code)
-        logger.info(f"[AUTH] Password reset code sent to {data.email}")
+        try:
+            await _deliver_code(user, code)
+            logger.info("[AUTH] Password reset code sent to user %s", user.id)
+        except HTTPException:
+            logger.warning("[AUTH] Password reset code could not be delivered to user %s", user.id)
     else:
-        logger.info(f"[AUTH] Password reset requested for unknown/unverified email: {data.email}")
+        logger.info("[AUTH] Password reset requested for an unknown, unverified or cooling-down account")
 
-    # Always return success to prevent email enumeration
-    return {"message": "If an account exists with this email, a reset code has been sent."}
+    return {"message": "If an account exists, a reset code has been sent."}
 
 
 # ── POST /reset-password ───────────────────────────────────────
@@ -311,8 +340,9 @@ async def reset_password(request: Request, data: ResetPasswordRequest, db: Async
     Reset password using the code sent to email.
     """
     # Checked before the code, so a weak choice doesn't use up one of the 5 attempts
-    _reject_weak_password(data.new_password, email=data.email)
-    result = await db.execute(select(User).where(User.email == data.email))
+    _reject_weak_password(data.new_password, email=data.email if "@" in data.email else None,
+                          phone=normalize_jo_mobile(data.email))
+    result = await db.execute(select(User).where(_identifier_filter(data.email)))
     user = result.scalar_one_or_none()
 
     if not user:
@@ -386,12 +416,7 @@ async def signin(request: Request, data: SignInRequest, db: AsyncSession = Depen
     """
     # Resolve user by email or phone
     result = await db.execute(
-        select(User).where(
-            or_(
-                User.email == data.email_or_phone,
-                User.phone_number == data.email_or_phone,
-            )
-        )
+        select(User).where(_identifier_filter(data.email_or_phone))
     )
     user = result.scalar_one_or_none()
 
@@ -407,7 +432,7 @@ async def signin(request: Request, data: SignInRequest, db: AsyncSession = Depen
             detail={
                 "message": "Unverified Account. Please complete verification first.",
                 "user_id": str(user.id),
-                "channel": "sms" if user.phone_number else "email",
+                "channel": "email" if user.email else "whatsapp",
                 "contact": user.phone_number or user.email,
                 "user_type": user.user_type,
             },

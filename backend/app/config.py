@@ -70,6 +70,14 @@ class Settings(BaseSettings):
     email_from: str = "Lamba <noreply@lambajo.com>"
     support_email: str = ""  # shown on /account-deletion; set SUPPORT_EMAIL in backend/.env
 
+        # WhatsApp verification codes (Meta Cloud API); token and ids live in backend/.env
+    whatsapp_access_token: str = ""
+    whatsapp_phone_number_id: str = ""
+    whatsapp_template_name: str = "lamba_verification"
+    whatsapp_template_lang: str = "ar"
+    whatsapp_api_version: str = "v25.0"
+    phone_signup_enabled: bool = False
+    
     # ── CLIP Model (image search — disabled in text-only phase) ──
     clip_model_name: str = "clip-ViT-B-32"
     enable_image_search: bool = False  # When False, /image route returns 410 Gone
