@@ -1,5 +1,5 @@
 /**
- * Registration Screen — Multi-channel Sign Up (Email / Phone).
+ * Registration Screen — sign up with email (and phone, when PHONE_AUTH_ENABLED is on).
  * All users sign up as customers; merchant privileges are granted upon store creation.
  */
 
@@ -16,6 +16,13 @@ import { signUp } from '../../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useThemeColors, useTheme } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
+import { PHONE_AUTH_ENABLED } from '../../constants/features';
+
+// Mirrors the server's password policy for instant feedback. The server stays the
+// authority (it also rejects common passwords and obvious patterns).
+const MIN_PASSWORD_LENGTH = 8;
+const ENGLISH_ONLY = /^[\x20-\x7E]*$/;  // printable ASCII: English letters, digits, symbols, space
+const RULE_MET = '#43A047';
 
 export default function RegisterScreen() {
   const Colors = useThemeColors();
@@ -33,6 +40,9 @@ export default function RegisterScreen() {
 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  const pwLongEnough = password.length >= MIN_PASSWORD_LENGTH;
+  const pwEnglishOnly = ENGLISH_ONLY.test(password);
 
   const validateEmail = (val: string) => {
     const reg = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -66,8 +76,15 @@ export default function RegisterScreen() {
       }
     }
 
-    if (password.length < 8) {
+    if (!pwLongEnough) {
       Alert.alert(t('common.error', 'Error'), t('register.password_too_short', 'Password must be at least 8 characters'));
+      return;
+    }
+    if (!pwEnglishOnly) {
+      Alert.alert(
+        t('common.error', 'Error'),
+        t('register.password_english_only', 'Password can only contain English letters, numbers and symbols.'),
+      );
       return;
     }
 
@@ -94,9 +111,14 @@ export default function RegisterScreen() {
         },
       });
     } catch (err: any) {
+      const detail = err?.response?.data?.detail;
       Alert.alert(
         t('register.registration_failed', 'Registration Failed'),
-        err?.response?.data?.detail || t('common.error', 'An error occurred during registration. Please try again.')
+        !err?.response
+          ? t('login.network_error', "Couldn't reach the server. Check your internet connection and try again.")
+          : typeof detail === 'string'
+            ? detail  // the server's sign-up messages are bilingual
+            : t('common.error', 'An error occurred during registration. Please try again.'),
       );
     } finally {
       setLoading(false);
@@ -223,6 +245,19 @@ export default function RegisterScreen() {
       fontSize: 16,
       fontWeight: '800',
     },
+    rules: {
+      marginTop: -Spacing.xs,
+      marginBottom: Spacing.sm,
+    },
+    ruleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 4,
+    },
+    ruleText: {
+      ...Typography.bodySmall,
+      marginStart: 6,
+    },
     linkContainer: {
       marginTop: Spacing.lg,
       alignItems: 'center',
@@ -285,7 +320,8 @@ export default function RegisterScreen() {
         </View>
 
         <View style={styles.card}>
-          {/* Email / Phone Tabs */}
+          {/* Email / Phone Tabs (only when phone sign-up is available) */}
+          {PHONE_AUTH_ENABLED && (
           <View style={styles.tabContainer}>
             <TouchableOpacity
               style={[styles.tabButton, activeTab === 'email' && styles.tabButtonActive]}
@@ -307,6 +343,7 @@ export default function RegisterScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+          )}
 
           {/* Form Inputs */}
           {activeTab === 'email' ? (
@@ -314,13 +351,14 @@ export default function RegisterScreen() {
               <Ionicons name="mail-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder={t('login.email_placeholder', 'name@example.com')}
+                placeholder={t('register.email_placeholder', 'Email address')}
                 placeholderTextColor={Colors.textMuted}
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoComplete="email"
+                autoCorrect={false}
               />
             </View>
           ) : (
@@ -349,11 +387,31 @@ export default function RegisterScreen() {
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
               autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="new-password"
+              textContentType="newPassword"
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)} activeOpacity={0.6}>
               <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color={Colors.textMuted} />
             </TouchableOpacity>
           </View>
+
+          {/* Live password rules (shown once typing starts) */}
+          {password.length > 0 && (
+            <View style={styles.rules}>
+              {[
+                { ok: pwLongEnough, key: 'register.rule_min_length', fallback: 'At least 8 characters' },
+                { ok: pwEnglishOnly, key: 'register.rule_english_only', fallback: 'English letters, numbers and symbols only' },
+              ].map(rule => (
+                <View key={rule.key} style={styles.ruleRow}>
+                  <Ionicons name={rule.ok ? 'checkmark-circle' : 'close-circle'} size={16} color={rule.ok ? RULE_MET : Colors.error} />
+                  <Text style={[styles.ruleText, { color: rule.ok ? RULE_MET : Colors.textSecondary }]}>
+                    {t(rule.key, rule.fallback)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
 
           {/* Submit Button */}
           <TouchableOpacity

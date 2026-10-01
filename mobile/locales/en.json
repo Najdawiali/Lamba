@@ -46,7 +46,7 @@
   },
   "login": {
     "welcome_back": "Welcome back",
-    "email_placeholder": "Email address or phone",
+    "email_placeholder": "Email address",
     "password_placeholder": "Password",
     "sign_in": "Sign In",
     "no_account": "Don't have an account?",
@@ -64,7 +64,10 @@
     "forgot_password": "Forgot password?",
     "role_mismatch_customer": "This account is registered as a Customer. Please use the Shopper sign-in.",
     "role_mismatch_merchant": "This account is registered as a Merchant. Please use the Seller sign-in.",
-    "invalid_credentials": "Invalid email/phone or password. Please try again."
+    "invalid_credentials": "Invalid email/phone or password. Please try again.",
+    "invalid_credentials_email": "Incorrect email or password. Please try again.",
+    "too_many_attempts": "Too many attempts. Please wait a minute and try again.",
+    "network_error": "Couldn't reach the server. Check your internet connection and try again."
   },
   "register": {
     "create_account": "Create Account",
@@ -86,6 +89,9 @@
     "invalid_email": "Please enter a valid email address",
     "invalid_phone": "Please enter a valid phone number (8-15 digits)",
     "password_too_short": "Password must be at least 8 characters",
+    "password_english_only": "Password can only contain English letters, numbers and symbols.",
+    "rule_min_length": "At least 8 characters",
+    "rule_english_only": "English letters, numbers and symbols only",
     "seller_title": "Create Seller Account",
     "shopper_title": "Create Shopper Account",
     "seller_account": "Seller Account",

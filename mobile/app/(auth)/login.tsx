@@ -1,5 +1,5 @@
 /**
- * Login Screen — Unified Multi-channel Sign In (Email / Phone).
+ * Login Screen — sign in with email (or phone, when PHONE_AUTH_ENABLED is on).
  * All users navigate to the customer home after sign in.
  * Merchants access their store dashboard via Profile -> "إدارة متجري".
  */
@@ -18,6 +18,7 @@ import { signIn } from '../../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useThemeColors, useTheme } from '../../context/ThemeContext';
 import { t, toggleLanguage, i18n } from '../../services/i18n';
+import { PHONE_AUTH_ENABLED } from '../../constants/features';
 
 export default function LoginScreen() {
   const Colors = useThemeColors();
@@ -55,6 +56,7 @@ export default function LoginScreen() {
 
   // Determine input icon dynamically
   const getUsernameIcon = (): any => {
+    if (!PHONE_AUTH_ENABLED) return 'mail-outline';
     const val = emailOrPhone.trim();
     if (!val) return 'person-outline';
     if (val.includes('@')) return 'mail-outline';
@@ -95,10 +97,23 @@ export default function LoginScreen() {
         }
       }
 
-      setErrorMessage(
-        err?.response?.data?.detail ||
-        t('login.invalid_credentials', 'Invalid email/phone or password. Please try again.')
-      );
+      // Show a translated message for the expected failures rather than the
+      // server's raw English text (e.g. "Invalid Credentials").
+      const status = err?.response?.status;
+      const detail = err?.response?.data?.detail;
+      if (!err?.response) {
+        setErrorMessage(t('login.network_error', "Couldn't reach the server. Check your internet connection and try again."));
+      } else if (status === 401) {
+        setErrorMessage(
+          PHONE_AUTH_ENABLED
+            ? t('login.invalid_credentials', 'Invalid email/phone or password. Please try again.')
+            : t('login.invalid_credentials_email', 'Incorrect email or password. Please try again.')
+        );
+      } else if (status === 429) {
+        setErrorMessage(t('login.too_many_attempts', 'Too many attempts. Please wait a minute and try again.'));
+      } else {
+        setErrorMessage(typeof detail === 'string' ? detail : t('common.error', 'Something went wrong. Please try again.'));
+      }
     } finally {
       setLoading(false);
     }
@@ -359,7 +374,7 @@ export default function LoginScreen() {
           </View>
         )}
 
-        {/* Email or Phone Input */}
+        {/* Email (or Phone) Input */}
         <View style={styles.inputContainer}>
           <Ionicons
             name={getUsernameIcon()}
@@ -369,16 +384,22 @@ export default function LoginScreen() {
           />
           <TextInput
             style={styles.input}
-            placeholder={t('auth.email_or_phone', 'البريد الإلكتروني أو رقم الهاتف')}
+            placeholder={
+              PHONE_AUTH_ENABLED
+                ? t('auth.email_or_phone', 'Email or phone number')
+                : t('auth.email', 'Email')
+            }
             placeholderTextColor={Colors.textMuted}
             value={emailOrPhone}
             onChangeText={(val) => {
               setEmailOrPhone(val);
               if (errorMessage) setErrorMessage(null);
             }}
-            keyboardType="default"
+            keyboardType={PHONE_AUTH_ENABLED ? 'default' : 'email-address'}
             autoCapitalize="none"
+            autoCorrect={false}
             autoComplete="username"
+            textContentType="username"
           />
         </View>
 
@@ -396,6 +417,9 @@ export default function LoginScreen() {
             }}
             secureTextEntry={!showPassword}
             autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="current-password"
+            textContentType="password"
           />
           <TouchableOpacity onPress={() => setShowPassword(!showPassword)} activeOpacity={0.6}>
             <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color={Colors.textMuted} />
