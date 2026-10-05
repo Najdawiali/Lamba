@@ -83,6 +83,9 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
 - Type check: `cd mobile; npx tsc --noEmit` must print nothing.
 - APK: `cd mobile\android; .\gradlew.bat assembleRelease --no-daemon`
   -> `app\build\outputs\apk\release\app-release.apk`. Google Play needs an .aab (`bundleRelease`).
+- Release builds inline `EXPO_PUBLIC_API_URL` from the git-ignored `mobile/.env`, which must hold
+  `EXPO_PUBLIC_API_URL=https://api.lambajo.com`. If it is missing, the app falls back to
+  `http://localhost:8000`. `scripts/start-mobile.js` never touches this file.
 - Add native packages with `npx expo install <pkg>` (SDK-compatible versions), then rebuild.
 - Windows long paths: `LongPathsEnabled=1`, and `android/app/build.gradle` (defaultConfig) points
   CMake at ninja 1.12 from Android SDK CMake 3.31.6. Both are required for New Architecture native
