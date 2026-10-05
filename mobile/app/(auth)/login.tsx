@@ -4,11 +4,10 @@
  * Merchants access their store dashboard via Profile -> "إدارة متجري".
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Image, Dimensions,
-  ScrollView,
+  ActivityIndicator, Alert, Image, Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -19,6 +18,8 @@ import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/them
 import { useThemeColors, useTheme } from '../../context/ThemeContext';
 import { t, toggleLanguage, i18n } from '../../services/i18n';
 import { PHONE_AUTH_ENABLED } from '../../constants/features';
+import KeyboardForm from '../../components/KeyboardForm';
+import { localizeServerMessage } from '../../utils/serverMessage';
 
 export default function LoginScreen() {
   const Colors = useThemeColors();
@@ -34,6 +35,7 @@ export default function LoginScreen() {
 
   const [emailOrPhone, setEmailOrPhone] = useState('');
   const [password, setPassword] = useState('');
+  const passwordRef = useRef<TextInput>(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -112,7 +114,7 @@ export default function LoginScreen() {
       } else if (status === 429) {
         setErrorMessage(t('login.too_many_attempts', 'Too many attempts. Please wait a minute and try again.'));
       } else {
-        setErrorMessage(typeof detail === 'string' ? detail : t('common.error', 'Something went wrong. Please try again.'));
+        setErrorMessage(localizeServerMessage(detail, !!isAr, t('common.error', 'Something went wrong. Please try again.')));
       }
     } finally {
       setLoading(false);
@@ -294,11 +296,7 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }} edges={['top']}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 20}
-      >
+      <View style={{ flex: 1 }}>
         <View style={styles.glowOrb1} />
         <View style={styles.glowOrb2} />
 
@@ -316,11 +314,7 @@ export default function LoginScreen() {
           <View style={{ width: 40 }} />
         </View>
 
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+        <KeyboardForm contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
         <TouchableOpacity
@@ -400,6 +394,9 @@ export default function LoginScreen() {
             autoCorrect={false}
             autoComplete="username"
             textContentType="username"
+            returnKeyType="next"
+            onSubmitEditing={() => passwordRef.current?.focus()}
+            submitBehavior="submit"
           />
         </View>
 
@@ -407,6 +404,7 @@ export default function LoginScreen() {
         <View style={styles.inputContainer}>
           <Ionicons name="lock-closed-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
           <TextInput
+            ref={passwordRef}
             style={styles.input}
             placeholder={t('auth.password_placeholder', 'Password')}
             placeholderTextColor={Colors.textMuted}
@@ -420,6 +418,8 @@ export default function LoginScreen() {
             autoCorrect={false}
             autoComplete="current-password"
             textContentType="password"
+            returnKeyType="done"
+            onSubmitEditing={handleLogin}
           />
           <TouchableOpacity onPress={() => setShowPassword(!showPassword)} activeOpacity={0.6}>
             <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color={Colors.textMuted} />
@@ -461,8 +461,8 @@ export default function LoginScreen() {
           </Text>
         </TouchableOpacity>
       </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardForm>
+    </View>
   </SafeAreaView>
   );
 }

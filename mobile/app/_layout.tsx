@@ -8,6 +8,7 @@ import { Platform, I18nManager } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
@@ -104,6 +105,10 @@ function AppShell() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Tracks the real keyboard position (Android 16 is always edge-to-edge, where the
+          old automatic resize no longer works). The app already handles system-bar insets
+          with safe-area views, so the provider must not add its own padding as well. */}
+      <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
       <QueryClientProvider client={queryClient}>
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <Stack
@@ -118,6 +123,7 @@ function AppShell() {
           <Stack.Screen name="(merchant)" options={{ headerShown: false }} />
         </Stack>
       </QueryClientProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

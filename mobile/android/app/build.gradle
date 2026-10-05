@@ -96,6 +96,19 @@ android {
         versionName "1.0.0"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
+
+        // Windows: build native (C++) code with the ninja from CMake 3.31.6, which supports
+        // paths longer than 260 characters (needed by New Architecture libraries such as
+        // react-native-keyboard-controller). Skipped automatically on machines without it.
+        def longPathNinja = new File(android.sdkDirectory, "cmake/3.31.6/bin/ninja.exe")
+        if (longPathNinja.exists()) {
+            externalNativeBuild {
+                cmake {
+                    arguments "-DCMAKE_MAKE_PROGRAM=${longPathNinja.absolutePath.replace('\\', '/')}",
+                              "-DCMAKE_OBJECT_PATH_MAX=1024"
+                }
+            }
+        }
     }
     signingConfigs {
         debug {

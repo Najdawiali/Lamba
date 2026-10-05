@@ -1,7 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  Alert, ActivityIndicator, KeyboardAvoidingView, ScrollView, Platform,
+  Alert, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,10 @@ import { useThemeColors } from '../../context/ThemeContext';
 import { Spacing, BorderRadius, Typography } from '../../constants/theme';
 import { t, i18n } from '../../services/i18n';
 import { forgotPassword, resetPassword } from '../../services/api';
+import KeyboardForm from '../../components/KeyboardForm';
+import OtpInput from '../../components/auth/OtpInput';
+import PasswordRules, { checkPassword } from '../../components/auth/PasswordRules';
+import { messageFromError } from '../../utils/serverMessage';
 
 export default function ForgotPasswordScreen() {
   const Colors = useThemeColors();
@@ -18,12 +22,13 @@ export default function ForgotPasswordScreen() {
 
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState('');
-  const [code, setCode] = useState(['', '', '', '', '', '']);
+  const [code, setCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const codeRefs = useRef<(TextInput | null)[]>([]);
+
+  const networkText = t('login.network_error', "Couldn't reach the server. Check your internet connection and try again.");
 
   const handleSendCode = async () => {
     if (!email.trim()) {
@@ -39,23 +44,28 @@ export default function ForgotPasswordScreen() {
       );
       setStep('code');
     } catch (err: any) {
-      Alert.alert(t('common.error', 'Error'), err?.response?.data?.detail || t('auth.request_failed', 'Request failed'));
+      Alert.alert(t('common.error', 'Error'), messageFromError(err, !!isAr, { network: networkText, fallback: t('auth.request_failed', 'Request failed') }));
     } finally {
       setLoading(false);
     }
   };
 
   const handleResetPassword = async () => {
-    const fullCode = code.join('');
+    const fullCode = code;
     if (fullCode.length !== 6) {
       Alert.alert(t('common.error', 'Error'), t('auth.enter_code', 'Please enter the 6-digit code'));
       return;
     }
-    if (newPassword.length < 8) {
+    const pw = checkPassword(newPassword, confirmPassword);
+    if (!pw.longEnough) {
       Alert.alert(t('common.error', 'Error'), t('auth.password_min', 'Password must be at least 8 characters'));
       return;
     }
-    if (newPassword !== confirmPassword) {
+    if (!pw.englishOnly) {
+      Alert.alert(t('common.error', 'Error'), t('register.password_english_only', 'Password can only contain English letters, numbers and symbols.'));
+      return;
+    }
+    if (!pw.matches) {
       Alert.alert(t('common.error', 'Error'), t('auth.password_mismatch', 'Passwords do not match'));
       return;
     }
@@ -68,28 +78,15 @@ export default function ForgotPasswordScreen() {
         [{ text: t('common.ok', 'OK'), onPress: () => router.replace('/(auth)/login') }],
       );
     } catch (err: any) {
-      Alert.alert(t('common.error', 'Error'), err?.response?.data?.detail || t('auth.reset_failed', 'Reset failed'));
+      Alert.alert(t('common.error', 'Error'), messageFromError(err, !!isAr, { network: networkText, fallback: t('auth.reset_failed', 'Reset failed') }));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCodeInput = (text: string, index: number) => {
-    const newCode = [...code];
-    newCode[index] = text;
-    setCode(newCode);
-    if (text && index < 5) {
-      codeRefs.current[index + 1]?.focus();
-    }
-  };
-
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: Colors.background }]} edges={['top']}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 20}
-      >
+      <View style={{ flex: 1 }}>
         {/* RTL-Safe Header */}
         <View style={{
           flexDirection: 'row',
@@ -104,11 +101,7 @@ export default function ForgotPasswordScreen() {
           <View style={{ width: 40 }} />
         </View>
 
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+        <KeyboardForm contentContainerStyle={styles.scroll}>
 
           <View style={styles.header}>
             <Ionicons name="lock-closed-outline" size={48} color="#FF8F00" />
@@ -134,6 +127,10 @@ export default function ForgotPasswordScreen() {
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="email"
+                returnKeyType="send"
+                onSubmitEditing={handleSendCode}
               />
               <TouchableOpacity
                 style={[styles.button, { backgroundColor: '#FF8F00' }, loading && { opacity: 0.5 }]}
@@ -150,24 +147,7 @@ export default function ForgotPasswordScreen() {
             </View>
           ) : (
             <View style={styles.form}>
-              <View style={styles.codeRow}>
-                {code.map((digit, i) => (
-                  <TextInput
-                    key={i}
-                    ref={(r) => { codeRefs.current[i] = r; }}
-                    style={[styles.codeInput, {
-                      backgroundColor: Colors.surface,
-                      color: Colors.textPrimary,
-                      borderColor: digit ? '#FF8F00' : Colors.border,
-                    }]}
-                    value={digit}
-                    onChangeText={(text) => handleCodeInput(text, i)}
-                    keyboardType="number-pad"
-                    maxLength={1}
-                    textAlign="center"
-                  />
-                ))}
-              </View>
+              <OtpInput value={code} onChange={setCode} autoFocus editable={!loading} />
 
               <View style={[styles.inputWrapper, { backgroundColor: Colors.surface, borderColor: Colors.border }]}>
                 <TextInput
@@ -177,6 +157,10 @@ export default function ForgotPasswordScreen() {
                   value={newPassword}
                   onChangeText={setNewPassword}
                   secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="new-password"
+                  textContentType="newPassword"
                 />
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                   <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color={Colors.textMuted} />
@@ -191,8 +175,16 @@ export default function ForgotPasswordScreen() {
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
                   secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="new-password"
+                  textContentType="newPassword"
+                  returnKeyType="done"
+                  onSubmitEditing={handleResetPassword}
                 />
               </View>
+
+              <PasswordRules password={newPassword} confirm={confirmPassword} />
 
               <TouchableOpacity
                 style={[styles.button, { backgroundColor: '#FF8F00' }, loading && { opacity: 0.5 }]}
@@ -208,8 +200,8 @@ export default function ForgotPasswordScreen() {
               </TouchableOpacity>
             </View>
           )}
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardForm>
+      </View>
     </SafeAreaView>
   );
 }
@@ -239,19 +231,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: Spacing.lg,
     fontSize: 16,
-  },
-  codeRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: Spacing.sm,
-  },
-  codeInput: {
-    width: 46,
-    height: 54,
-    borderWidth: 1.5,
-    borderRadius: BorderRadius.md,
-    fontSize: 22,
-    fontWeight: '700',
   },
   button: {
     backgroundColor: '#FF8F00',

@@ -99,6 +99,8 @@ async def _deliver_code(user: User, code: str) -> str:
 def _reject_weak_password(password: str, **personal) -> None:
     problem = password_problem(password, **personal)
     if problem:
+        # Log which rule refused it (never the password), so refusals can be diagnosed
+        logger.info("New password rejected by policy rule: %s", problem[0])
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=problem[1])
 
 

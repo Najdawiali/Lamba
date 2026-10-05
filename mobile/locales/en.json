@@ -92,6 +92,7 @@
     "password_english_only": "Password can only contain English letters, numbers and symbols.",
     "rule_min_length": "At least 8 characters",
     "rule_english_only": "English letters, numbers and symbols only",
+    "rule_match": "Passwords match",
     "seller_title": "Create Seller Account",
     "shopper_title": "Create Shopper Account",
     "seller_account": "Seller Account",

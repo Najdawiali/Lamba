@@ -1,13 +1,12 @@
 /**
- * Verification Screen — Enter a 6-digit code.
- * Implements a premium, bug-free grid entry interface using a hidden TextInput overlay.
- * Includes a real-time 60-second countdown timer for resends.
+ * Verification Screen — enter the 6-digit code.
+ * Uses the shared OtpInput (one real input over the boxes, with paste and autofill)
+ * and a keyboard-aware container. 60-second countdown before a resend.
  */
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, Alert, ActivityIndicator
+  View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -16,6 +15,9 @@ import { verifyCode, resendCode } from '../../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
+import KeyboardForm from '../../components/KeyboardForm';
+import OtpInput from '../../components/auth/OtpInput';
+import { messageFromError } from '../../utils/serverMessage';
 
 export default function VerifyScreen() {
   const Colors = useThemeColors();
@@ -23,10 +25,10 @@ export default function VerifyScreen() {
 
   const styles = useMemo(() => StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: Colors.background,
+    flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.xl,
   },
   glowOrb1: {
     position: 'absolute',
@@ -83,45 +85,8 @@ export default function VerifyScreen() {
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  boxesContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  codeWrapper: {
     marginBottom: Spacing.xl,
-    width: '100%',
-  },
-  box: {
-    width: 44,
-    height: 52,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  boxFilled: {
-    borderColor: 'rgba(255, 143, 0, 0.4)',
-  },
-  boxFocused: {
-    borderColor: '#FF8F00',
-    backgroundColor: Colors.surfaceElevated,
-  },
-  boxText: {
-    ...Typography.h2,
-    color: Colors.textPrimary,
-  },
-  cursor: {
-    position: 'absolute',
-    width: 2,
-    height: 20,
-    backgroundColor: '#FF8F00',
-  },
-  hiddenInput: {
-    position: 'absolute',
-    width: 1,
-    height: 1,
-    opacity: 0,
   },
   button: {
     backgroundColor: '#FF8F00',
@@ -188,9 +153,6 @@ export default function VerifyScreen() {
   const [loading, setLoading] = useState(false);
   const [verified, setVerified] = useState(false);
   const [resendTimer, setResendTimer] = useState(60);
-  const [isFocused, setIsFocused] = useState(false);
-  
-  const textInputRef = useRef<TextInput>(null);
   const CODE_LENGTH = 6;
 
   // Countdown timer logic
@@ -248,14 +210,17 @@ export default function VerifyScreen() {
     } catch (err: any) {
       Alert.alert(
         t('verify.verification_failed'),
-        err?.response?.data?.detail || t('verify.invalid_code')
+        messageFromError(err, !!isAr, {
+          network: t('login.network_error', "Couldn't reach the server. Check your internet connection and try again."),
+          fallback: t('verify.invalid_code'),
+        }),
       );
       // Clear code on failure to allow retry
       setCode('');
     } finally {
       setLoading(false);
     }
-  }, [code, loading, verified, userId, contact, router]);
+  }, [code, loading, verified, userId, contact, router, isAr]);
 
   // Trigger verify automatically when all 6 digits are typed
   useEffect(() => {
@@ -276,35 +241,12 @@ export default function VerifyScreen() {
     } catch (err: any) {
       Alert.alert(
         t('common.error', 'Error'),
-        err?.response?.data?.detail || t('auth.resend_failed', 'Failed to resend code. Please try again.'),
+        messageFromError(err, !!isAr, {
+          network: t('login.network_error', "Couldn't reach the server. Check your internet connection and try again."),
+          fallback: t('auth.resend_failed', 'Failed to resend code. Please try again.'),
+        }),
       );
     }
-  };
-
-  const handleBoxPress = () => {
-    textInputRef.current?.focus();
-  };
-
-  // Render individual code box
-  const renderCodeBox = (index: number) => {
-    const char = code[index] || '';
-    const showFocusBorder = isFocused && code.length === index;
-
-    return (
-      <TouchableOpacity
-        key={index}
-        style={[
-          styles.box,
-          char ? styles.boxFilled : null,
-          showFocusBorder ? styles.boxFocused : null
-        ]}
-        onPress={handleBoxPress}
-        activeOpacity={1}
-      >
-        <Text style={styles.boxText}>{char}</Text>
-        {showFocusBorder && <View style={styles.cursor} />}
-      </TouchableOpacity>
-    );
   };
 
   return (
@@ -323,18 +265,17 @@ export default function VerifyScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <View style={{ flex: 1 }}>
         {/* Background glow effects */}
         <View style={styles.glowOrb1} />
         <View style={styles.glowOrb2} />
 
+      <KeyboardForm contentContainerStyle={styles.container}>
+
       <View style={styles.header}>
         <View style={styles.iconContainer}>
           <Ionicons
-            name={channel === 'sms' ? 'chatbubble-ellipses-outline' : 'mail-open-outline'}
+            name={channel === 'email' ? 'mail-open-outline' : 'chatbubble-ellipses-outline'}
             size={40}
             color={Colors.secondary}
           />
@@ -345,29 +286,15 @@ export default function VerifyScreen() {
       </View>
 
       <View style={styles.card}>
-        {/* Hidden inputs overlay method */}
-        <TouchableOpacity
-          style={styles.boxesContainer}
-          onPress={handleBoxPress}
-          activeOpacity={1}
-        >
-          {Array.from({ length: CODE_LENGTH }).map((_, i) => renderCodeBox(i))}
-        </TouchableOpacity>
-
-        {/* Real hidden TextInput */}
-        <TextInput
-          ref={textInputRef}
-          style={styles.hiddenInput}
-          value={code}
-          onChangeText={setCode}
-          maxLength={CODE_LENGTH}
-          keyboardType="number-pad"
-          textContentType="oneTimeCode"
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          caretHidden
-          autoFocus
-        />
+        <View style={styles.codeWrapper}>
+          <OtpInput
+            value={code}
+            onChange={setCode}
+            length={CODE_LENGTH}
+            autoFocus
+            editable={!loading && !verified}
+          />
+        </View>
 
         {/* Verify Action Button (Fallback/Backup) */}
         <TouchableOpacity
@@ -402,7 +329,8 @@ export default function VerifyScreen() {
           )}
         </View>
       </View>
-    </KeyboardAvoidingView>
+      </KeyboardForm>
+      </View>
   </SafeAreaView>
   );
 

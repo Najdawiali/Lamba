@@ -3,11 +3,10 @@
  * All users sign up as customers; merchant privileges are granted upon store creation.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, ScrollView,
-  Image, Dimensions,
+  Alert, ActivityIndicator, Image, Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -17,12 +16,9 @@ import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/them
 import { useThemeColors, useTheme } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
 import { PHONE_AUTH_ENABLED } from '../../constants/features';
-
-// Mirrors the server's password policy for instant feedback. The server stays the
-// authority (it also rejects common passwords and obvious patterns).
-const MIN_PASSWORD_LENGTH = 8;
-const ENGLISH_ONLY = /^[\x20-\x7E]*$/;  // printable ASCII: English letters, digits, symbols, space
-const RULE_MET = '#43A047';
+import KeyboardForm from '../../components/KeyboardForm';
+import PasswordRules, { checkPassword } from '../../components/auth/PasswordRules';
+import { messageFromError } from '../../utils/serverMessage';
 
 export default function RegisterScreen() {
   const Colors = useThemeColors();
@@ -37,12 +33,14 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const passwordRef = useRef<TextInput>(null);
+  const confirmRef = useRef<TextInput>(null);
 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  const pwLongEnough = password.length >= MIN_PASSWORD_LENGTH;
-  const pwEnglishOnly = ENGLISH_ONLY.test(password);
+  const pw = checkPassword(password, confirmPassword);
 
   const validateEmail = (val: string) => {
     const reg = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -76,15 +74,19 @@ export default function RegisterScreen() {
       }
     }
 
-    if (!pwLongEnough) {
+    if (!pw.longEnough) {
       Alert.alert(t('common.error', 'Error'), t('register.password_too_short', 'Password must be at least 8 characters'));
       return;
     }
-    if (!pwEnglishOnly) {
+    if (!pw.englishOnly) {
       Alert.alert(
         t('common.error', 'Error'),
         t('register.password_english_only', 'Password can only contain English letters, numbers and symbols.'),
       );
+      return;
+    }
+    if (!pw.matches) {
+      Alert.alert(t('common.error', 'Error'), t('auth.password_mismatch', 'Passwords do not match'));
       return;
     }
 
@@ -111,14 +113,12 @@ export default function RegisterScreen() {
         },
       });
     } catch (err: any) {
-      const detail = err?.response?.data?.detail;
       Alert.alert(
         t('register.registration_failed', 'Registration Failed'),
-        !err?.response
-          ? t('login.network_error', "Couldn't reach the server. Check your internet connection and try again.")
-          : typeof detail === 'string'
-            ? detail  // the server's sign-up messages are bilingual
-            : t('common.error', 'An error occurred during registration. Please try again.'),
+        messageFromError(err, !!isAr, {
+          network: t('login.network_error', "Couldn't reach the server. Check your internet connection and try again."),
+          fallback: t('common.error', 'An error occurred during registration. Please try again.'),
+        }),
       );
     } finally {
       setLoading(false);
@@ -245,19 +245,6 @@ export default function RegisterScreen() {
       fontSize: 16,
       fontWeight: '800',
     },
-    rules: {
-      marginTop: -Spacing.xs,
-      marginBottom: Spacing.sm,
-    },
-    ruleRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 4,
-    },
-    ruleText: {
-      ...Typography.bodySmall,
-      marginStart: 6,
-    },
     linkContainer: {
       marginTop: Spacing.lg,
       alignItems: 'center',
@@ -276,10 +263,7 @@ export default function RegisterScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }} edges={['top']}>
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <View style={styles.container}>
         <View style={styles.glowOrb1} />
         <View style={styles.glowOrb2} />
 
@@ -297,7 +281,7 @@ export default function RegisterScreen() {
           <View style={{ width: 40 }} />
         </View>
 
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <KeyboardForm contentContainerStyle={styles.scroll}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
@@ -359,6 +343,9 @@ export default function RegisterScreen() {
                 autoCapitalize="none"
                 autoComplete="email"
                 autoCorrect={false}
+                returnKeyType="next"
+                onSubmitEditing={() => passwordRef.current?.focus()}
+                submitBehavior="submit"
               />
             </View>
           ) : (
@@ -380,6 +367,7 @@ export default function RegisterScreen() {
           <View style={styles.inputContainer}>
             <Ionicons name="lock-closed-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
             <TextInput
+              ref={passwordRef}
               style={styles.input}
               placeholder={t('auth.password_placeholder', 'Password')}
               placeholderTextColor={Colors.textMuted}
@@ -390,28 +378,37 @@ export default function RegisterScreen() {
               autoCorrect={false}
               autoComplete="new-password"
               textContentType="newPassword"
+              returnKeyType="next"
+              onSubmitEditing={() => confirmRef.current?.focus()}
+              submitBehavior="submit"
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)} activeOpacity={0.6}>
               <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color={Colors.textMuted} />
             </TouchableOpacity>
           </View>
 
-          {/* Live password rules (shown once typing starts) */}
-          {password.length > 0 && (
-            <View style={styles.rules}>
-              {[
-                { ok: pwLongEnough, key: 'register.rule_min_length', fallback: 'At least 8 characters' },
-                { ok: pwEnglishOnly, key: 'register.rule_english_only', fallback: 'English letters, numbers and symbols only' },
-              ].map(rule => (
-                <View key={rule.key} style={styles.ruleRow}>
-                  <Ionicons name={rule.ok ? 'checkmark-circle' : 'close-circle'} size={16} color={rule.ok ? RULE_MET : Colors.error} />
-                  <Text style={[styles.ruleText, { color: rule.ok ? RULE_MET : Colors.textSecondary }]}>
-                    {t(rule.key, rule.fallback)}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          )}
+          {/* Confirm password */}
+          <View style={styles.inputContainer}>
+            <Ionicons name="lock-closed-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
+            <TextInput
+              ref={confirmRef}
+              style={styles.input}
+              placeholder={t('auth.confirm_password', 'Confirm Password')}
+              placeholderTextColor={Colors.textMuted}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="new-password"
+              textContentType="newPassword"
+              returnKeyType="done"
+              onSubmitEditing={handleRegister}
+            />
+          </View>
+
+          {/* Live password rules, including "passwords match" */}
+          <PasswordRules password={password} confirm={confirmPassword} />
 
           {/* Submit Button */}
           <TouchableOpacity
@@ -439,8 +436,8 @@ export default function RegisterScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardForm>
+    </View>
   </SafeAreaView>
   );
 }
