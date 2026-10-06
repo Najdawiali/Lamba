@@ -5,6 +5,12 @@ Follows NIST SP 800-63B: a minimum length, a blocklist of common passwords, obvi
 patterns and personal information are rejected; there are deliberately NO composition
 rules ("one uppercase, one symbol"), which produce predictable passwords like Password1!.
 
+Beyond a whole-password blocklist match, a listed word followed by only a few digits or symbols
+("Rasputin_3") is refused as a trivial variant ("common_variant", with its own message). A longer
+tail is accepted: like Microsoft Entra's scoring (the word is 1 point, every other character 1
+point, 5 needed), MIN_TAIL_LENGTH (4) trailing characters are enough. An exact blocklist entry
+stays "common".
+
 Product rule: passwords use English-keyboard characters only (printable ASCII: letters,
 digits, symbols, spaces). Arabic letters have look-alike variants (ي/ی, ك/ک) that
 different keyboards produce, which would lock users out when they change phones.
@@ -20,9 +26,12 @@ from pathlib import Path
 
 MIN_LENGTH = 8
 MAX_LENGTH = 72  # bcrypt's input limit (72 bytes = 72 characters, since passwords are ASCII)
+# A listed word followed by fewer than this many trailing digits/symbols ("Rasputin_3") is refused
+# as a trivial variant; this many or more is accepted ("Rasputin_3??").
+MIN_TAIL_LENGTH = 4
 _ENGLISH_ONLY = re.compile(r"[\x20-\x7E]+")  # printable ASCII: English letters, digits, symbols, space
 
-# Weak for Lamba users specifically (also checked with trailing digits/symbols removed)
+# Weak for Lamba users specifically (also matched with a short tail of digits/symbols, see MIN_TAIL_LENGTH)
 LOCAL_WEAK = {
     "lamba", "lambajo", "jordan", "amman", "irbid", "zarqa", "salt", "assalt", "alsalt", "aqaba",
     "karak", "madaba", "jerash", "ajloun", "mafraq", "tafila", "maan", "welcome", "merchant",
@@ -45,6 +54,9 @@ MSG = {
     "too_long": "كلمة المرور طويلة جداً، الرجاء اختيار كلمة أقصر.\nPassword is too long. Please choose a shorter one.",
     "common": "كلمة المرور هذه شائعة وسهلة التخمين. اختر كلمة أخرى، مثلاً عبارة من عدة كلمات.\n"
               "This password is too common and easy to guess. Choose another, for example a phrase of several words.",
+    "common_variant": "هذه كلمة شائعة أُضيفت إليها أرقام أو رموز قليلة، وهو نمط سهل التخمين. جرّب عبارة من عدة كلمات غير مترابطة.\n"
+                      "This is a common word with a few digits or symbols added, which is easy to guess. "
+                      "Try a phrase of several unrelated words instead.",
     "pattern": "كلمة المرور تتبع نمطاً سهل التخمين (مثل 12345678 أو رقم هاتف).\n"
                "This password follows an easy-to-guess pattern (like 12345678 or a phone number).",
     "personal": "يجب ألا تحتوي كلمة المرور على بريدك الإلكتروني أو اسمك.\nYour password must not contain your email or name.",
@@ -70,10 +82,13 @@ def password_problem(password: str, *, email: str | None = None, name: str | Non
 
     norm = password.strip().lower()
     compact = re.sub(r"[\s\-]", "", norm)
-    core = _TRAILING_JUNK.sub("", norm)
+    core = _TRAILING_JUNK.sub("", norm)  # the word without its trailing digits/symbols
 
-    if norm in _common() or norm in LOCAL_WEAK or (core and (core in _common() or core in LOCAL_WEAK)):
+    if norm in _common() or norm in LOCAL_WEAK:
         return "common", MSG["common"]
+    # A listed word plus a short tail ("Rasputin_3"). No tail at all means core == norm, handled above.
+    if core and len(norm) - len(core) < MIN_TAIL_LENGTH and (core in _common() or core in LOCAL_WEAK):
+        return "common_variant", MSG["common_variant"]
     if (len(set(compact)) <= 2 or _REPEATED_CHUNK.fullmatch(compact)
             or any(compact in seq for seq in _SEQUENCES) or _JO_MOBILE.fullmatch(compact)):
         return "pattern", MSG["pattern"]
