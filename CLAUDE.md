@@ -23,10 +23,9 @@ Google Play closed test. Owner: Ali, founder and sole developer.
     signin_throttle.
   - `app/taxonomy.py`: single source of truth for categories and store types.
   - `app/legal_content.py`: privacy policy and terms (served at /privacy, /terms; mirrored into
-    `mobile/constants/legal.ts`; edit here, then regenerate the mobile copy). There is no generator
-    script in the repo: legal.ts is its 8-line header comment, then each `DOCS` entry in order as a
-    backtick-quoted template-literal export (`export const NAME = ...;`) holding `to_plain_text(doc)`,
-    separated by blank lines, LF endings. The privacy policy has its own date (`PRIVACY_UPDATED_*`).
+    `mobile/constants/legal.ts`). After every edit run `uv run scripts/generate-legal-ts.py` to
+    regenerate the mobile copy (`--check` verifies without writing). The privacy policy has its own
+    date (`PRIVACY_UPDATED_*`).
   - `app/jobs/import_catalog.py`, `app/moderation_cli.py`: server-side jobs and tools.
   - `backend/scripts/` is NOT in the Docker image (.dockerignore). Anything that must run on the
     server belongs in `app/`.
@@ -55,6 +54,8 @@ Google Play closed test. Owner: Ali, founder and sole developer.
     `mobile/.env.development.local` (replaced each run), then runs `npx expo start`. Expo reads
     that file only in development mode, so release builds keep using `mobile/.env`, which the
     script never touches.
+  - `generate-legal-ts.py`: regenerates `mobile/constants/legal.ts` from `backend/app/legal_content.py`
+    (standard library only; `--check` reports whether the file is out of date instead of writing it).
 - `package.json` (root, "lamba-workspace"): no dependencies, only npm shortcuts: `services:*` and
   `backend:*` wrap docker compose, `mobile:start` / `mobile:tunnel` run `scripts/start-mobile.js`.
   Not used by the build, deploy or backup workflows in this file; README.md presents it as the
