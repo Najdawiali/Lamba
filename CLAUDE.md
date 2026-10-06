@@ -19,7 +19,8 @@ Google Play closed test. Owner: Ali, founder and sole developer.
 - `backend/` FastAPI (Python 3.13), SQLAlchemy async, Alembic, Docker.
   - `app/api/*_v1.py` routers: auth, customer, merchant, search, chat, reports, account, legal.
   - `app/services/`: llm (DeepInfra adapter), embedding, reranker, query_understanding,
-    item_classifier (restriction + category), item_enrichment, whatsapp_service, password_policy.
+    item_classifier (restriction + category), item_enrichment, whatsapp_service, password_policy,
+    signin_throttle.
   - `app/taxonomy.py`: single source of truth for categories and store types.
   - `app/legal_content.py`: privacy policy and terms (served at /privacy, /terms; mirrored into
     `mobile/constants/legal.ts`; edit here, then regenerate the mobile copy).
@@ -127,6 +128,13 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
   Batch jobs must wait out an open circuit breaker and retry, never fast-fail the queue.
 - Merchant photos: the first photo of a catalog product becomes its catalog photo
   (POST /api/v1/merchant/items/{id}/photos); required in the scanner when a product has none.
+- Sign-in throttle (`app/services/signin_throttle.py`): 10 failed sign-ins per account within 15
+  minutes (fixed window from the first failure) -> HTTP 429 with a bilingual message and Retry-After.
+  This is the per-account limit NIST SP 800-63B-4 3.2.2 asks for; slowapi's limits are per IP and
+  separate. Counters are Redis keys `signin_fail:<sha256 of lower-cased email / normalised phone>`;
+  unknown accounts are counted the same (no account enumeration); a correct password or a password
+  reset clears the counter; if Redis is down it fails open (warning logged). The `/verify` and
+  `/reset-password` codes have their own 5-attempt counters.
 
 ## Status (keep this section current)
 Done: security hardening, Alembic migrations, taxonomy, classifier ensemble, merchant flow fixes,
