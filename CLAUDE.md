@@ -109,7 +109,9 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
 - `mobile/locales/ar.json` and `en.json`: CRLF, no trailing newline. Edit entries in place; do not
   re-serialize the whole file.
 - Server user-facing errors are bilingual ("Arabic\nEnglish"). The app shows one language via
-  `mobile/utils/serverMessage.ts`.
+  `mobile/utils/serverMessage.ts`. Rate-limit 429s follow the same shape (`app/rate_limit.py` answers
+  `{"detail": ...}`; slowapi's default `{"error": ...}` is not shown by the app); `login.tsx` shows
+  that message and falls back to its own text.
 - Phone sign-in is OFF on purpose: `mobile/constants/features.ts` PHONE_AUTH_ENABLED=false and
   backend `PHONE_SIGNUP_ENABLED=false`. WhatsApp codes are built (`whatsapp_service.py`, number
   registered) but Meta only allows authentication templates for verified businesses. Turn both

@@ -112,7 +112,9 @@ export default function LoginScreen() {
             : t('login.invalid_credentials_email', 'Incorrect email or password. Please try again.')
         );
       } else if (status === 429) {
-        setErrorMessage(t('login.too_many_attempts', 'Too many attempts. Please wait a minute and try again.'));
+        // The server's message says how long to wait (account locked vs. too many requests from this IP);
+        // the static text is the fallback.
+        setErrorMessage(localizeServerMessage(detail, !!isAr, t('login.too_many_attempts', 'Too many attempts. Please wait a minute and try again.')));
       } else {
         setErrorMessage(localizeServerMessage(detail, !!isAr, t('common.error', 'Something went wrong. Please try again.')));
       }
