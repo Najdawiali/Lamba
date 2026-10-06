@@ -144,6 +144,10 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
   unknown accounts are counted the same (no account enumeration); a correct password or a password
   reset clears the counter; if Redis is down it fails open (warning logged). The `/verify` and
   `/reset-password` codes have their own 5-attempt counters.
+- Redis client (`get_redis()` in `app/services/cache.py`): redis-py's default retry policy is switched
+  off (`_NO_RETRY`). With it on (10 retries with backoff in redis-py 8.1) one call to an unreachable
+  Redis took 3 to 20+ seconds despite the 0.5 s timeouts; now a failure costs at most ~0.5 s.
+  `requirements.txt` leaves `redis>=5.0.0` unpinned, so a rebuilt image gets the newest version.
 
 ## Status (keep this section current)
 Done: security hardening, Alembic migrations, taxonomy, classifier ensemble, merchant flow fixes,

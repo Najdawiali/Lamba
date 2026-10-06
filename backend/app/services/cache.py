@@ -4,10 +4,17 @@ import hashlib
 import logging
 from typing import Optional, List, Dict, Any
 import redis.asyncio as redis
+from redis.asyncio.retry import Retry
+from redis.backoff import NoBackoff
 from app.config import settings
 from app.services.arabic_norm import normalize_arabic
 
 logger = logging.getLogger(__name__)
+
+# redis-py retries a failed command with backoff by default (10 retries in 8.1), so one call to an
+# unreachable Redis takes several seconds even with the 0.5 s timeouts below. Everything that uses
+# Redis here treats it as optional (a cache miss, or the sign-in throttle failing open), so fail at once.
+_NO_RETRY = Retry(NoBackoff(), 0)
 
 _redis: Optional[redis.Redis] = None
 
@@ -24,6 +31,7 @@ async def get_redis() -> Any:
                 decode_responses=True,
                 socket_timeout=0.5,
                 socket_connect_timeout=0.5,
+                retry=_NO_RETRY,
             )
             await asyncio.wait_for(r.ping(), timeout=0.5)
             _redis = r
@@ -39,6 +47,7 @@ async def get_redis() -> Any:
                     decode_responses=True,
                     socket_timeout=0.5,
                     socket_connect_timeout=0.5,
+                    retry=_NO_RETRY,
                 )
     return _redis
 
