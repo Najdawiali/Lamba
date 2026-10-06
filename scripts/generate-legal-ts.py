@@ -58,19 +58,24 @@ def main(argv: list[str]) -> int:
     if any(arg != "--check" for arg in argv):
         print("usage: generate-legal-ts.py [--check]")
         return 2
-    new = render()
+    new = render()  # LF
     old = TARGET.read_bytes() if TARGET.exists() else b""
+    # git on Windows (core.autocrlf) checks files out with CRLF: compare without line endings, and keep
+    # the file's existing style when writing.
+    crlf = b"\r\n" in old
+    up_to_date = old.replace(b"\r\n", b"\n") == new
     if "--check" in argv:
-        if new == old:
+        if up_to_date:
             print("legal.ts is up to date")
             return 0
         print("legal.ts is OUT OF DATE: run  uv run scripts/generate-legal-ts.py")
         return 1
-    if new == old:
-        print("legal.ts is already up to date (%d bytes)" % len(new))
+    if up_to_date:
+        print("legal.ts is already up to date (%d bytes)" % len(old))
         return 0
-    TARGET.write_bytes(new)
-    print("wrote %s (%d bytes)" % (TARGET.relative_to(ROOT), len(new)))
+    data = new.replace(b"\n", b"\r\n") if crlf else new
+    TARGET.write_bytes(data)
+    print("wrote %s (%d bytes)" % (TARGET.relative_to(ROOT), len(data)))
     return 0
 
 
