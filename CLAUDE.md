@@ -23,7 +23,10 @@ Google Play closed test. Owner: Ali, founder and sole developer.
     signin_throttle.
   - `app/taxonomy.py`: single source of truth for categories and store types.
   - `app/legal_content.py`: privacy policy and terms (served at /privacy, /terms; mirrored into
-    `mobile/constants/legal.ts`; edit here, then regenerate the mobile copy).
+    `mobile/constants/legal.ts`; edit here, then regenerate the mobile copy). There is no generator
+    script in the repo: legal.ts is its 8-line header comment, then each `DOCS` entry in order as a
+    backtick-quoted template-literal export (`export const NAME = ...;`) holding `to_plain_text(doc)`,
+    separated by blank lines, LF endings. The privacy policy has its own date (`PRIVACY_UPDATED_*`).
   - `app/jobs/import_catalog.py`, `app/moderation_cli.py`: server-side jobs and tools.
   - `backend/scripts/` is NOT in the Docker image (.dockerignore). Anything that must run on the
     server belongs in `app/`.
@@ -77,6 +80,10 @@ Google Play closed test. Owner: Ali, founder and sole developer.
   gemma-4-31B (approve only when both answer "allowed"; any flag or failure -> review).
 - Email: Resend sends codes (noreply@lambajo.com); support@lambajo.com via Cloudflare Email Routing.
 - Backups: daily 03:00 cron to /opt/lamba/backups, 7-day retention.
+- Docker logs: json-file capped at 10 MB x 5 files per container (`x-logging` in docker-compose.yml),
+  so old lines are deleted automatically and the disk cannot fill up. The api logs contain client IPs
+  (the privacy policy says so). A container gets the cap when it is recreated: `api` at the next
+  deploy, postgres and redis only when they are recreated too.
 
 Deploy on the server:
 ```bash

@@ -1,3 +1,13 @@
+# Docker keeps container logs forever by default. The api logs contain client IP addresses (the
+# privacy policy says so) and unlimited logs can fill the disk, so each container is capped: old
+# lines are deleted as new ones are written (50 MB per container). A container picks this up when
+# it is recreated.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   postgres:
     build:
@@ -15,6 +25,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    logging: *default-logging
     restart: unless-stopped
 
   redis:
@@ -23,6 +34,7 @@ services:
     volumes:
       - redis_data:/data
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD}
+    logging: *default-logging
     restart: unless-stopped
 
   api:
@@ -57,6 +69,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    logging: *default-logging
     restart: unless-stopped
 
 volumes:
