@@ -108,7 +108,10 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
   switches on together after business verification.
 - Passwords (`app/services/password_policy.py`): min 8, max 72, English-keyboard characters only,
   blocklist (SecLists 10k), patterns, personal details; applied at sign-up and reset, never at
-  sign-in. Mirrored for instant feedback in `components/auth/PasswordRules.tsx`; the server decides.
+  sign-in. A listed word with fewer than 4 trailing digits/symbols ("Rasputin_3") is refused as
+  `common_variant` (own message); 4+ trailing characters pass (Microsoft Entra scoring idea); exact
+  list entries stay `common`. Mirrored for instant feedback in `components/auth/PasswordRules.tsx`;
+  the server decides.
 - Forms with text fields use `components/KeyboardForm.tsx` (react-native-keyboard-controller).
   Android 16 is edge-to-edge, so the old adjustResize no longer works. `KeyboardProvider` is in
   `app/_layout.tsx` with statusBarTranslucent and navigationBarTranslucent.

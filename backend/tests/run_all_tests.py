@@ -54,6 +54,7 @@ from tests.test_offer_model_and_schemas import TestOfferModelAndSchemas
 from tests.test_merchant_offers_api import TestMerchantOffersAPI
 from tests.test_market_profile_model_and_schemas import TestMarketProfileModelAndSchemas
 from tests.test_merchant_market_profile_api import TestMerchantMarketProfileAPI
+from tests.test_password_policy import TestPasswordPolicy
 
 
 class TestArabicNorm(unittest.TestCase):
