@@ -42,7 +42,7 @@ Google Play closed test. Owner: Ali, founder and sole developer.
   `POSTGRES_PASSWORD` and `REDIS_PASSWORD` come from the shell or a git-ignored root `.env`.
   Legacy names remain: containers `eagle_*`, database `eagle_vision`, user `eagle`.
 - `Caddyfile` (root): reference copy of the server's Caddy config, only the `api.lambajo.com` block
-  (-> 127.0.0.1:8000, security headers); no lambajo.com/www block, Cloudflare serves the homepage.
+  (-> localhost:8000, security headers); no lambajo.com/www block, Cloudflare serves the homepage.
   Source of truth: `/etc/caddy/Caddyfile` on the server, edited there directly. The repo copy may
   lag, so compare before copying anything over the live file.
 - `scripts/` (root, not `backend/scripts/`):
@@ -63,7 +63,7 @@ Google Play closed test. Owner: Ali, founder and sole developer.
 ## Production
 - Server: Hetzner 4 GB Ubuntu, `ssh root@167.233.213.93`, project in `/opt/lamba`.
   Docker Compose: `api` (container eagle_api), `postgres` (PostGIS + pgvector), `redis`.
-  Caddy (system service, /etc/caddy/Caddyfile) serves only api.lambajo.com -> 127.0.0.1:8000.
+  Caddy (system service, /etc/caddy/Caddyfile) serves only api.lambajo.com -> localhost:8000.
 - Domains: api.lambajo.com (API and legal pages), lambajo.com + www (homepage),
   images.lambajo.com (Cloudflare R2 bucket `lamba-images`).
 - Client IP behind Caddy: api.lambajo.com is DNS-only (no Cloudflare), and Caddy (default
