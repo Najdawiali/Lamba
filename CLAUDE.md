@@ -97,6 +97,9 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
 
 ## Build and checks (Windows dev machine, PowerShell)
 - Type check: `cd mobile; npx tsc --noEmit` must print nothing.
+- End-to-end checks (sign-in throttle, proxy-header trust, Redis outages) run real uvicorn, FastAPI,
+  slowapi and redis-py: `backend/tests/e2e/` (README inside). They need a throwaway venv outside the
+  repo built from the pins in `backend/requirements.txt`; no Docker, Redis or Postgres.
 - APK: `cd mobile\android; .\gradlew.bat assembleRelease --no-daemon`
   -> `app\build\outputs\apk\release\app-release.apk`. Google Play needs an .aab (`bundleRelease`).
 - Release builds inline `EXPO_PUBLIC_API_URL` from the git-ignored `mobile/.env`, which must hold
