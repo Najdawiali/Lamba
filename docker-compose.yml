@@ -1,3 +1,13 @@
+# Docker keeps container logs forever by default. The api logs contain client IP addresses (the
+# privacy policy says so) and unlimited logs can fill the disk, so each container is capped: old
+# lines are deleted as new ones are written (50 MB per container). A container picks this up when
+# it is recreated.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   postgres:
     build:
@@ -15,6 +25,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    logging: *default-logging
     restart: unless-stopped
 
   redis:
@@ -23,6 +34,7 @@ services:
     volumes:
       - redis_data:/data
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD}
+    logging: *default-logging
     restart: unless-stopped
 
   api:
@@ -30,6 +42,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: eagle_api
+    # Loopback only: Caddy on the host is the one client. Never publish this on 0.0.0.0 while
+    # FORWARDED_ALLOW_IPS (below) trusts proxy headers, or anyone could fake their IP address.
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
@@ -39,6 +53,11 @@ services:
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      # Caddy reaches the container through the Docker bridge gateway (172.18.0.1 on the server), so
+      # uvicorn must trust X-Forwarded-For from there. Without this every client looks like the
+      # gateway and slowapi's per-IP rate limits become global. Docker bridge networks live in
+      # 172.16.0.0/12. Never use "*" (it would trust a client-supplied header).
+      - FORWARDED_ALLOW_IPS=127.0.0.1,172.16.0.0/12
     depends_on:
       postgres:
         condition: service_healthy
@@ -50,6 +69,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    logging: *default-logging
     restart: unless-stopped
 
 volumes:

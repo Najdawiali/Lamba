@@ -15,8 +15,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
-from slowapi import _rate_limit_exceeded_handler
-from app.rate_limit import limiter
+from app.rate_limit import limiter, rate_limit_exceeded_handler
 
 from app.config import settings
 from app.database import engine
@@ -83,7 +82,7 @@ app.add_middleware(
 
 # ── Rate Limiting ───────────────────────────────────────────────
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 # ── Static files (product images) ──────────────────────────────
 os.makedirs(settings.upload_dir, exist_ok=True)

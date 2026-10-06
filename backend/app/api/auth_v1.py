@@ -28,6 +28,7 @@ from app.schemas.auth_v1 import (
     SignInRequest, SignInResponse, SignInUserInfo,
 )
 from app.services.auth import hash_password, verify_password, create_access_token
+from app.services import signin_throttle
 from app.services.password_policy import password_problem
 from app.config import settings
 from app.services.email_service import send_verification_email
@@ -71,6 +72,11 @@ RESEND_TOO_SOON = (
     "Please wait a minute before requesting a new code."
 )
 RESEND_COOLDOWN_SECONDS = 60  # each WhatsApp code costs money and counts toward Meta's daily limit
+_LOCK_MINUTES = signin_throttle.WINDOW_SECONDS // 60
+SIGNIN_LOCKED = (
+    f"محاولات تسجيل دخول فاشلة كثيرة لهذا الحساب. انتظر حتى {_LOCK_MINUTES} دقيقة ثم حاول مرة أخرى، أو أعد تعيين كلمة المرور.\n"
+    f"Too many failed sign-in attempts for this account. Wait up to {_LOCK_MINUTES} minutes and try again, or reset your password."
+)
 
 
 def _within_cooldown(user: User) -> bool:
@@ -401,6 +407,10 @@ async def reset_password(request: Request, data: ResetPasswordRequest, db: Async
     user.verification_attempts = 0
     await db.flush()
 
+    # A reset proves control of the account: let the owner sign in right away, even if the
+    # failed-attempts block was active.
+    await signin_throttle.reset_failures(signin_throttle.canonical_identifier(data.email, normalize_jo_mobile))
+
     return {"message": "Password reset successfully. Please sign in with your new password."}
 
 
@@ -415,7 +425,19 @@ async def signin(request: Request, data: SignInRequest, db: AsyncSession = Depen
     Returns descriptive error payloads:
       - 401: "Invalid Credentials"
       - 403: "Unverified Account"
+      - 429: too many failed attempts for this account (see signin_throttle)
     """
+    # Per-account limit on failed attempts. Checked first, before the lookup and the slow
+    # password hash; it applies to unknown accounts too, so it never reveals whether one exists.
+    account = signin_throttle.canonical_identifier(data.email_or_phone, normalize_jo_mobile)
+    wait = await signin_throttle.seconds_locked(account)
+    if wait:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=SIGNIN_LOCKED,
+            headers={"Retry-After": str(wait)},
+        )
+
     # Resolve user by email or phone
     result = await db.execute(
         select(User).where(_identifier_filter(data.email_or_phone))
@@ -423,10 +445,13 @@ async def signin(request: Request, data: SignInRequest, db: AsyncSession = Depen
     user = result.scalar_one_or_none()
 
     if user is None or not verify_password(data.password, user.password_hash):
+        await signin_throttle.record_failure(account)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid Credentials",
         )
+
+    await signin_throttle.reset_failures(account)  # a correct password clears the account's failures
 
     if not user.verified:
         raise HTTPException(

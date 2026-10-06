@@ -7,12 +7,15 @@ app and the web never disagree.
 
 UPDATED_EN = "29 September 2026"
 UPDATED_AR = "٢٩ سبتمبر ٢٠٢٦"
+# The privacy policy changed later than the terms (IP addresses and server logs), so it has its own date.
+PRIVACY_UPDATED_EN = "6 October 2026"
+PRIVACY_UPDATED_AR = "٦ أكتوبر ٢٠٢٦"
 DELETION_URL = "https://api.lambajo.com/account-deletion"
 EMAIL = "support@lambajo.com"
 
 PRIVACY_EN = {
  "title": "Lamba Privacy Policy",
- "updated": f"Last updated: {UPDATED_EN}",
+ "updated": f"Last updated: {PRIVACY_UPDATED_EN}",
  "intro": "Lamba is a local discovery app for Jordan that helps people find products and services in nearby stores, and helps stores show what they offer. Lamba is operated by Ali Sharhabeel Abdallah Al-Najdawi, an individual developer based in Jordan (\"we\"). This policy explains what we collect, why, and the choices you have.",
  "sections": [
   ("1. Information we collect", [
@@ -22,6 +25,7 @@ PRIVACY_EN = {
    "- Messages: your conversations with stores in the app.",
    "- Ratings and reports: store ratings and reviews you leave, and listings you report.",
    "- Notifications: a device token used to send you notifications.",
+   "- Technical data: your IP address and basic details of each request, such as the time and which part of the service you used. We use them to keep Lamba secure and prevent abuse, for example by limiting repeated sign-in attempts. They are recorded in our server logs, and old log entries are deleted automatically as new ones are written.",
    "- For stores (merchants): store name, address, location, opening hours, contact details, staff names you add, product listings and prices, and product photos you take or upload. Store details and product photos are public in the app.",
   ]),
   ("2. How we use your information", [
@@ -64,7 +68,7 @@ PRIVACY_EN = {
 
 PRIVACY_AR = {
  "title": "سياسة الخصوصية لتطبيق لمبة",
- "updated": f"آخر تحديث: {UPDATED_AR}",
+ "updated": f"آخر تحديث: {PRIVACY_UPDATED_AR}",
  "intro": "لمبة تطبيق محلي في الأردن يساعدك على إيجاد المنتجات والخدمات في المتاجر القريبة منك، ويساعد المتاجر على عرض ما تقدّمه. يدير لمبة المطوّر علي شرحبيل عبدالله النجداوي، من الأردن (\"نحن\"). توضّح هذه السياسة ما نجمعه ولماذا، والخيارات المتاحة لك.",
  "sections": [
   ("١. المعلومات التي نجمعها", [
@@ -74,6 +78,7 @@ PRIVACY_AR = {
    "- الرسائل: محادثاتك مع المتاجر داخل التطبيق.",
    "- التقييمات والبلاغات: تقييماتك ومراجعاتك للمتاجر، والمنتجات التي تُبلغ عنها.",
    "- الإشعارات: رمز خاص بجهازك نستخدمه لإرسال الإشعارات.",
+   "- البيانات التقنية: عنوان IP الخاص بك وتفاصيل أساسية عن كل طلب، مثل وقته والجزء الذي استخدمته من الخدمة. نستخدمها لحماية لمبة ومنع إساءة الاستخدام، مثل الحدّ من محاولات تسجيل الدخول المتكررة. وتُسجَّل في سجلّات الخادم، وتُحذف السجلّات القديمة تلقائياً عند كتابة سجلّات جديدة.",
    "- للمتاجر (التجّار): اسم المتجر وعنوانه وموقعه وساعات العمل وبيانات التواصل، وأسماء الموظفين التي تضيفها، والمنتجات والأسعار، وصور المنتجات التي تلتقطها أو ترفعها. بيانات المتجر وصور المنتجات تظهر للجميع داخل التطبيق.",
   ]),
   ("٢. كيف نستخدم معلوماتك", [

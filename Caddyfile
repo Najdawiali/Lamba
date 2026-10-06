@@ -1,15 +1,15 @@
 # Reference copy of the production reverse proxy config for api.lambajo.com.
 # The source of truth is /etc/caddy/Caddyfile on the server, which is edited there directly,
 # so this copy may lag behind it. Compare before relying on it.
+# Last synced with the live file on 2026-10-06.
 
 api.lambajo.com {
-    reverse_proxy 127.0.0.1:8000
-
     header {
-        Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
         X-Content-Type-Options "nosniff"
         X-Frame-Options "DENY"
         Referrer-Policy "strict-origin-when-cross-origin"
         -Server
     }
+    reverse_proxy localhost:8000
 }
