@@ -30,6 +30,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: eagle_api
+    # Loopback only: Caddy on the host is the one client. Never publish this on 0.0.0.0 while
+    # FORWARDED_ALLOW_IPS (below) trusts proxy headers, or anyone could fake their IP address.
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
@@ -39,6 +41,11 @@ services:
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      # Caddy reaches the container through the Docker bridge gateway (172.18.0.1 on the server), so
+      # uvicorn must trust X-Forwarded-For from there. Without this every client looks like the
+      # gateway and slowapi's per-IP rate limits become global. Docker bridge networks live in
+      # 172.16.0.0/12. Never use "*" (it would trust a client-supplied header).
+      - FORWARDED_ALLOW_IPS=127.0.0.1,172.16.0.0/12
     depends_on:
       postgres:
         condition: service_healthy

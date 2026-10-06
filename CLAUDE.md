@@ -62,6 +62,13 @@ Google Play closed test. Owner: Ali, founder and sole developer.
   Caddy (system service, /etc/caddy/Caddyfile) serves only api.lambajo.com -> 127.0.0.1:8000.
 - Domains: api.lambajo.com (API and legal pages), lambajo.com + www (homepage),
   images.lambajo.com (Cloudflare R2 bucket `lamba-images`).
+- Client IP behind Caddy: api.lambajo.com is DNS-only (no Cloudflare), and Caddy (default
+  `reverse_proxy`, no `trusted_proxies`; live Caddyfile checked 2026-10-06) overwrites
+  X-Forwarded-For with the real client IP. Caddy reaches `api` through the Docker bridge gateway
+  (network `lamba_default` = 172.18.0.0/16, gateway 172.18.0.1), so uvicorn trusts proxy headers only
+  from `FORWARDED_ALLOW_IPS=127.0.0.1,172.16.0.0/12` (docker-compose.yml). Without it every request
+  looks like 172.18.0.1 and slowapi's per-IP limits are global. Keep the API port on 127.0.0.1,
+  never use `*`, and revisit this if Cloudflare is ever put in front of the API.
 - AI on DeepInfra, prepaid credit. If credit runs out, every AI call fails with HTTP 402
   (search degrades, new products go to review). Models: query understanding gemma-4-E4B,
   expansion gemma-4-26B-A4B, embeddings Qwen3-Embedding-0.6B (1024-d), reranker
