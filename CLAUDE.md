@@ -20,7 +20,7 @@ Google Play closed test. Owner: Ali, founder and sole developer.
   - `app/api/*_v1.py` routers: auth, customer, merchant, search, chat, reports, account, legal.
   - `app/services/`: llm (DeepInfra adapter), embedding, reranker, query_understanding,
     item_classifier (restriction + category), item_enrichment, whatsapp_service, password_policy,
-    signin_throttle.
+    signin_throttle, refresh_tokens (session rules) + refresh_token_store (SQL).
   - `app/taxonomy.py`: single source of truth for categories and store types.
   - `app/legal_content.py`: privacy policy and terms (served at /privacy, /terms; mirrored into
     `mobile/constants/legal.ts`). After every edit run `uv run scripts/generate-legal-ts.py` to
@@ -97,9 +97,14 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
 
 ## Build and checks (Windows dev machine, PowerShell)
 - Type check: `cd mobile; npx tsc --noEmit` must print nothing.
-- End-to-end checks (sign-in throttle, proxy-header trust, Redis outages) run real uvicorn, FastAPI,
-  slowapi and redis-py: `backend/tests/e2e/` (README inside). They need a throwaway venv outside the
-  repo built from the pins in `backend/requirements.txt`; no Docker, Redis or Postgres.
+- Mobile tests: `cd mobile; npm test` (Node's own test runner on `services/api/session.ts`: renewal,
+  single refresh for parallel 401s, session end; no device, no extra packages; needs Node 22.18+).
+- End-to-end checks (sign-in throttle, proxy-header trust, Redis outages, refresh-token sessions) run real
+  uvicorn, FastAPI, slowapi, redis-py and PyJWT: `backend/tests/e2e/` (README inside). They need a throwaway
+  venv outside the repo built from the pins in `backend/requirements.txt`; no Docker, Redis or Postgres.
+- Refresh-token SQL checks: `backend/tests/test_refresh_token_store_pg.py` run against a THROWAWAY Postgres
+  (never production) when `LAMBA_TEST_DATABASE_URL` is set, and are skipped otherwise (instructions inside).
+  They cover row locking under concurrency, the delete cascade and the whole HTTP flow on a real database.
 - APK: `cd mobile\android; .\gradlew.bat assembleRelease --no-daemon`
   -> `app\build\outputs\apk\release\app-release.apk`. Google Play needs an .aab (`bundleRelease`).
 - Release builds inline `EXPO_PUBLIC_API_URL` from the git-ignored `mobile/.env`, which must hold
@@ -151,6 +156,26 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
   unknown accounts are counted the same (no account enumeration); a correct password or a password
   reset clears the counter; if Redis is down it fails open (warning logged). The `/verify` and
   `/reset-password` codes have their own 5-attempt counters.
+- Sessions (`app/services/refresh_tokens.py`, `refresh_token_store.py`, table `refresh_tokens`, migration
+  0003): sign-in with `client_supports_refresh: true` (the app always sends it) returns a 30-minute access
+  token plus an opaque refresh token; builds without the flag keep the 24-hour JWT (`JWT_EXPIRATION_MINUTES`)
+  and get no refresh token, so remove that path once old builds are gone. Only the SHA-256 of a refresh token
+  is stored (one family per sign-in). Every use rotates it; presenting an already-rotated token revokes the
+  whole family (RFC 9700 4.14.2), except a replay within `REFRESH_REUSE_LEEWAY_SECONDS` (10, 0 = off) of the
+  rotation, which is a lost response: it gets a fresh token, the unused one is revoked, and it is logged
+  ("forgiven"). Reuse revocation is committed before the 401 (get_db rolls back on exceptions). Lifetimes:
+  30-day sliding idle window (`REFRESH_IDLE_DAYS`), 90-day absolute cap (`REFRESH_ABSOLUTE_DAYS`).
+  DEVIATION: NIST SP 800-63B-4 says the overall reauthentication timeout at AAL1 SHOULD be no more than
+  30 days; we allow 90 (a shop-discovery app, not a high-risk service; only a SHOULD) and keep 30 as the idle
+  window. Set `REFRESH_ABSOLUTE_DAYS=30` to comply. `/auth/refresh`, `/auth/logout` and `/auth/me` are the
+  endpoints; every refresh failure is the same bilingual 401 (expired, revoked and deleted accounts look
+  alike). Password reset revokes all refresh tokens and sets `users.tokens_valid_after`, which also refuses
+  every older access token (including old 24-hour ones); account deletion revokes them first and the
+  foreign key cascades. Raw tokens (and their hashes) are never logged. The app (`mobile/services/api/
+  session.ts` + `client.ts`) renews once on a 401 that carried a token (one shared refresh call for parallel
+  requests, then the request is repeated), never on guest requests or the auth endpoints; a refused renewal
+  clears the session and sends the user to login with one message (`login.session_ended`); app start
+  checks the session with GET /auth/me (no connection keeps the user signed in).
 - Redis client (`get_redis()` in `app/services/cache.py`): redis-py's default retry policy is switched
   off (`_NO_RETRY`). With it on (10 retries with backoff in redis-py 8.1) one call to an unreachable
   Redis took 3 to 20+ seconds despite the 0.5 s timeouts; now a failure costs at most ~0.5 s.
@@ -161,9 +186,11 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
 ## Status (keep this section current)
 Done: security hardening, Alembic migrations, taxonomy, classifier ensemble, merchant flow fixes,
 report button, account deletion (in app + web page), legal pages, catalog import and enrichment,
-images.lambajo.com, homepage, password policy, email-only auth with keyboard/code-entry fixes.
+images.lambajo.com, homepage, password policy, email-only auth with keyboard/code-entry fixes,
+refresh-token sessions (code and tests done; deploy: backend first, then the new app build).
 
-In progress: phone test of the auth fixes; Google Play personal developer account (identity
+In progress: phone test of the auth fixes and of the new sessions (sign in, background the app past
+30 minutes, reset password from another device); Google Play personal developer account (identity
 verification pending; personal accounts need a 14-day closed test with 12+ testers).
 
 Next before the closed test: review the ~49 held products; monitoring alert for AI/credit
