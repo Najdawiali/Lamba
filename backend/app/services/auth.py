@@ -28,9 +28,10 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 # ── JWT tokens ──────────────────────────────────────────────────
-def create_access_token(user_id: uuid.UUID, role: str) -> str:
+def create_access_token(user_id: uuid.UUID, role: str, minutes: int | None = None) -> str:
     """
-    Create a JWT access token.
+    Create a JWT access token. `minutes` overrides the lifetime (default: the legacy
+    JWT_EXPIRATION_MINUTES, kept for clients that can't use refresh tokens).
 
     Payload contains:
         sub: user UUID (string)
@@ -42,7 +43,7 @@ def create_access_token(user_id: uuid.UUID, role: str) -> str:
     payload = {
         "sub": str(user_id),
         "role": role,
-        "exp": now + timedelta(minutes=settings.jwt_expiration_minutes),
+        "exp": now + timedelta(minutes=minutes or settings.jwt_expiration_minutes),
         "iat": now,
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
@@ -64,3 +65,14 @@ def decode_access_token(token: str) -> dict:
         settings.jwt_secret,
         algorithms=[settings.jwt_algorithm],
     )
+
+
+def issued_before(payload: dict, valid_after: datetime | None) -> bool:
+    """True when the token was issued before `valid_after` (users.tokens_valid_after) and so must be refused.
+
+    Compared in whole seconds because `iat` has no sub-second part: a token issued in the same
+    second as the reset still passes.
+    """
+    if valid_after is None:
+        return False
+    return int(payload.get("iat") or 0) < int(valid_after.timestamp())

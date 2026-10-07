@@ -12,6 +12,7 @@ from app.models.offer import Offer
 from app.models.pos_receipt import POSReceipt, POSReceiptItem
 from app.models.conversation import Conversation, Message
 from app.models.product_report import ProductReport
+from app.models.refresh_token import RefreshToken
 
 __all__ = [
     "User",
@@ -30,4 +31,5 @@ __all__ = [
     "Conversation",
     "Message",
     "ProductReport",
+    "RefreshToken",
 ]

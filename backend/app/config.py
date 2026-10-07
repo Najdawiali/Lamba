@@ -59,7 +59,14 @@ class Settings(BaseSettings):
     # ── JWT ─────────────────────────────────────────────────────
     jwt_secret: str = "INSECURE-CHANGE-ME-set-JWT_SECRET-in-env"
     jwt_algorithm: str = "HS256"
-    jwt_expiration_minutes: int = 1440  # 24 hours
+    jwt_expiration_minutes: int = 1440  # 24 hours: only for clients that don't support refresh tokens
+
+    # Sessions for clients that send client_supports_refresh (see app/services/refresh_tokens.py):
+    # short access token + rotating opaque refresh token.
+    access_token_minutes: int = 30
+    refresh_idle_days: int = 30        # a refresh token unused for this long is dead (sliding window)
+    refresh_absolute_days: int = 90    # a session can't be renewed past this, whatever the activity
+    refresh_reuse_leeway_seconds: int = 10  # replay of the just-rotated token is forgiven this long
 
     # ── Security & CORS ─────────────────────────────────────────
     cors_origins: List[str] = ["http://localhost:3000", "http://localhost:8081"]

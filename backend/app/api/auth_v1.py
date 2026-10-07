@@ -4,7 +4,10 @@ Auth V1 API — Multi-channel registration (Email / Phone), verification, and si
 Endpoints:
   POST /api/v1/auth/signup  — Register with email OR phone, dispatches verification code
   POST /api/v1/auth/verify  — Submit 6-digit verification code
-  POST /api/v1/auth/signin  — Authenticate and receive JWT
+  POST /api/v1/auth/signin  — Authenticate and receive JWT (+ refresh token for apps that ask)
+  POST /api/v1/auth/refresh — Rotate a refresh token, get a new access token
+  POST /api/v1/auth/logout  — Revoke the session behind a refresh token
+  GET  /api/v1/auth/me      — The signed-in user (the app validates its session with it)
 """
 
 import logging
@@ -14,21 +17,24 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from app.rate_limit import limiter
 from pydantic import BaseModel, Field
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.auth import get_current_user
 from app.database import get_db
 from app.models.user import User
 from app.schemas.auth_v1 import (
     SignUpRequest, SignUpResponse,
     VerifyRequest, VerifyResponse,
     SignInRequest, SignInResponse, SignInUserInfo,
+    RefreshRequest, RefreshResponse,
 )
 from app.services.auth import hash_password, verify_password, create_access_token
-from app.services import signin_throttle
+from app.services import refresh_tokens, signin_throttle
+from app.services.refresh_token_store import SqlRefreshStore
 from app.services.password_policy import password_problem
 from app.config import settings
 from app.services.email_service import send_verification_email
@@ -70,6 +76,10 @@ CODE_SEND_FAILED = (
 RESEND_TOO_SOON = (
     "الرجاء الانتظار دقيقة قبل طلب رمز جديد.\n"
     "Please wait a minute before requesting a new code."
+)
+SESSION_ENDED = (
+    "انتهت جلستك. الرجاء تسجيل الدخول مرة أخرى.\n"
+    "Your session has ended. Please sign in again."
 )
 RESEND_COOLDOWN_SECONDS = 60  # each WhatsApp code costs money and counts toward Meta's daily limit
 _LOCK_MINUTES = signin_throttle.WINDOW_SECONDS // 60
@@ -405,7 +415,12 @@ async def reset_password(request: Request, data: ResetPasswordRequest, db: Async
     user.verification_code = None
     user.verification_code_created_at = None
     user.verification_attempts = 0
+    # Whoever held the old password (or a stolen session) is signed out: refresh tokens are
+    # revoked and access tokens issued before now (including the 24-hour ones) are refused.
+    now = datetime.now(timezone.utc)
+    user.tokens_valid_after = now
     await db.flush()
+    await refresh_tokens.revoke_all(SqlRefreshStore(db), user.id, "password_reset", now)
 
     # A reset proves control of the account: let the owner sign in right away, even if the
     # failed-attempts block was active.
@@ -465,10 +480,74 @@ async def signin(request: Request, data: SignInRequest, db: AsyncSession = Depen
             },
         )
 
-    # Generate JWT with user context
-    token = create_access_token(user.id, user.user_type)
+    if not data.client_supports_refresh:
+        # Builds that predate refresh tokens: the 24-hour token, as before
+        return SignInResponse(
+            access_token=create_access_token(user.id, user.user_type),
+            user=SignInUserInfo.model_validate(user),
+        )
 
+    policy = refresh_tokens.policy_from_settings(settings)
+    raw_refresh = await refresh_tokens.issue(SqlRefreshStore(db), user.id, policy)
     return SignInResponse(
-        access_token=token,
+        access_token=create_access_token(user.id, user.user_type, minutes=settings.access_token_minutes),
+        user=SignInUserInfo.model_validate(user),
+        refresh_token=raw_refresh,
+        expires_in=settings.access_token_minutes * 60,
+    )
+
+
+class LogoutRequest(BaseModel):
+    refresh_token: str = Field(..., min_length=20, max_length=200)
+
+
+# ── POST /refresh ──────────────────────────────────────────────
+@router.post("/refresh", response_model=RefreshResponse)
+@limiter.limit("60/minute")
+async def refresh(request: Request, data: RefreshRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Exchange a refresh token for a new access token and a new refresh token (rotation).
+
+    Every failure is the same 401 with the same message, so the app can't tell (and doesn't
+    need to) whether the session expired, was revoked, or the account was deleted.
+    """
+    store = SqlRefreshStore(db)
+    result = await refresh_tokens.rotate(store, data.refresh_token, refresh_tokens.policy_from_settings(settings))
+    if not result.ok:
+        if result.changed:
+            await db.commit()  # reuse revoked the family; get_db() would roll that back on the 401
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=SESSION_ENDED,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user = (await db.execute(select(User).where(User.id == result.user_id))).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=SESSION_ENDED,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return RefreshResponse(
+        access_token=create_access_token(user.id, user.user_type, minutes=settings.access_token_minutes),
+        refresh_token=result.raw_token,
+        expires_in=settings.access_token_minutes * 60,
         user=SignInUserInfo.model_validate(user),
     )
+
+
+# ── POST /logout ───────────────────────────────────────────────
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("30/minute")
+async def logout(request: Request, data: LogoutRequest, db: AsyncSession = Depends(get_db)):
+    """Revoke the session behind a refresh token. Always 204: unknown or expired tokens are fine."""
+    await refresh_tokens.revoke_by_raw(SqlRefreshStore(db), data.refresh_token)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ── GET /me ────────────────────────────────────────────────────
+@router.get("/me", response_model=SignInUserInfo)
+async def me(user: User = Depends(get_current_user)):
+    """The signed-in user. The app calls this at start-up to find out whether its session is still valid."""
+    return SignInUserInfo.model_validate(user)

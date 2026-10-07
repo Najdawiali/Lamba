@@ -47,6 +47,10 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+    # Access tokens issued before this moment are refused (set on password reset).
+    tokens_valid_after: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Relationships
     markets = relationship("Market", back_populates="merchant", cascade="all, delete-orphan")
