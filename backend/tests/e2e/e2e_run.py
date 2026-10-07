@@ -1,16 +1,18 @@
 """
 End-to-end checks: see README.md in this folder. Run it with the Python of a throwaway venv that has the pinned
-fastapi, uvicorn, slowapi and redis installed (the driver itself only needs the standard library):
+fastapi, uvicorn, slowapi, redis and PyJWT installed (the driver itself only needs the standard library):
 
     <venv>\\Scripts\\python.exe -B backend\\tests\\e2e\\e2e_run.py
 
-It starts REAL uvicorn processes serving e2e_app.py (the real auth_v1 router on real FastAPI, slowapi and
-redis-py) and checks behaviour over real HTTP. A small Redis-protocol server below lets the real redis-py client
+It starts REAL uvicorn processes serving e2e_app.py (the real auth_v1 router on real FastAPI, slowapi, redis-py
+and PyJWT) and checks behaviour over real HTTP. A small Redis-protocol server below lets the real redis-py client
 talk to "Redis" over real TCP, with a clock that can be moved forward to test the lock window. Exit code 0 means
 every check passed.
 """
 
 import asyncio
+import base64
+import hashlib
 import http.client
 import importlib.util
 import json
@@ -36,7 +38,7 @@ ARABIC = re.compile(r"[؀-ۿ]")
 MAX_SIGNIN_SECONDS = 5.0
 CHECKS = 0
 
-missing = [m for m in ("fastapi", "uvicorn", "slowapi", "redis") if importlib.util.find_spec(m) is None]
+missing = [m for m in ("fastapi", "uvicorn", "slowapi", "redis", "jwt") if importlib.util.find_spec(m) is None]
 if missing:
     sys.exit("Missing in this Python: %s. Run this with the throwaway venv's python; see README.md in this folder."
              % ", ".join(missing))
@@ -377,8 +379,8 @@ try:
     check(set(redis.commands) <= {"get", "ttl", "ping", "client", "select"}, redis.commands)
     say("    11th attempt (correct password, new IP) -> 429, Retry-After=%ss, message mentions 15 minutes, DB not queried, Redis only read (%s)" % (headers["retry-after"], ",".join(redis.commands)))
     status, _, body = signin(s2, "bob@example.com", "right-pass-bob")
-    check(status == 200 and body["access_token"].startswith("token-") and body["user"]["email"] == "bob@example.com", (status, body))
-    say("    another account signs in normally -> 200 with a token")
+    check(status == 200 and body["access_token"].count(".") == 2 and body["user"]["email"] == "bob@example.com", (status, body))
+    say("    another account signs in normally -> 200 with a JWT")
     for i in range(10):
         check(signin(s2, "ghost@example.com", "x")[0] == 401, i)
     ghost = signin(s2, "ghost@example.com", "x")
@@ -471,6 +473,155 @@ try:
         s5 = outage_phase(mode, port, label)
         s5.stop()
         bad.stop()
+
+    # ============================================================ S6: sessions with refresh tokens (renewal, rotation, revocation)
+    say("S6  sessions: short access token + rotating refresh token (real routers, real PyJWT, in-memory token store):")
+    s6 = Server("s6_sessions", "127.0.0.1,172.16.0.0/12", redis.port)
+    servers.append(s6)
+    ended = s6.stats()["session_ended"]
+    handed_out = []  # every raw refresh token the server gave out: none may ever appear in its log
+
+    def login(email, password, refresh=True, xff=None):
+        body = {"email_or_phone": email, "password": password}
+        if refresh:
+            body["client_supports_refresh"] = True
+        status, _, data = call(s6.port, "POST", "/api/v1/auth/signin", body, {"X-Forwarded-For": xff or fresh_ip()})
+        check(status == 200, (email, status, data))
+        if data.get("refresh_token"):
+            handed_out.append(data["refresh_token"])
+        return data
+
+    def renew(token, xff=None):
+        status, headers, data = call(s6.port, "POST", "/api/v1/auth/refresh", {"refresh_token": token},
+                                     {"X-Forwarded-For": xff or fresh_ip()})
+        if status == 200:
+            handed_out.append(data["refresh_token"])
+        return status, headers, data
+
+    def me(access, xff=None):
+        headers = {"X-Forwarded-For": xff or fresh_ip()}
+        if access:
+            headers["Authorization"] = "Bearer " + access
+        return call(s6.port, "GET", "/api/v1/auth/me", None, headers)
+
+    def warp(seconds):
+        check(call(s6.port, "POST", "/__warp?seconds=%s" % seconds)[0] == 200, "warp")
+
+    def lifetime(access):
+        part = access.split(".")[1]
+        payload = json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
+        return payload["exp"] - payload["iat"]
+
+    def ended_response(res, what):
+        status, headers, body = res
+        check(status == 401 and body == {"detail": ended} and two_languages(body["detail"]), (what, status, body))
+        check(headers.get("www-authenticate") == "Bearer", (what, headers))
+
+    day = 86400
+    # -- old and new clients
+    old = login("kim@example.com", "right-pass-kim", refresh=False)
+    check(old["refresh_token"] is None and lifetime(old["access_token"]) == 24 * 3600, old)
+    check(me(old["access_token"])[0] == 200, "old clients keep their 24-hour token")
+    new = login("kim@example.com", "right-pass-kim")
+    check(lifetime(new["access_token"]) == 30 * 60 and new["expires_in"] == 1800 and len(new["refresh_token"]) >= 40, new)
+    status, _, body = me(new["access_token"])
+    check(status == 200 and body["email"] == "kim@example.com" and "password_hash" not in body, (status, body))
+    check(me(None)[0] == 401 and me("garbage.token.value")[0] == 401, "no token / bad token -> 401")
+    check(s6.stats()["refresh_rows"] == 1, "only the client that asked for refresh gets a token row")
+    say("    a client without the opt-in gets the 24-hour token and no refresh token; one that asks gets 30 min + refresh_token; /auth/me works with both")
+
+    # -- rotation
+    token = login("lena@example.com", "right-pass-lena")["refresh_token"]
+    for i in range(3):
+        status, _, body = renew(token)
+        check(status == 200 and body["refresh_token"] != token and body["user"]["email"] == "lena@example.com", (i, status, body))
+        check(lifetime(body["access_token"]) == 30 * 60 and me(body["access_token"])[0] == 200, "renewed access token must work")
+        token = body["refresh_token"]
+    say("    /auth/refresh x3 in a row: a new access token (30 min) and a different refresh token every time, all usable")
+
+    # -- lost response, then a real theft
+    check(call(s6.port, "POST", "/api/v1/auth/refresh", {"refresh_token": "x" * 43}, {"X-Forwarded-For": fresh_ip()})[0] == 401, "unknown")
+    check(s6.stats()["last_error_committed"] is False, "an unknown token changes nothing, so nothing is committed")
+    r0 = login("lena@example.com", "right-pass-lena")["refresh_token"]
+    _, _, lost = renew(r0)            # the response to this call never reaches the app...
+    status, _, retry = renew(r0)      # ...so the app retries with the old token, inside the 10 s leeway
+    check(status == 200 and retry["refresh_token"] != lost["refresh_token"], (status, retry))
+    say("    lost response: the retry with the already-rotated token, within the leeway -> 200 with a new token (forgiven, logged)")
+    ended_response(renew(lost["refresh_token"]), "superseded token")
+    check(s6.stats()["last_error_committed"] is True, "the revocation must be committed BEFORE the 401 (get_db rolls back on errors)")
+    ended_response(renew(retry["refresh_token"]), "family after reuse")
+    say("    ...but the token the retry replaced shows up later (a thief?) -> 401, and the whole family is revoked, including the retry's token")
+
+    r0 = login("mona@example.com", "right-pass-mona")["refresh_token"]
+    _, _, r1 = renew(r0)
+    warp(60)
+    ended_response(renew(r0), "reuse after the leeway")
+    check(s6.stats()["last_error_committed"] is True, "reuse revocation committed")
+    ended_response(renew(r1["refresh_token"]), "owner after the theft")
+    say("    replay of a rotated token after the leeway -> 401 and the family dies: the owner's newest token is dead too (both parties must sign in)")
+
+    # -- logout
+    d = login("nour@example.com", "right-pass-nour")
+    check(call(s6.port, "POST", "/api/v1/auth/logout", {"refresh_token": d["refresh_token"]}, {"X-Forwarded-For": fresh_ip()})[0] == 204, "logout")
+    ended_response(renew(d["refresh_token"]), "after logout")
+    for tok in (d["refresh_token"], "y" * 43):
+        check(call(s6.port, "POST", "/api/v1/auth/logout", {"refresh_token": tok}, {"X-Forwarded-For": fresh_ip()})[0] == 204, "logout is idempotent")
+    check(call(s6.port, "POST", "/api/v1/auth/logout", {"refresh_token": "short"}, {"X-Forwarded-For": fresh_ip()})[0] == 422, "malformed")
+    check(me(d["access_token"])[0] == 200, "the access token itself lives on until it expires (30 min)")
+    say("    logout: 204 (also when repeated or for an unknown token), then /auth/refresh -> 401")
+
+    # -- lifetimes
+    e = login("omar@example.com", "right-pass-omar")["refresh_token"]
+    warp(30 * day + 60)
+    ended_response(renew(e), "idle for 31 days")
+    e = login("omar@example.com", "right-pass-omar")["refresh_token"]
+    for i in range(4):
+        warp(20 * day)  # active every 20 days: never idle for 30
+        status, _, body = renew(e)
+        check(status == 200, (i, status, body))
+        e = body["refresh_token"]
+    warp(11 * day)  # 91 days after the sign-in; the last token had been used only 11 days ago
+    ended_response(renew(e), "absolute cap")
+    minted = call(s6.port, "POST", "/__mint_token?email=omar@example.com&age_seconds=1860&minutes=30")[2]["access_token"]
+    check(me(minted)[0] == 401, "an expired access token is refused")
+    say("    idle window: 31 days unused -> 401; used every 20 days it slides (4 renewals); the 90-day cap ends it anyway; expired access token -> 401")
+
+    # -- password reset
+    a = login("judy@example.com", "right-pass-judy")
+    b = login("judy@example.com", "right-pass-judy", refresh=False)
+    time.sleep(1.1)  # tokens are stamped in whole seconds
+    status, _, body = call(s6.port, "POST", "/api/v1/auth/reset-password",
+                           {"email": "judy@example.com", "code": "123456", "new_password": "purple-tractor-ocean-1987"},
+                           {"X-Forwarded-For": fresh_ip()})
+    check(status == 200, (status, body))
+    ended_response(renew(a["refresh_token"]), "refresh token after a password reset")
+    check(me(a["access_token"])[0] == 401 and me(b["access_token"])[0] == 401, "access tokens issued before the reset are refused")
+    c = login("judy@example.com", "purple-tractor-ocean-1987")
+    check(me(c["access_token"])[0] == 200 and renew(c["refresh_token"])[0] == 200, "a new sign-in works")
+    say("    password reset: refresh tokens revoked, and every access token issued before it (30-minute and 24-hour) refused; the new sign-in works")
+
+    # -- deleted account
+    p = login("pia@example.com", "right-pass-pia")
+    check(call(s6.port, "POST", "/__delete_user?email=pia@example.com")[0] == 200, "delete")
+    ended_response(renew(p["refresh_token"]), "deleted account")
+    check(me(p["access_token"])[0] == 401, "deleted account's access token")
+    say("    deleted account: /auth/refresh answers the same 401 and message as an expired session; its access token is refused")
+
+    # -- limits, Redis, logs
+    q = login("quin@example.com", "right-pass-quin")
+    redis.commands.clear()
+    ip = "192.0.2.201"
+    codes = [call(s6.port, "POST", "/api/v1/auth/refresh", {"refresh_token": "z" * 43}, {"X-Forwarded-For": ip})[0] for _ in range(61)]
+    check(codes == [401] * 60 + [429], codes)
+    check(not [c for c in redis.commands if c in ("get", "incr", "incrby", "del", "expire", "ttl")], redis.commands)
+    check(login("quin@example.com", "right-pass-quin", xff=ip) and renew(q["refresh_token"])[0] in (200, 429), "sign-in has its own bucket")
+    say("    /auth/refresh is limited to 60/minute per IP (61st -> 429), sign-in on the same IP is unaffected, Redis is not involved")
+    log = s6.text()
+    check("forgiven" in log and "reuse detected" in log, "the leeway and the reuse must be logged")
+    leaks = [t for t in handed_out if t in log or hashlib.sha256(t.encode()).hexdigest() in log]
+    check(handed_out and not leaks, "raw refresh tokens (or their hashes) found in the server log")
+    say("    server log: leeway and reuse are logged; none of the %d refresh tokens handed out (nor their hashes) appears in it" % len(handed_out))
+    s6.stop()
 
     say("\nE2E: ALL %d CHECKS PASSED in %.0fs" % (CHECKS, time.time() - started))
     code = 0

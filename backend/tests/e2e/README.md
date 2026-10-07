@@ -20,6 +20,14 @@ No Docker, Redis or Postgres is needed, and nothing is installed into the projec
   in under 5 s; throttling resumes by itself when Redis returns. This is what caught redis-py's default
   retries, which made every call to an unreachable Redis take seconds (see `get_redis()`).
 
+- **Sessions with refresh tokens** (`/auth/refresh`, `/auth/logout`, `/auth/me`; real routers, real PyJWT and the
+  real rotation rules): clients without the opt-in keep the 24-hour token and get no refresh token; renewal and
+  rotation; a lost response is forgiven once inside the 10-second leeway; reuse after it revokes the whole family
+  and is committed before the 401 (the database rolls back on errors); logout; the 30-day idle window, its
+  sliding, and the 90-day cap; password reset ends refresh tokens and every access token issued before it; a
+  deleted account gets the same 401 as an expired session; the 60/minute limit; and no raw token or hash ever
+  reaches the server log.
+
 ## Run it
 
 PowerShell, from the repo root. The venv lives outside the repo, takes its versions from
@@ -28,7 +36,7 @@ PowerShell, from the repo root. The venv lives outside the repo, takes its versi
 ```powershell
 $venv = "$env:TEMP\lamba-e2e"   # any folder outside the repo
 uv run --no-project python -m venv $venv
-$pins = (Get-Content backend\requirements.txt) -match '^(fastapi|uvicorn|slowapi|redis)\b' -replace '\[standard\]', ''
+$pins = (Get-Content backend\requirements.txt) -match '^(fastapi|uvicorn|slowapi|redis|PyJWT)\b' -replace '\[standard\]', ''
 uv pip install --python "$venv\Scripts\python.exe" $pins
 & "$venv\Scripts\python.exe" -B backend\tests\e2e\e2e_run.py
 ```
@@ -41,11 +49,14 @@ the unsigned launcher that `uv venv` writes into a new venv (error 4551, "Applic
 
 ## Real and stand-in
 
-Real: FastAPI, slowapi (and limits), redis-py, uvicorn, and the repo's `auth_v1.py`, `rate_limit.py`,
-`signin_throttle.py`, `cache.py`, `password_policy.py` and `schemas/auth_v1.py`.
+Real: FastAPI, slowapi (and limits), redis-py, PyJWT, uvicorn, and the repo's `auth_v1.py`, `api/auth.py`,
+`rate_limit.py`, `signin_throttle.py`, `cache.py`, `password_policy.py`, `services/auth.py`,
+`services/refresh_tokens.py` and `schemas/auth_v1.py`.
 
-Stand-ins (`e2e_app.py`, `e2e_run.py`): the database (a few users in memory), password hashing and tokens,
-email sending, and the Redis *server* (`MiniRedis`, a protocol stand-in with a clock the test can move forward).
+Stand-ins (`e2e_app.py`, `e2e_run.py`): the database (a few users and a refresh token table in memory, with test
+hooks to move the clock and delete an account), password hashing, email sending, and the Redis *server*
+(`MiniRedis`, a protocol stand-in with a clock the test can move forward). The SQL token store is covered by
+`tests/test_refresh_token_store_pg.py` (needs a throwaway Postgres).
 Not covered: PostgreSQL, a real Redis server, Caddy and Docker's network, `docker-compose.yml` itself (the trust
 list is passed to uvicorn directly, so a change to the file would go unnoticed), and Linux-only behaviour (it was
 written and run on Windows).

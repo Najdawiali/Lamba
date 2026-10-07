@@ -56,6 +56,8 @@ from tests.test_merchant_offers_api import TestMerchantOffersAPI
 from tests.test_market_profile_model_and_schemas import TestMarketProfileModelAndSchemas
 from tests.test_merchant_market_profile_api import TestMerchantMarketProfileAPI
 from tests.test_password_policy import TestPasswordPolicy
+from tests.test_refresh_tokens import TestRefreshTokens, TestAccessTokens
+from tests.test_refresh_token_store_pg import TestRefreshTokensPostgres, TestAuthFlowPostgres  # skipped without LAMBA_TEST_DATABASE_URL
 
 
 class TestArabicNorm(unittest.TestCase):
