@@ -22,7 +22,7 @@ import {
   POSCheckoutItem,
   POSCheckoutResponse,
   MarketItemDashboardResponse,
-  logout,
+  isSessionEnded,
 } from '../../services/api';
 import { formatPrice } from '../../services/currency';
 import { resolveImageUrl } from '../../services/utils';
@@ -980,16 +980,8 @@ const styles = useMemo(() => StyleSheet.create({
         }, 600);
       }
     } catch (err: any) {
-      if (err?.response?.status === 401) {
-        console.warn('POS Checkout failed due to 401 Unauthorized. Logging out.');
-        try {
-          await logout();
-        } catch (logoutErr) {
-          // ignore
-        }
-        router.replace('/(auth)/gateway');
-        return;
-      }
+      // A 401 is handled globally: the session is renewed, or ended with a trip to login
+      if (isSessionEnded(err)) return;
       console.warn('POS Checkout failed:', err);
       Alert.alert(t('common.error', 'Error'), t('scanner.checkout_error', 'An error occurred during transaction checkout.'));
     } finally {

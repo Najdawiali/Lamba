@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { getCheckoutHistory, HistoricalReceipt, logout } from '../../services/api';
+import { getCheckoutHistory, HistoricalReceipt, isSessionEnded } from '../../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
@@ -52,16 +52,8 @@ export default function ReceiptHistoryScreen() {
       const data = await getCheckoutHistory();
       setReceipts(data);
     } catch (err: any) {
-      if (err?.response?.status === 401) {
-        console.warn('Failed to load transaction history due to 401 Unauthorized. Logging out.');
-        try {
-          await logout();
-        } catch (logoutErr) {
-          // ignore
-        }
-        router.replace('/(auth)/gateway');
-        return;
-      }
+      // A 401 is handled globally: the session is renewed, or ended with a trip to login
+      if (isSessionEnded(err)) return;
 
       console.warn('Failed to load transaction history:', err);
       Alert.alert(

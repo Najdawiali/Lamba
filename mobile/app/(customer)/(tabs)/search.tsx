@@ -26,7 +26,7 @@ import EnableLocationPrompt from '../../../components/EnableLocationPrompt';
 import {
   textSearch, imageSearch, getCategories, getUser,
   getNearMarkets, getCustomerSpecialOffers, getNearbyItems, createSearchAlert,
-  SearchResultItem, SearchFilters, getSearchHistory, addSearchHistory, clearSearchHistory, SearchHistoryEntry,
+  SearchResultItem, SearchFilters, getSearchHistory, addSearchHistory, clearSearchHistory, SearchHistoryEntry, isSessionEnded,
   NearMarketResponse, CustomerSpecialOfferResponse, NearbyItemResponse,
 } from '../../../services/api';
 import ProductCard from '../../../components/ProductCard';
@@ -142,7 +142,7 @@ export default function SearchScreen() {
         if (currentUser) {
           setUserId(currentUser.id);
           setUserEmail(currentUser.email);
-          loadHistory(currentUser.id);
+          loadHistory();
         }
       } catch (authErr) {
         console.warn('Failed to fetch current user profile:', authErr);
@@ -185,9 +185,9 @@ export default function SearchScreen() {
     return () => { isMounted = false; };
   }, [userLocation]);
 
-  const loadHistory = async (uid: string) => {
+  const loadHistory = async () => {
     try {
-      const data = await getSearchHistory(uid);
+      const data = await getSearchHistory();
       setHistoryList(data);
     } catch (err) {
       console.warn('Failed to fetch search history:', err);
@@ -197,8 +197,8 @@ export default function SearchScreen() {
   const handleSaveSearch = async (queryText: string, count: number) => {
     if (!userId) return;
     try {
-      await addSearchHistory(userId, queryText, searchType, count);
-      loadHistory(userId);
+      await addSearchHistory(queryText, searchType, count);
+      loadHistory();
     } catch (err) {
       console.warn('Failed to save search history:', err);
     }
@@ -271,11 +271,11 @@ export default function SearchScreen() {
       setToastVisible(true);
       setTimeout(() => setToastVisible(false), 3000);
     } catch (err) {
+      // No fake success: if the session ended the user is already on their way to login
       console.warn('Failed to create search alert:', err);
-      // Show success anyway — backend auto-creates alerts on zero-result searches
-      setToastMessage(`✓ سنبلغك فور توفر "${query.trim()}"`);
-      setToastVisible(true);
-      setTimeout(() => setToastVisible(false), 3000);
+      if (!isSessionEnded(err)) {
+        Alert.alert(t('common.error', 'Error'), t('search.alert_failed', 'تعذّر حفظ التنبيه، حاول مرة أخرى.'));
+      }
     }
   };
 
@@ -1355,7 +1355,7 @@ export default function SearchScreen() {
               <TouchableOpacity onPress={async () => {
                 if (!userId) return;
                 try {
-                  await clearSearchHistory(userId);
+                  await clearSearchHistory();
                   setHistoryList([]);
                 } catch (err) { console.warn('Failed to clear history:', err); }
               }}>

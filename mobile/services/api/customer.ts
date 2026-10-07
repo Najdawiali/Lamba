@@ -194,30 +194,19 @@ export async function getCategories(): Promise<CategoryNode[]> {
   return data;
 }
 
-export async function getCustomerAlerts(userId: string): Promise<AlertResponse[]> {
-  try {
-    const { data } = await api.get<AlertResponse[]>('/api/v1/customer/alerts', {
-      params: { user_id: userId },
-    });
-    return Array.isArray(data) ? data : [];
-  } catch { return []; }
+/** The signed-in user's alerts (the server knows who from the token). Errors are the caller's to show. */
+export async function getCustomerAlerts(): Promise<AlertResponse[]> {
+  const { data } = await api.get<AlertResponse[]>('/api/v1/customer/alerts');
+  return Array.isArray(data) ? data : [];
 }
 
 export async function createSearchAlert(
   queryText: string, latitude: number, longitude: number,
 ): Promise<AlertResponse> {
-  try {
-    const { data } = await api.post<AlertResponse>('/api/v1/customer/alerts', {
-      query_text: queryText, latitude, longitude,
-    });
-    return data;
-  } catch {
-    return {
-      id: 'local-alert-' + Date.now(),
-      query_text: queryText, latitude, longitude,
-      is_active: true, created_at: new Date().toISOString(),
-    };
-  }
+  const { data } = await api.post<AlertResponse>('/api/v1/customer/alerts', {
+    query_text: queryText, latitude, longitude,
+  });
+  return data;
 }
 
 // ── Reports & account ─────────────────────────────────────────
@@ -270,22 +259,23 @@ export async function isFavorite(itemId: string): Promise<boolean> {
 }
 
 // ── Search History ─────────────────────────────────────────────
-export async function getSearchHistory(userId: string, limit: number = 20): Promise<SearchHistoryEntry[]> {
+// The server takes the user from the token: none of these send a user id.
+export async function getSearchHistory(limit: number = 20): Promise<SearchHistoryEntry[]> {
   const { data } = await api.get<SearchHistoryEntry[]>('/api/v1/customer/search-history', {
-    params: { user_id: userId, limit },
+    params: { limit },
   });
   return data;
 }
 
 export async function addSearchHistory(
-  userId: string, queryText: string, searchType: string = 'text', resultCount: number = 0,
+  queryText: string, searchType: string = 'text', resultCount: number = 0,
 ): Promise<SearchHistoryEntry> {
   const { data } = await api.post<SearchHistoryEntry>('/api/v1/customer/search-history', {
-    user_id: userId, query_text: queryText, search_type: searchType, result_count: resultCount,
+    query_text: queryText, search_type: searchType, result_count: resultCount,
   });
   return data;
 }
 
-export async function clearSearchHistory(userId: string): Promise<void> {
-  await api.delete('/api/v1/customer/search-history', { params: { user_id: userId } });
+export async function clearSearchHistory(): Promise<void> {
+  await api.delete('/api/v1/customer/search-history');
 }
