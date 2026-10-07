@@ -56,6 +56,12 @@ export default function LoginScreen() {
     }
   }, [prefill]);
 
+  // Sent here because the session ended (expired, revoked, or the account was deleted): one message for all of them
+  const sessionEnded = searchParams.sessionEnded as string | undefined;
+  useEffect(() => {
+    if (sessionEnded) setErrorMessage(t('login.session_ended', 'انتهت جلستك. الرجاء تسجيل الدخول مرة أخرى.'));
+  }, [sessionEnded]);
+
   // Determine input icon dynamically
   const getUsernameIcon = (): any => {
     if (!PHONE_AUTH_ENABLED) return 'mail-outline';

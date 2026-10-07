@@ -57,7 +57,8 @@ export default function DashboardScreen() {
   useEffect(() => {
     if (!marketError) return;
     const status = (marketError as any)?.response?.status;
-    if (status === 401 || status === 403) {
+    // 401 is handled globally (renew, or end the session and go to login)
+    if (status === 403) {
       logout().then(() => router.replace('/(auth)/login'));
     } else if (status === 404) {
       router.replace('/(merchant)/onboarding');

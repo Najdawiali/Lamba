@@ -21,6 +21,8 @@ from app.api.auth import get_current_user
 from app.config import settings
 from app.database import get_db
 from app.models.user import User
+from app.services import refresh_tokens
+from app.services.refresh_token_store import SqlRefreshStore
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,8 @@ async def delete_my_account(
     db: AsyncSession = Depends(get_db),
 ):
     user_id = user.id
+    # Sign the account out everywhere first (the delete would cascade to these rows anyway)
+    await refresh_tokens.revoke_all(SqlRefreshStore(db), user_id, "account_deleted")
     # Core DELETE (not session.delete) so the database delete rules do the work,
     # instead of the ORM trying to null out child rows first.
     await db.execute(delete(User).where(User.id == user_id))

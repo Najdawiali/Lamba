@@ -2,7 +2,7 @@
  * Lamba API — Auth
  */
 
-import api, { saveToken, saveUser } from './client';
+import api, { saveSession } from './client';
 
 // ── Types ──────────────────────────────────────────────────────
 export interface UserResponse {
@@ -61,6 +61,8 @@ export interface SignInResponse {
   access_token: string;
   token_type: string;
   user: SignInUserInfo;
+  refresh_token?: string | null;
+  expires_in?: number | null; // seconds the access token lives
 }
 
 // ── Functions ──────────────────────────────────────────────────
@@ -78,9 +80,18 @@ export async function signIn(emailOrPhone: string, password: string): Promise<Si
   const { data } = await api.post<SignInResponse>('/api/v1/auth/signin', {
     email_or_phone: emailOrPhone,
     password,
+    client_supports_refresh: true, // short access token + refresh token (older servers ignore it)
   });
-  await saveToken(data.access_token);
-  await saveUser(data.user);
+  await saveSession(data, data.user);
+  return data;
+}
+
+/**
+ * The signed-in user, from the server. Used at app start to find out whether the stored session
+ * still works: a 401 here (after a renewal attempt) means it doesn't; a network error means nothing.
+ */
+export async function getMe(timeoutMs: number = 8000): Promise<SignInUserInfo> {
+  const { data } = await api.get<SignInUserInfo>('/api/v1/auth/me', { timeout: timeoutMs });
   return data;
 }
 

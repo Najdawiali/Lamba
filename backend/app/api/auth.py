@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.user import User
-from app.services.auth import decode_access_token
+from app.services.auth import decode_access_token, issued_before
 
 security = HTTPBearer(auto_error=False)
 
@@ -56,6 +56,13 @@ async def get_current_user(
             detail="User not found",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    if issued_before(payload, getattr(user, "tokens_valid_after", None)):
+        # Issued before the last password reset
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return user
 
 
@@ -77,7 +84,10 @@ async def get_optional_current_user(
         return None
 
     result = await db.execute(select(User).where(User.id == user_id))
-    return result.scalar_one_or_none()
+    user = result.scalar_one_or_none()
+    if user is not None and issued_before(payload, getattr(user, "tokens_valid_after", None)):
+        return None
+    return user
 
 
 def require_merchant(user: User = Depends(get_current_user)) -> User:

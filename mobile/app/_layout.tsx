@@ -3,9 +3,9 @@
  * Uses Expo Router for file-based routing.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Platform, I18nManager } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useRootNavigationState, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -18,7 +18,7 @@ import * as SecureStore from 'expo-secure-store';
 import { setupI18n } from '../services/i18n';
 import { setupCurrency } from '../services/currency';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
-import api from '../services/api';
+import api, { onSessionEnded } from '../services/api';
 
 // Set RTL before first render — synchronous check
 try {
@@ -100,6 +100,24 @@ const queryClient = new QueryClient({
 
 function AppShell() {
   const { colors, isDark, ready } = useTheme();
+  const router = useRouter();
+  const segments = useSegments();
+  const segmentsRef = useRef<string[]>(segments);
+  segmentsRef.current = segments;
+  const navigationReady = !!useRootNavigationState()?.key;
+
+  // The session ended (a 401 that renewal could not fix): drop the cached data of that session and
+  // send the user to login with one message. Not needed on the start-up route (app/index.tsx
+  // redirects by itself) or on the auth screens, where the user is signed out already.
+  useEffect(() => {
+    if (!navigationReady) return;
+    return onSessionEnded(() => {
+      queryClient.clear();
+      const here = segmentsRef.current as string[];
+      if (here.length === 0 || here[0] === '(auth)') return;
+      router.replace({ pathname: '/(auth)/login', params: { sessionEnded: '1' } });
+    });
+  }, [navigationReady, router]);
 
   if (!ready) return null;
 

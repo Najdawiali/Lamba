@@ -46,6 +46,7 @@
   },
   "login": {
     "welcome_back": "Welcome back",
+    "session_ended": "Your session has ended. Please sign in again.",
     "email_placeholder": "Email address",
     "password_placeholder": "Password",
     "sign_in": "Sign In",
@@ -151,6 +152,7 @@
   },
   "search": {
     "placeholder": "Search products nearby...",
+    "alert_failed": "Couldn't save the alert. Please try again.",
     "filters": "Search Filters",
     "location_city": "Location City",
     "range_limit": "Range Limit",
@@ -388,6 +390,7 @@
   },
   "profile": {
     "title": "Profile",
+    "alerts_load_failed": "Couldn't load your alerts. Please try again.",
     "store_name": "Store Name",
     "account": "Account",
     "preferences": "Preferences",

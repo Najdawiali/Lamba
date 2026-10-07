@@ -55,11 +55,28 @@ class UnverifiedAccountResponse(BaseModel):
 class SignInRequest(BaseModel):
     email_or_phone: str = Field(..., min_length=3)
     password: str
+    # Apps that renew their session through /auth/refresh send true and get a short-lived
+    # access token plus a refresh token. Older builds omit it and keep the 24-hour token.
+    client_supports_refresh: bool = False
 
 
 class SignInResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    user: "SignInUserInfo"
+    refresh_token: Optional[str] = None  # only when the client asked for it
+    expires_in: Optional[int] = None  # seconds the access token lives (only with refresh_token)
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(..., min_length=20, max_length=200)
+
+
+class RefreshResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    refresh_token: str
+    expires_in: int
     user: "SignInUserInfo"
 
 

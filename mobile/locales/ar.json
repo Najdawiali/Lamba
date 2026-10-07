@@ -46,6 +46,7 @@
   },
   "login": {
     "welcome_back": "مرحباً بعودتك",
+    "session_ended": "انتهت جلستك. الرجاء تسجيل الدخول مرة أخرى.",
     "email_placeholder": "البريد الإلكتروني",
     "password_placeholder": "كلمة المرور",
     "sign_in": "تسجيل الدخول",
@@ -151,6 +152,7 @@
   },
   "search": {
     "placeholder": "ابحث عن المنتجات القريبة...",
+    "alert_failed": "تعذّر حفظ التنبيه، حاول مرة أخرى.",
     "filters": "فلاتر البحث",
     "location_city": "المدينة",
     "range_limit": "نطاق المسافة",
@@ -368,6 +370,7 @@
   },
   "profile": {
     "title": "حسابي",
+    "alerts_load_failed": "تعذّر تحميل التنبيهات، حاول مرة أخرى.",
     "store_name": "اسم المتجر",
     "account": "الحساب",
     "preferences": "التفضيلات",

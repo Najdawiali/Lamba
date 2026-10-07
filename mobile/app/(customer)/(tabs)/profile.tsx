@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getUser, saveUser, logout, deleteAccount, getCustomerAlerts, AlertResponse, getMyStore, updateProfile } from '../../../services/api';
+import { getUser, saveUser, logout, deleteAccount, getCustomerAlerts, AlertResponse, getMyStore, updateProfile, isSessionEnded } from '../../../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
 import { useTheme, useThemeColors, ThemeMode } from '../../../context/ThemeContext';
 import { t, i18n, toggleLanguage, changeLanguage } from '../../../services/i18n';
@@ -132,10 +132,11 @@ export default function CustomerProfileScreen() {
     const targetId = userId || user?.id;
     if (!targetId) return;
     try {
-      const data = await getCustomerAlerts(targetId);
+      const data = await getCustomerAlerts();
       setAlertCount(Array.isArray(data) ? data.length : 0);
-    } catch {
-      setAlertCount(0);
+    } catch (err) {
+      // Keep the last known count rather than claiming "0 alerts"
+      console.warn('Failed to load alert count:', err);
     }
   }, [user?.id]);
 
@@ -245,12 +246,16 @@ export default function CustomerProfileScreen() {
     setLoadingAlerts(true);
     setAlertsModalVisible(true);
     try {
-      const data = await getCustomerAlerts(user.id);
+      const data = await getCustomerAlerts();
       const alertList = Array.isArray(data) ? data : [];
       setAlerts(alertList);
       setAlertCount(alertList.length);
     } catch (err) {
-      setAlerts([]);
+      console.warn('Failed to load alerts:', err);
+      setAlertsModalVisible(false);
+      if (!isSessionEnded(err)) {
+        Alert.alert(t('common.error', 'Error'), t('profile.alerts_load_failed', 'تعذّر تحميل التنبيهات، حاول مرة أخرى.'));
+      }
     } finally {
       setLoadingAlerts(false);
     }
