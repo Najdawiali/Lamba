@@ -154,7 +154,9 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
 - Redis client (`get_redis()` in `app/services/cache.py`): redis-py's default retry policy is switched
   off (`_NO_RETRY`). With it on (10 retries with backoff in redis-py 8.1) one call to an unreachable
   Redis took 3 to 20+ seconds despite the 0.5 s timeouts; now a failure costs at most ~0.5 s.
-  `requirements.txt` leaves `redis>=5.0.0` unpinned, so a rebuilt image gets the newest version.
+  `requirements.txt` pins `redis==8.1.0`, the version production runs, and the end-to-end harness is
+  tested against it. `httpx`, `slowapi` and `boto3` are still `>=`, so a rebuilt image gets their
+  newest versions.
 
 ## Status (keep this section current)
 Done: security hardening, Alembic migrations, taxonomy, classifier ensemble, merchant flow fixes,
