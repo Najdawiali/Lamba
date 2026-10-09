@@ -72,6 +72,8 @@ from tests.test_enrich_attributes import (  # need SQLAlchemy to import the job;
 from tests.test_enrich_attributes_pg import TestEnrichAttributesSql  # skipped without LAMBA_TEST_DATABASE_URL
 from tests.test_query_attributes import TestQueryAttributes
 from tests.test_llm_error_reasons import TestErrorReasons
+from tests.test_qu_cache import TestQuCache
+from tests.test_query_understanding_service import TestQueryUnderstandingService, TestSettingsDefaults
 
 
 class TestArabicNorm(unittest.TestCase):

@@ -1,20 +1,32 @@
 """
-Query Understanding Service — LLM-based intent, category, brand, and attribute
-extraction with needs_llm gatekeeper.
+Query Understanding Service — intent, category, brand and attribute extraction for a search query.
+
+Three layers, cheapest first:
+  1. rules (app/services/query_attributes.py): organic / gender / temperature / dietary from the query's
+     words; instant, no network; always present, and they win over the model for their keys;
+  2. a Redis cache of what the model answered for this query (app/services/qu_cache.py);
+  3. the model, called once, with no retry, through its own circuit breaker, asking DeepInfra to reject
+     at once ("fail_fast") instead of queueing when the model is at capacity.
+Any failure falls back to the rules alone. The call never raises. Every call is counted by outcome in
+Redis (HGETALL lamba:stats:qu:<YYYY-MM-DD>) and logged as "[QU] outcome=...".
 """
 
 from __future__ import annotations
-import asyncio
 
-import logging
+import hashlib
 import json
-import re
+import logging
+import time
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
 
 from app.config import settings
-from app.services.llm import llm_adapter
+from app.services import qu_cache
 from app.services.arabic_norm import normalize_query
+from app.services.cache import get_redis
+from app.services.http_pool import deepinfra_query_breaker
+from app.services.llm import llm_adapter
+from app.services.query_attributes import extract_query_attributes, merge_attributes
 
 logger = logging.getLogger(__name__)
 
@@ -186,67 +198,141 @@ _ALLOWED_ATTR_KEYS = {
 }
 
 
+# A change to the prompt invalidates cached answers.
+_PROMPT_VERSION = hashlib.sha256(_QU_SYSTEM_PROMPT.encode("utf-8")).hexdigest()[:8]
+
+
+def _outcome_from_reasons(reasons: List[str]) -> str:
+    """Name the failure of a model call from the adapter's reasons (see LLMAdapter.error_sink)."""
+    reason = reasons[-1] if reasons else "error"
+    if reason == "timeout":
+        return "timeout"
+    if reason == "http_429":
+        return "overloaded"
+    if reason.startswith("http_"):
+        return "http_error"
+    if reason in ("breaker_open", "no_api_key"):
+        return reason
+    return "error"
+
+
+def _parse_reply(reply: str) -> Optional[dict]:
+    """The model's answer as the fields that are cached and used, or None if it is not a JSON object."""
+    try:
+        parsed = json.loads(reply)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+
+    def text(name: str) -> Optional[str]:
+        value = parsed.get(name)
+        return value if isinstance(value, str) and value.strip() else None
+
+    intent = parsed.get("intent")
+    raw_attrs = parsed.get("attributes", {})
+    if not isinstance(raw_attrs, dict):
+        raw_attrs = {}
+    return {
+        "intent": intent if intent in ("product", "service") else None,
+        "category_name": text("category_name"),
+        "brand": text("brand"),
+        "search_query": text("search_query"),
+        "query_clean": text("query_clean"),
+        "attributes": {k: v for k, v in raw_attrs.items() if k in _ALLOWED_ATTR_KEYS and v is not None},
+    }
+
+
+async def _redis_or_none() -> Any:
+    try:
+        return await get_redis()
+    except Exception:
+        return None
+
+
 class QueryUnderstandingService:
-    """Async Query Understanding service using LLMAdapter."""
+    """Async Query Understanding: rules, then cache, then one model call. Never raises."""
+
+    def __init__(self) -> None:
+        self._inflight = 0
+
+    def rules_only_intent(self, query_text: str) -> QueryIntent:
+        """What search knows about a query with no model at all: the rule-based attributes."""
+        norm_q = normalize_query(query_text)
+        return QueryIntent(
+            search_query=norm_q or query_text,
+            attributes=extract_query_attributes(norm_q),
+        )
 
     async def analyze_query_async(self, query_text: str) -> QueryIntent:
-        """
-        Extract intent, category, brand, and structured attributes from user query.
-        Returns fallback QueryIntent immediately if needs_llm is False or if LLM fails.
-        """
-        norm_q = normalize_query(query_text)
-        default_intent = QueryIntent(search_query=norm_q or query_text)
-
-        if not needs_llm(query_text):
-            logger.info(f"Query understanding skipped via needs_llm gatekeeper for '{query_text}'")
-            return default_intent
-
+        started = time.monotonic()
+        fallback = self.rules_only_intent(query_text)
+        redis_client = await _redis_or_none()
         try:
-            # Hard 6s deadline — if the LLM+retries exceed this, bail out
-            # rather than letting the user wait 17s for 3 failed retries.
-            res = await asyncio.wait_for(
-                llm_adapter.complete_chat(
-                    messages=[
-                        {"role": "system", "content": _QU_SYSTEM_PROMPT},
-                        {"role": "user", "content": f"Query: {query_text}"},
-                    ],
-                    model=settings.query_llm_fallback_model,
-                    temperature=0.0,
-                    max_tokens=250,
-                    timeout=3.0,
-                    max_retries=2,
-                    chat_template_kwargs={"enable_thinking": False},
-                ),
-                timeout=4.0,
+            intent, outcome = await self._understand(query_text, fallback, redis_client)
+        except Exception as exc:  # search must never fail because of query understanding
+            logger.warning("[QU] unexpected failure, using the rules only: %r", exc)
+            intent, outcome = fallback, "error"
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+        log = logger.debug if outcome == "not_needed" else logger.info
+        log("[QU] outcome=%s ms=%d query=%r attrs=%s", outcome, elapsed_ms, query_text, intent.attributes)
+        await qu_cache.count(redis_client, outcome)
+        return intent
+
+    async def _understand(self, query_text: str, fallback: QueryIntent, redis_client: Any):
+        if not needs_llm(query_text):
+            return fallback, "not_needed"
+
+        key = qu_cache.cache_key(normalize_query(query_text), settings.query_llm_fallback_model, _PROMPT_VERSION)
+        cached = await qu_cache.get(redis_client, key)
+        if cached is not None:
+            return self._intent_from(cached, fallback), "cache_hit"
+
+        if deepinfra_query_breaker.should_skip():
+            return fallback, "breaker_open"
+        if self._inflight >= settings.query_llm_max_inflight:
+            return fallback, "busy"
+
+        reasons: List[str] = []
+        extra = {"fail_fast": True} if settings.query_llm_fail_fast else {}
+        self._inflight += 1
+        try:
+            reply = await llm_adapter.complete_chat(
+                messages=[
+                    {"role": "system", "content": _QU_SYSTEM_PROMPT},
+                    {"role": "user", "content": f"Query: {query_text}"},
+                ],
+                model=settings.query_llm_fallback_model,
+                temperature=0.0,
+                max_tokens=250,
+                timeout=settings.query_llm_call_timeout_seconds,
+                max_retries=1,  # one attempt: a 429 or a timeout is not retried inside the search's time budget
+                breaker=deepinfra_query_breaker,
+                error_sink=reasons,
+                chat_template_kwargs={"enable_thinking": False},
+                **extra,
             )
+        finally:
+            self._inflight -= 1
+        if reply is None:
+            return fallback, _outcome_from_reasons(reasons)
 
-            if res:
-                parsed = json.loads(res)
-                intent_val = parsed.get("intent")
-                if intent_val not in ("product", "service"):
-                    intent_val = None
+        fields = _parse_reply(reply)
+        if fields is None:
+            return fallback, "bad_json"
+        await qu_cache.put(redis_client, key, fields, settings.cache_qu_ttl)
+        return self._intent_from(fields, fallback), "ok"
 
-                # Extract and whitelist attributes
-                raw_attrs = parsed.get("attributes", {})
-                if not isinstance(raw_attrs, dict):
-                    raw_attrs = {}
-                filtered_attrs = {
-                    k: v for k, v in raw_attrs.items()
-                    if k in _ALLOWED_ATTR_KEYS and v is not None
-                }
-
-                return QueryIntent(
-                    intent=intent_val,
-                    category_name=parsed.get("category_name"),
-                    brand=parsed.get("brand"),
-                    search_query=parsed.get("search_query") or norm_q or query_text,
-                    query_clean=parsed.get("query_clean"),
-                    attributes=filtered_attrs,
-                )
-        except Exception as e:
-            logger.warning(f"Query understanding LLM analysis failed gracefully: {e}")
-
-        return default_intent
+    @staticmethod
+    def _intent_from(fields: dict, fallback: QueryIntent) -> QueryIntent:
+        return QueryIntent(
+            intent=fields.get("intent"),
+            category_name=fields.get("category_name"),
+            brand=fields.get("brand"),
+            search_query=fields.get("search_query") or fallback.search_query,
+            query_clean=fields.get("query_clean"),
+            attributes=merge_attributes(fields.get("attributes"), fallback.attributes),
+        )
 
 
 query_understanding_service = QueryUnderstandingService()
