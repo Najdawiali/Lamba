@@ -164,13 +164,23 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
   `sanitize_merchant_attributes` (known keys, right types). Filling attributes can narrow results: the
   unfiltered retry in `search_v1.py` fires only when the filtered search returns ZERO rows, so one wrongly
   tagged product switches it off. The catalog fill is `app/jobs/enrich_attributes.py` (names only, prompt v1,
-  commands in its docstring); it must be graded on a dry run before the full run. OPEN QUESTION: queries are
-  alef-normalized before the query model sees them, but the filter's ILIKE is alef-sensitive, so check
-  the `[ATTR FILTER]` log lines for hamza forms (أخضر vs اخضر) before the full run.
-- Synonyms: the Redis hash `lamba:synonyms` is the curated `CORE_SYNONYMS` only
-  (`scripts/build_synonym_table.py`, also run by `scripts/flush_search_cache.py`). Never rebuild it from
-  catalog `search_terms`: that mapped a dialect word to one product's name. `scripts/reembed_catalog.py` was
-  deleted (it did exactly that, and embedded a different text than `enrich_and_embed`).
+  commands in its docstring); it must be graded on a dry run before the full run.
+  Query-side spelling: the query model is shown alef/hamza-normalized text but answers in the usual
+  spelling (seen on the server 2026-10-09: "شاي اخضر" -> type "أخضر"), while names and stored values may use
+  either, so `match_variants` tries every text/brand value as given, normalized and with the original
+  alef/hamza letters put back, with and without "ال". Stored values stay as the model wrote them.
+  LATENCY WARNING: on the same check the query model (gemma-4-E4B-it, 3 s timeout) timed out on 3 of 4
+  calls and the circuit breaker then skipped the rest, and the retained api logs held no `[ATTR FILTER]`
+  line. If that is typical, attribute filters rarely fire and filling attributes will not change results;
+  measure it before judging the fill.
+- Synonyms: search looks words up in the Redis hash `lamba:synonyms`. It was EMPTY in production on
+  2026-10-09 (HLEN 0): `scripts/` is not in the Docker image, so nothing loads it and search runs without
+  dialect rewriting. The curated list is `CORE_SYNONYMS` (30 pairs) in `scripts/build_synonym_table.py`, which
+  now only loads that list (also run by `scripts/flush_search_cache.py`). Never rebuild it from catalog
+  `search_terms`: that mapped a dialect word to one product's name. `scripts/reembed_catalog.py` was deleted
+  (it did exactly that, and embedded a different text than `enrich_and_embed`). DECISION PENDING: whether to
+  ship the 30 pairs (an app-level loader) after checking them on the golden set; some are risky rewrites
+  ("شكر" also means thanks, "بندورة" may be the catalog's own word).
 - Catalog: 10,508 products with GTIN-14 barcodes (`app/utils/barcode.py` normalizes scans).
   Batch jobs must wait out an open circuit breaker and retry, never fast-fail the queue.
 - Merchant photos: the first photo of a catalog product becomes its catalog photo
