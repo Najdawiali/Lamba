@@ -1,0 +1,15 @@
+{"query": "شاي أخضر", "intent": "product", "category": "tea", "query_type": "attr_type", "relevant_ids": [], "relevant_keywords": [["شاي"]]}
+{"query": "جبنة بيضاء بلدية", "intent": "product", "category": "cheese", "query_type": "attr_type", "relevant_ids": [], "relevant_keywords": [["جبنة"]]}
+{"query": "حليب قليل الدسم", "intent": "product", "category": "dairy", "query_type": "attr_dietary", "relevant_ids": [], "relevant_keywords": [["حليب"]]}
+{"query": "حليب كامل الدسم", "intent": "product", "category": "dairy", "query_type": "attr_dietary", "relevant_ids": [], "relevant_keywords": [["حليب"]]}
+{"query": "كولا زيرو", "intent": "product", "category": "soft_drinks", "query_type": "attr_dietary", "relevant_ids": [], "relevant_keywords": [["كولا"], ["cola"]]}
+{"query": "معكرونة خالية من الغلوتين", "intent": "product", "category": "pasta", "query_type": "attr_dietary", "relevant_ids": [], "relevant_keywords": [["معكرونة"], ["pasta"]]}
+{"query": "زيت زيتون عضوي", "intent": "product", "category": "oil", "query_type": "attr_organic", "relevant_ids": [], "relevant_keywords": [["زيت"]]}
+{"query": "عسل عضوي", "intent": "product", "category": "honey", "query_type": "attr_organic", "relevant_ids": [], "relevant_keywords": [["عسل"]]}
+{"query": "عطر نسائي", "intent": "product", "category": "fragrance", "query_type": "attr_gender", "relevant_ids": [], "relevant_keywords": [["عطر"], ["perfume"]]}
+{"query": "عطر رجالي", "intent": "product", "category": "fragrance", "query_type": "attr_gender", "relevant_ids": [], "relevant_keywords": [["عطر"], ["perfume"]]}
+{"query": "مزيل عرق رجالي", "intent": "product", "category": "hygiene", "query_type": "attr_gender", "relevant_ids": [], "relevant_keywords": [["مزيل"], ["deodorant"]]}
+{"query": "شامبو نسائي", "intent": "product", "category": "hygiene", "query_type": "attr_gender", "relevant_ids": [], "relevant_keywords": [["شامبو"], ["shampoo"]]}
+{"query": "قهوة باردة", "intent": "product", "category": "coffee", "query_type": "attr_temperature", "relevant_ids": [], "relevant_keywords": [["قهوة"], ["coffee"]]}
+{"query": "شاي مثلج", "intent": "product", "category": "tea", "query_type": "attr_temperature", "relevant_ids": [], "relevant_keywords": [["شاي"], ["tea"]]}
+{"query": "iced tea", "intent": "product", "category": "tea", "query_type": "attr_temperature", "relevant_ids": [], "relevant_keywords": [["tea"], ["شاي"]]}

@@ -116,6 +116,10 @@ def main():
     parser.add_argument("--endpoint", default="/api/v1/search/hybrid")
     parser.add_argument("--base-url", default="http://localhost:8000")
     parser.add_argument("--token", default="")
+    parser.add_argument("--lat", type=float, default=32.0385, help="latitude of the simulated user")
+    parser.add_argument("--lng", type=float, default=35.7275, help="longitude of the simulated user")
+    parser.add_argument("--max-distance-km", type=float, default=None,
+                        help="search radius sent as filters.max_distance_km (the API default is used if omitted)")
     parser.add_argument("--mock", action="store_true", help="Run with mock data (no server needed)")
     
     args = parser.parse_args()
@@ -169,7 +173,9 @@ def main():
             latency = response_data.get("meta", {}).get("latency_ms", 15.0)
         else:
             url = f"{args.base_url.rstrip('/')}{args.endpoint}"
-            payload = {"query_text": query, "latitude": 32.0385, "longitude": 35.7275}
+            payload = {"query_text": query, "latitude": args.lat, "longitude": args.lng}
+            if args.max_distance_km is not None:
+                payload["filters"] = {"max_distance_km": args.max_distance_km}
             try:
                 resp = requests.post(url, json=payload, headers=headers, timeout=30)
                 if resp.status_code == 405: # Fallback to GET if POST not allowed
@@ -193,7 +199,7 @@ def main():
         worksheet_items = []
 
         for rank, item in enumerate(results):
-            item_id = str(item.get("id", ""))
+            item_id = str(item.get("id") or item.get("item_id") or "")  # the search API names it item_id
             score = 0
             is_matched_kw = False
 
