@@ -58,10 +58,18 @@ from tests.test_merchant_market_profile_api import TestMerchantMarketProfileAPI
 from tests.test_password_policy import TestPasswordPolicy
 from tests.test_refresh_tokens import TestRefreshTokens, TestAccessTokens
 from tests.test_refresh_token_store_pg import TestRefreshTokensPostgres, TestAuthFlowPostgres  # skipped without LAMBA_TEST_DATABASE_URL
-from tests.test_attribute_rules import TestSanitizeMerchantAttributes, TestHelpers, TestPlanAttributeFilters
+from tests.test_attribute_rules import TestSanitizeMerchantAttributes, TestAttributeRuleHelpers, TestPlanAttributeFilters
 from tests.test_attribute_filters import TestAttributeFilters, TestSearchUsesTheSharedFilters
 from tests.test_build_synonym_table import TestBuildSynonymTable
 from tests.test_attributes_version_migration import TestAttributesVersionMigration
+from tests.test_attribute_extraction import (
+    TestAttributeValidator, TestAttributeJsonParser, TestAttributeExtract, TestAttributePrompt,
+)
+from tests.test_enrich_attributes import (  # need SQLAlchemy to import the job; skipped without it
+    TestEnrichProcess, TestEnrichProbeAndGate, TestEnrichReports, TestEnrichSqlText,
+    TestEnrichDatabaseHelpers, TestEnrichRun,
+)
+from tests.test_enrich_attributes_pg import TestEnrichAttributesSql  # skipped without LAMBA_TEST_DATABASE_URL
 
 
 class TestArabicNorm(unittest.TestCase):

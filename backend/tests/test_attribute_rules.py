@@ -58,7 +58,7 @@ class TestSanitizeMerchantAttributes(unittest.TestCase):
         self.assertEqual(sanitize_merchant_attributes({}), {})
 
 
-class TestHelpers(unittest.TestCase):
+class TestAttributeRuleHelpers(unittest.TestCase):
     def test_canonical_enum_value(self):
         self.assertEqual(canonical_enum_value("gender", "MALE"), "male")
         self.assertEqual(canonical_enum_value("gender", "رجالي"), "male")
