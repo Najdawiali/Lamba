@@ -204,7 +204,7 @@ def _with_and_without_al(value: str) -> tuple[str, ...]:
 # original letter put back, one letter at a time (a word-initial bare alef was أ or إ; a bare hamza was ئ or ؤ).
 _ALEF, _ALEF_HAMZA_ABOVE, _ALEF_HAMZA_BELOW = chr(0x0627), chr(0x0623), chr(0x0625)
 _HAMZA, _YEH_HAMZA, _WAW_HAMZA = chr(0x0621), chr(0x0626), chr(0x0624)
-MAX_MATCH_VARIANTS = 16
+MAX_MATCH_VARIANTS = 24
 
 
 def _single_letter_restorations(form: str) -> list[str]:
@@ -216,7 +216,7 @@ def _single_letter_restorations(form: str) -> list[str]:
             is_the_article_itself = starts_word and form[i:i + 2] == "ال"
             if (starts_word or after_article) and not is_the_article_itself:
                 out.extend(form[:i] + rep + form[i + 1:] for rep in (_ALEF_HAMZA_ABOVE, _ALEF_HAMZA_BELOW))
-        elif ch == _HAMZA:
+        elif ch == _HAMZA and i + 1 < len(form) and form[i + 1] != " ":  # a word-final hamza stays a hamza
             out.extend(form[:i] + rep + form[i + 1:] for rep in (_YEH_HAMZA, _WAW_HAMZA))
     return out
 
@@ -232,12 +232,49 @@ def spelling_variants(value: str) -> tuple[str, ...]:
     return tuple(form for form in seen.values() if form.strip())
 
 
-def match_variants(value: str) -> tuple[str, ...]:
-    """Every form of a query value worth matching: spelling variants, with and without "ال"."""
+# The query model answers with inflected adjectives ("بيضاء", "بلدية") while stored values and names are
+# usually masculine ("أبيض", "بلدي"), and a stored value has to CONTAIN the query value. So a text value
+# is also tried in its masculine form: colour adjectives from this list, and any other word with the
+# feminine ending "ة" without it ("بلدية" -> "بلدي", "طازجة" -> "طازج"; as a substring that still matches
+# the feminine form in a name). Not for brands, which are not adjectives.
+_COLOUR_MASCULINE = {
+    "بيضاء": "أبيض", "خضراء": "أخضر", "حمراء": "أحمر", "سوداء": "أسود",
+    "زرقاء": "أزرق", "صفراء": "أصفر", "سمراء": "أسمر",
+}
+_COLOUR_LOOKUP = {**_COLOUR_MASCULINE, **{normalize_arabic(k): v for k, v in _COLOUR_MASCULINE.items()}}
+_MIN_WORD_LENGTH_FOR_FEMININE_ENDING = 4  # "بلدية" (stem "بلدي") yes; a 3-letter word ending in "ة" no
+
+
+def masculine_form(value: str) -> str | None:
+    """The value with feminine adjectives made masculine, or None if nothing changes."""
+    words, changed = [], False
+    for word in value.split(" "):
+        article = "ال" if word.startswith("ال") and len(word) > 4 else ""
+        stem = word[len(article):]
+        colour = _COLOUR_LOOKUP.get(stem) or _COLOUR_LOOKUP.get(normalize_arabic(stem))
+        if colour:
+            word, changed = article + colour, True
+        elif stem.endswith("ة") and len(stem) >= _MIN_WORD_LENGTH_FOR_FEMININE_ENDING:
+            word, changed = article + stem[:-1], True
+        words.append(word)
+    return " ".join(words) if changed else None
+
+
+def match_variants(value: str, inflect: bool = True) -> tuple[str, ...]:
+    """
+    Every form of a query value worth matching: spelling variants, with and without "ال", and (for words
+    that can be adjectives) the masculine form. The value as given always comes first.
+    """
+    seeds = [value]
+    if inflect:
+        masculine = masculine_form(value)
+        if masculine:
+            seeds.append(masculine)
     variants: dict[str, str] = {}
-    for base in _with_and_without_al(value):
-        for form in spelling_variants(base):
-            variants.setdefault(form.lower(), form)
+    for seed in seeds:
+        for base in _with_and_without_al(seed):
+            for form in spelling_variants(base):
+                variants.setdefault(form.lower(), form)
     return tuple(variants.values())[:MAX_MATCH_VARIANTS]
 
 
@@ -269,6 +306,7 @@ def plan_attribute_filters(extracted_attrs: Any) -> list[AttrFilter]:
             text = value.strip()
             if text:
                 plans.append(AttrFilter(
-                    "brand" if key == "brand" else "text", key, variants=match_variants(text),
+                    "brand" if key == "brand" else "text", key,
+                    variants=match_variants(text, inflect=key != "brand"),
                 ))
     return plans

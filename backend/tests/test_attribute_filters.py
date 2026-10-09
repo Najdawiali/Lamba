@@ -111,6 +111,12 @@ class TestAttributeFilters(unittest.TestCase):
         # one substring test per spelling in each of the attribute, name and name_ar columns
         self.assertEqual(sql.upper().count(" ILIKE "), 3 * len(plan.variants))
 
+    def test_a_feminine_query_value_also_matches_the_masculine_stored_value(self):
+        ((sql, params),) = compile_filters({"origin": "بلدية"})
+        values = list(params.values())
+        self.assertIn("%بلدية%", values)
+        self.assertIn("%بلدي%", values)
+
     def test_brand_also_looks_in_search_terms(self):
         ((sql, params),) = compile_filters({"brand": "مرسيدس"})
         self.assertIn("search_terms", sql)

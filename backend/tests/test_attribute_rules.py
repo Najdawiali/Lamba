@@ -14,6 +14,7 @@ from app.services.attribute_rules import (
     canonical_enum_value,
     clean_text,
     coerce_bool,
+    masculine_form,
     match_variants,
     plan_attribute_filters,
     sanitize_merchant_attributes,
@@ -118,6 +119,50 @@ class TestSpellingVariants(unittest.TestCase):
         self.assertLessEqual(len(match_variants("اب اب اب اب اب اب اب اب")), MAX_MATCH_VARIANTS)
         for blank in ("", "   "):
             self.assertNotIn("", [v.strip() for v in spelling_variants(blank)])
+
+
+class TestFeminineForms(unittest.TestCase):
+    def test_nisba_adjectives_are_also_tried_without_the_feminine_ending(self):
+        # A2c/A2f on the live server: the model answered origin "بلدية" while stored values are "بلدي"
+        self.assertEqual(masculine_form("بلدية"), "بلدي")
+        self.assertIn("بلدي", match_variants("بلدية"))      # "%بلدي%" also matches "بلدية" in a name
+        self.assertEqual(masculine_form("طازجة"), "طازج")
+        self.assertEqual(masculine_form("رمادية"), "رمادي")
+
+    def test_colour_feminines_become_masculine(self):
+        # the model answered type "بيضاء" for "جبنة بيضاء"; the stored value is "أبيض"
+        self.assertEqual(masculine_form("بيضاء"), "أبيض")
+        self.assertEqual(masculine_form("البيضاء"), "الأبيض")
+        for expected in ("أبيض", "ابيض"):
+            self.assertIn(expected, match_variants("بيضاء"))
+        for feminine, masculine in (("خضراء", "أخضر"), ("حمراء", "أحمر"), ("سوداء", "أسود"),
+                                    ("زرقاء", "أزرق"), ("صفراء", "أصفر"), ("سمراء", "أسمر")):
+            self.assertEqual(masculine_form(feminine), masculine, feminine)
+
+    def test_each_word_of_a_phrase_is_made_masculine(self):
+        self.assertEqual(masculine_form("بيضاء بلدية"), "أبيض بلدي")
+        self.assertIn("أبيض بلدي", match_variants("بيضاء بلدية"))
+        self.assertEqual(match_variants("بيضاء بلدية")[0], "بيضاء بلدية")  # as given comes first
+
+    def test_other_words_are_left_alone(self):
+        for word in ("أخضر", "ماء", "سماء", "لبن", "ثلة"):  # masculine, final hamza, no ة, 3-letter word with ة
+            self.assertIsNone(masculine_form(word), word)
+        self.assertEqual(spelling_variants("ماء"), ("ماء",))  # a word-final hamza is a real hamza
+
+    def test_brands_are_not_inflected(self):
+        (brand,) = plan_attribute_filters({"brand": "ملكة"})
+        self.assertNotIn("ملك", brand.variants)
+        (text,) = plan_attribute_filters({"type": "ملكة"})
+        self.assertIn("ملك", text.variants)  # only text keys, which are adjectives and nouns of kind
+
+    def test_what_the_26b_model_returned_for_a_white_local_cheese(self):
+        plans = {p.key: p for p in plan_attribute_filters({"type": "بيضاء", "origin": "بلدية"})}
+        self.assertIn("أبيض", plans["type"].variants)
+        self.assertIn("بلدي", plans["origin"].variants)
+
+    def test_the_number_of_variants_stays_bounded(self):
+        for value in ("بيضاء بلدية طازجة مجمدة", "اب اب اب اب اب اب اب اب"):
+            self.assertLessEqual(len(match_variants(value)), MAX_MATCH_VARIANTS)
 
 
 class TestPlanAttributeFilters(unittest.TestCase):
