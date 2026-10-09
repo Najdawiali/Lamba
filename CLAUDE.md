@@ -187,10 +187,9 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
 Done: security hardening, Alembic migrations, taxonomy, classifier ensemble, merchant flow fixes,
 report button, account deletion (in app + web page), legal pages, catalog import and enrichment,
 images.lambajo.com, homepage, password policy, email-only auth with keyboard/code-entry fixes,
-refresh-token sessions (code and tests done; deploy: backend first, then the new app build).
+refresh-token sessions (deployed; renewal and the session-ended message verified on a phone).
 
-In progress: phone test of the auth fixes and of the new sessions (sign in, background the app past
-30 minutes, reset password from another device); Google Play personal developer account (identity
+In progress: phone test of the auth fixes; Google Play personal developer account (identity
 verification pending; personal accounts need a 14-day closed test with 12+ testers).
 
 Next before the closed test: review the ~49 held products; monitoring alert for AI/credit
