@@ -23,7 +23,10 @@ Google Play closed test. Owner: Ali, founder and sole developer.
     signin_throttle, refresh_tokens (session rules) + refresh_token_store (SQL), attribute_rules
     (what a product attribute may be; shared by search, merchant uploads and the enrichment job),
     attribute_filters (SQL of the search attribute filters), attribute_extraction (names-only prompt,
-    parser and validator for the catalog attribute fill).
+    parser and validator for the catalog attribute fill), query_attributes (organic/gender/temperature/
+    dietary read from a query's words), qu_cache (query-understanding cache + outcome counters),
+    search_budget (query understanding in parallel with the first embedding, under a time budget),
+    category_match (exact taxonomy matching of the model's category).
   - `app/taxonomy.py`: single source of truth for categories and store types.
   - `app/legal_content.py`: privacy policy and terms (served at /privacy, /terms; mirrored into
     `mobile/constants/legal.ts`). After every edit run `uv run scripts/generate-legal-ts.py` to
@@ -111,10 +114,14 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
   They cover row locking under concurrency, the delete cascade and the whole HTTP flow on a real database.
   `backend/tests/test_enrich_attributes_pg.py` does the same for the attribute job's SQL (a TEMP table, so
   it needs no migrations).
-- Attribute tests: `test_attribute_filters.py`, `test_attributes_version_migration.py` and
-  `test_enrich_attributes.py` need SQLAlchemy and skip themselves without it. A 3 MB throwaway venv outside
-  the repo is enough (`uv run --no-project python -m venv <dir>`, then
-  `uv pip install --python <dir>\Scripts\python.exe sqlalchemy==2.0.36`); no database is needed.
+- Attribute and query-path tests: `test_attribute_filters.py`, `test_attributes_version_migration.py`,
+  `test_enrich_attributes.py` and the SQL test in `test_category_match.py` need SQLAlchemy, and
+  `test_query_understanding_service.py` needs pydantic; they skip themselves without them. A small throwaway
+  venv outside the repo is enough (`uv run --no-project python -m venv <dir>`, then
+  `uv pip install --python <dir>\Scripts\python.exe sqlalchemy==2.0.36 pydantic`; add `--offline` to reuse
+  uv's cache); no database is needed. Modules whose dependencies are not installed locally (httpx,
+  pydantic-settings) are imported against stand-ins from `backend/tests/stub_modules.py`, which installs them
+  only for the length of a test and restores `sys.modules` afterwards.
 - APK: `cd mobile\android; .\gradlew.bat assembleRelease --no-daemon`
   -> `app\build\outputs\apk\release\app-release.apk`. Google Play needs an .aab (`bundleRelease`).
 - Release builds inline `EXPO_PUBLIC_API_URL` from the git-ignored `mobile/.env`, which must hold
@@ -165,22 +172,44 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
   unfiltered retry in `search_v1.py` fires only when the filtered search returns ZERO rows, so one wrongly
   tagged product switches it off. The catalog fill is `app/jobs/enrich_attributes.py` (names only, prompt v1,
   commands in its docstring); it must be graded on a dry run before the full run.
-  Query-side spelling: the query model is shown alef/hamza-normalized text but answers in the usual
-  spelling (seen on the server 2026-10-09: "شاي اخضر" -> type "أخضر"), while names and stored values may use
-  either, so `match_variants` tries every text/brand value as given, normalized and with the original
-  alef/hamza letters put back, with and without "ال". Stored values stay as the model wrote them.
-  QUERY MODEL LATENCY (measured on the server 2026-10-09, 16 calls with the production prompt, model and
-  max_tokens): `query_llm_fallback_model` (gemma-4-E4B-it) answered correctly every time (organic true,
-  gender, temperature, dietary, type) but took 2.5-7.6 s, median about 3.9 s, while `analyze_query_async`
-  allows 3 s per attempt and 4 s overall. Only 2 of the 16 calls were under 3 s, so most attribute queries
-  time out silently and search runs unfiltered (the retained api logs held no `[ATTR FILTER]` line). Until
-  that is fixed, filling attributes changes few results. Free-text values from the query model can be
-  longer than what is stored ("جبنة بيضاء بلدية" -> type "بيضاء بلدية"), and the contiguous substring match
-  never finds those; the reliable keys are organic, gender, temperature, dietary and brand.
+  Query-side matching: the query model is shown alef/hamza-normalized text but answers in the usual spelling
+  (seen on the server 2026-10-09: "شاي اخضر" -> type "أخضر") and with inflected adjectives ("بيضاء", "بلدية")
+  while stored values are masculine, so `match_variants` tries every text value as given, normalized, with
+  the original alef/hamza letters put back, with and without "ال", and in its masculine form (colour
+  feminines; a final "ة" dropped, which as a substring still matches the feminine form in a name). Brands are
+  not inflected. Stored values stay as the model wrote them.
+- Query understanding in search (committed 2026-10-10 on branch catalog-attributes, not deployed when this
+  was written). Measured on the server 2026-10-09: the small model first used (gemma-4-E4B-it) was saturated
+  at DeepInfra (9 of 9 calls failed: 5 read timeouts, 4 HTTP 429 "engine_overloaded"; an hour earlier it had
+  answered in 2.5-7.6 s); `google/gemma-4-26B-A4B-it` answered 24 of 24 calls with correct attributes every
+  time, median 1.77 s, 83% within 2.0 s, 96% within 2.3 s, one outlier at 3.8 s. Production sets
+  `QUERY_LLM_FALLBACK_MODEL=google/gemma-4-26B-A4B-it` in backend/.env (now also the code default).
+  `analyze_query_async` works in layers and never raises: rules (`query_attributes.py`: organic, gender,
+  temperature, dietary from whole-word matches, a conflict guard, always present and winning over the model
+  for those keys); a Redis cache of the model's answer (`qu_cache.py`, 7 days, key = query + model + prompt
+  hash, which also makes a query's category and attributes stable); then ONE model call (no retry, its own
+  breaker `deepinfra_query_breaker`, DeepInfra `fail_fast`, at most 8 in flight). `search_budget.py` starts it
+  together with the first embedding and `_run_search` waits for it only until
+  `query_understanding_budget_seconds` (2.5) after the start of both; if it is late, search goes on with the
+  rules, the call keeps running and fills the cache, and that response is not put in the 5-minute search cache.
+  Category: only an EXACT taxonomy name (name/name_ar/name_en) counts, and the 1.5x boost goes to that
+  category and its subcategories (`category_match.py`); the model's loose words (شاي, حليب, dairy) are ignored,
+  so with the real taxonomy only names like "Beverages" resolve. Counters: `HGETALL lamba:stats:qu:<YYYY-MM-DD>`
+  (ok, cache_hit, not_needed, timeout, overloaded, http_error, breaker_open, busy, no_api_key, bad_json, error)
+  and `HGETALL lamba:stats:search:<YYYY-MM-DD>` (budget_answered, budget_late, budget_failed); log lines `[QU]`
+  and `[QU BUDGET]`. Free-text values from the model can still be longer than what is stored; the reliable
+  keys are organic, gender, temperature, dietary and brand.
+- Golden-query comparison (before/after a change to search): run `scripts/eval_search.py --worksheet` twice
+  against the live API with `data/golden_search.jsonl` and `data/attribute_queries.jsonl`, then
+  `scripts/compare_search_runs.py before.jsonl after.jsonl` (per query: results that left or entered, overlap,
+  top-1, a REGRESSION flag for lost results or fewer keyword-relevant ones). Use `--max-distance-km 500`:
+  catalog products appear in search only once a shop within the radius stocks them. Clear the cached search
+  results between runs (`lamba:search:*`; `scripts/flush_search_cache.py` does it, but `scripts/` is not in the
+  image, so delete those keys from a one-off `python` in the api container).
 - Synonyms: search looks words up in the Redis hash `lamba:synonyms`. It was EMPTY in production on
   2026-10-09 (HLEN 0): `scripts/` is not in the Docker image, so nothing loads it and search runs without
   dialect rewriting. The curated list is `CORE_SYNONYMS` (30 pairs) in `scripts/build_synonym_table.py`, which
-  now only loads that list (also run by `scripts/flush_search_cache.py`). Never rebuild it from catalog
+  now only loads that list (run it by hand; `flush_search_cache.py` no longer touches it). Never rebuild it from catalog
   `search_terms`: that mapped a dialect word to one product's name. `scripts/reembed_catalog.py` was deleted
   (it did exactly that, and embedded a different text than `enrich_and_embed`). DECISION PENDING: whether to
   ship the 30 pairs (an app-level loader) after checking them on the golden set; some are risky rewrites
@@ -233,8 +262,10 @@ refresh-token sessions (deployed; renewal and the session-ended message verified
 In progress: Google Play personal developer account (identity verification pending; personal
 accounts need a 14-day closed test with 12+ testers).
 
-Next before the closed test: apply migration 0004 and run the catalog attribute fill (job and tests are in
-the repo, NOT run yet: dry run of 100, graded, then the full run); review the ~49 held products;
+Next before the closed test: merge and deploy branch catalog-attributes (search safety fixes, the query path
+above, migration 0004), after taking the golden "before" run and then the "after" run; then the catalog
+attribute fill (job and tests are in the repo, NOT run yet: dry run of 100, graded, then the full run);
+review the ~49 held products;
 monitoring alert for AI/credit failures; build the .aab; create review test accounts for Play "App access"; Play data safety form.
 
 Later: register Lamba as a business (unlocks Meta verification for WhatsApp codes, SMS sender ID,
