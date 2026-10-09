@@ -20,13 +20,17 @@ Google Play closed test. Owner: Ali, founder and sole developer.
   - `app/api/*_v1.py` routers: auth, customer, merchant, search, chat, reports, account, legal.
   - `app/services/`: llm (DeepInfra adapter), embedding, reranker, query_understanding,
     item_classifier (restriction + category), item_enrichment, whatsapp_service, password_policy,
-    signin_throttle, refresh_tokens (session rules) + refresh_token_store (SQL).
+    signin_throttle, refresh_tokens (session rules) + refresh_token_store (SQL), attribute_rules
+    (what a product attribute may be; shared by search, merchant uploads and the enrichment job),
+    attribute_filters (SQL of the search attribute filters), attribute_extraction (names-only prompt,
+    parser and validator for the catalog attribute fill).
   - `app/taxonomy.py`: single source of truth for categories and store types.
   - `app/legal_content.py`: privacy policy and terms (served at /privacy, /terms; mirrored into
     `mobile/constants/legal.ts`). After every edit run `uv run scripts/generate-legal-ts.py` to
     regenerate the mobile copy (`--check` verifies without writing). The privacy policy has its own
     date (`PRIVACY_UPDATED_*`).
-  - `app/jobs/import_catalog.py`, `app/moderation_cli.py`: server-side jobs and tools.
+  - `app/jobs/import_catalog.py`, `app/jobs/enrich_attributes.py`, `app/moderation_cli.py`: server-side
+    jobs and tools.
   - `backend/scripts/` is NOT in the Docker image (.dockerignore). Anything that must run on the
     server belongs in `app/`.
   - `evals/`: offline classifier evaluation (data lives on the server in /opt/lamba/eval_data).
@@ -105,6 +109,12 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
 - Refresh-token SQL checks: `backend/tests/test_refresh_token_store_pg.py` run against a THROWAWAY Postgres
   (never production) when `LAMBA_TEST_DATABASE_URL` is set, and are skipped otherwise (instructions inside).
   They cover row locking under concurrency, the delete cascade and the whole HTTP flow on a real database.
+  `backend/tests/test_enrich_attributes_pg.py` does the same for the attribute job's SQL (a TEMP table, so
+  it needs no migrations).
+- Attribute tests: `test_attribute_filters.py`, `test_attributes_version_migration.py` and
+  `test_enrich_attributes.py` need SQLAlchemy and skip themselves without it. A 3 MB throwaway venv outside
+  the repo is enough (`uv run --no-project python -m venv <dir>`, then
+  `uv pip install --python <dir>\Scripts\python.exe sqlalchemy==2.0.36`); no database is needed.
 - APK: `cd mobile\android; .\gradlew.bat assembleRelease --no-daemon`
   -> `app\build\outputs\apk\release\app-release.apk`. Google Play needs an .aab (`bundleRelease`).
 - Release builds inline `EXPO_PUBLIC_API_URL` from the git-ignored `mobile/.env`, which must hold
@@ -145,6 +155,22 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
 - Moderation: `global_items.moderation_status` approved | pending_review | blocked. Customers only
   ever see approved products. Review tool:
   `docker compose run --rm --no-deps api python -m app.moderation_cli pending|reports|approve <id>|block <id>`
+- Attributes (`global_items.attributes` JSONB; `attributes_version` SMALLINT, migration 0004, NULL = never
+  processed by the catalog fill). Search reads them only through `app/services/attribute_rules.py` and
+  `attribute_filters.py`: booleans and gender/temperature are matched by JSONB containment (`attributes @>`),
+  never by a SQL CAST (a stored non-boolean string used to be a database error) and never by ILIKE ("male" is
+  inside "female"); text keys keep the substring match plus the name fallback; an unusable value from the
+  query model is skipped, which only widens results. Merchant uploads go through
+  `sanitize_merchant_attributes` (known keys, right types). Filling attributes can narrow results: the
+  unfiltered retry in `search_v1.py` fires only when the filtered search returns ZERO rows, so one wrongly
+  tagged product switches it off. The catalog fill is `app/jobs/enrich_attributes.py` (names only, prompt v1,
+  commands in its docstring); it must be graded on a dry run before the full run. OPEN QUESTION: queries are
+  alef-normalized before the query model sees them, but the filter's ILIKE is alef-sensitive, so check
+  the `[ATTR FILTER]` log lines for hamza forms (أخضر vs اخضر) before the full run.
+- Synonyms: the Redis hash `lamba:synonyms` is the curated `CORE_SYNONYMS` only
+  (`scripts/build_synonym_table.py`, also run by `scripts/flush_search_cache.py`). Never rebuild it from
+  catalog `search_terms`: that mapped a dialect word to one product's name. `scripts/reembed_catalog.py` was
+  deleted (it did exactly that, and embedded a different text than `enrich_and_embed`).
 - Catalog: 10,508 products with GTIN-14 barcodes (`app/utils/barcode.py` normalizes scans).
   Batch jobs must wait out an open circuit breaker and retry, never fast-fail the queue.
 - Merchant photos: the first photo of a catalog product becomes its catalog photo
@@ -193,9 +219,11 @@ refresh-token sessions (deployed; renewal and the session-ended message verified
 In progress: Google Play personal developer account (identity verification pending; personal
 accounts need a 14-day closed test with 12+ testers).
 
-Next before the closed test: review the ~49 held products; monitoring alert for AI/credit
-failures; build the .aab; create review test accounts for Play "App access"; Play data safety form.
+Next before the closed test: apply migration 0004 and run the catalog attribute fill (job and tests are in
+the repo, NOT run yet: dry run of 100, graded, then the full run); review the ~49 held products;
+monitoring alert for AI/credit failures; build the .aab; create review test accounts for Play "App access"; Play data safety form.
 
 Later: register Lamba as a business (unlocks Meta verification for WhatsApp codes, SMS sender ID,
-Play organization account); enrichment prompt v2 with evaluation; app.json "locales" should point
+Play organization account); enrichment prompt v2 with evaluation; `name_en` fill (a separate job, after the
+attributes); a gender filter that also accepts unisex/any items; app.json "locales" should point
 to native-only strings; consider removing expo-dev-client from release builds; review npm audit.
