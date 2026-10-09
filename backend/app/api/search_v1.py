@@ -90,6 +90,9 @@ from app.services.attribute_rules import plan_attribute_filters
 from app.services.cache import get_cached_search, cache_search, lookup_synonym, get_redis
 from app.services.search_budget import assemble_embeddings, understand_within_budget
 from app.services import qu_cache
+from app.services.category_match import (
+    boost_matching_category, exact_category_clause, exact_name_forms,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -801,34 +804,33 @@ async def _run_search(
         logger.info(f"[ATTR FILTER] query={query_text!r} resolved={resolved_query!r} attrs={extracted_attrs} query_clean={query_clean!r} qu={parallel.outcome}")
 
     # ── Resolve category for retrieval branch ────────────────────
+    # Only an EXACT taxonomy name counts (name / name_ar / name_en, any case; see services/category_match.py).
+    # The model's category is a loose word, or in the other language, and varies from call to call: a substring
+    # match used to give unstable and sometimes wrong boosts ("حليب" matched the baby-formula category).
     resolved_category_id: Optional[uuid.UUID] = None
-    if intent_analysis and getattr(intent_analysis, 'category_name', None):
-        _cat_name = intent_analysis.category_name.strip()
-        if _cat_name:
-            # Exact match (case-insensitive) on name / name_ar / name_en
-            _cat_row = (await db.execute(
-                select(Category.id).where(
+    resolved_category_names: set = set()
+    _cat_name = (getattr(intent_analysis, 'category_name', None) or "").strip()
+    if _cat_name:
+        _cat_row = (await db.execute(
+            select(Category.id)
+            .where(exact_category_clause(Category, _cat_name))
+            .order_by(Category.parent_category_id.is_(None).desc(), Category.id)  # a section before a subcategory
+            .limit(1)
+        )).first()
+        if _cat_row:
+            resolved_category_id = _cat_row[0]
+            _names = (await db.execute(
+                select(Category.name, Category.name_ar, Category.name_en).where(
                     or_(
-                        func.lower(Category.name) == _cat_name.lower(),
-                        func.lower(Category.name_ar) == _cat_name.lower(),
-                        func.lower(Category.name_en) == _cat_name.lower(),
+                        Category.id == resolved_category_id,
+                        Category.parent_category_id == resolved_category_id,
                     )
-                ).limit(1)
-            )).first()
-            if not _cat_row:
-                # Fuzzy fallback — ILIKE substring
-                _cat_row = (await db.execute(
-                    select(Category.id).where(
-                        or_(
-                            Category.name.ilike(f"%{_cat_name}%"),
-                            Category.name_ar.ilike(f"%{_cat_name}%"),
-                            Category.name_en.ilike(f"%{_cat_name}%"),
-                        )
-                    ).limit(1)
-                )).first()
-            if _cat_row:
-                resolved_category_id = _cat_row[0]
-                logger.info(f"[SEARCH] Resolved category '{_cat_name}' → {resolved_category_id}")
+                )
+            )).all()
+            resolved_category_names = exact_name_forms(*(name for row in _names for name in row))
+            logger.info(f"[SEARCH] Resolved category '{_cat_name}' → {resolved_category_id}")
+        else:
+            logger.info(f"[SEARCH] Category '{_cat_name}' from query understanding is not an exact taxonomy name: ignored")
 
     # Primary text for semantic search embedding: use query_clean if modifiers were extracted, else resolved_query
     primary_text = query_clean or resolved_query
@@ -949,17 +951,12 @@ async def _run_search(
 
     fused.sort(key=lambda x: x['rrf_score'], reverse=True)
 
-    # ── Category boost: prioritize results matching the extracted category ──
-    if intent_analysis and getattr(intent_analysis, 'category_name', None):
-        cat = intent_analysis.category_name.lower()
-        for r in fused:
-            item_cat = (r.get('category') or '').lower()
-            item_cat_ar = (r.get('category_name_ar') or '').lower()
-            item_cat_en = (r.get('category_name_en') or '').lower()
-            if cat in item_cat or cat in item_cat_ar or cat in item_cat_en:
-                r['rrf_score'] *= 1.5  # 50% boost for category match
-        fused.sort(key=lambda x: x['rrf_score'], reverse=True)
-        logger.info(f"[SEARCH] Category boost applied for: {intent_analysis.category_name}")
+    # ── Category boost: prioritize results in the exactly matched category (and its subcategories) ──
+    if resolved_category_names:
+        boosted = boost_matching_category(fused, resolved_category_names)
+        if boosted:
+            fused.sort(key=lambda x: x['rrf_score'], reverse=True)
+        logger.info(f"[SEARCH] Category boost applied to {boosted} result(s) for category {resolved_category_id}")
 
     candidates = fused
     unique_item_ids_count = len(set(

@@ -76,6 +76,7 @@ from tests.test_qu_cache import TestQuCache
 from tests.test_query_understanding_service import TestQueryUnderstandingService, TestSettingsDefaults
 from tests.test_search_budget import TestUnderstandWithinBudget, TestAssembleEmbeddings
 from tests.test_search_pipeline_structure import TestSearchPipelineStructure
+from tests.test_category_match import TestExactNames, TestBoost, TestRealTaxonomy, TestClause, TestSearchUsesIt
 
 
 class TestArabicNorm(unittest.TestCase):
