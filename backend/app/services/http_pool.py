@@ -86,3 +86,6 @@ deepinfra_reranker_breaker = CircuitBreaker(failure_threshold=3, cooldown_second
 # Catalog work (item classification + search-term enrichment) gets its own breaker so
 # bulk jobs (CSV upload, catalog import) can never switch off search's LLM features.
 deepinfra_catalog_breaker = CircuitBreaker(failure_threshold=5, cooldown_seconds=30)
+# Query understanding in the search path: its own breaker, so that a saturated small model can neither
+# switch off search's other LLM features nor be held open by them; it re-tests after 20 s.
+deepinfra_query_breaker = CircuitBreaker(failure_threshold=5, cooldown_seconds=20)
