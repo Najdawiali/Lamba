@@ -74,6 +74,8 @@ from tests.test_query_attributes import TestQueryAttributes
 from tests.test_llm_error_reasons import TestErrorReasons
 from tests.test_qu_cache import TestQuCache
 from tests.test_query_understanding_service import TestQueryUnderstandingService, TestSettingsDefaults
+from tests.test_search_budget import TestUnderstandWithinBudget, TestAssembleEmbeddings
+from tests.test_search_pipeline_structure import TestSearchPipelineStructure
 
 
 class TestArabicNorm(unittest.TestCase):

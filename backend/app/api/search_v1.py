@@ -87,7 +87,9 @@ from app.services.query_expansion import query_expansion_service
 from app.services.arabic_norm import normalize_query
 from app.services.attribute_filters import build_attribute_clauses
 from app.services.attribute_rules import plan_attribute_filters
-from app.services.cache import get_cached_search, cache_search, lookup_synonym
+from app.services.cache import get_cached_search, cache_search, lookup_synonym, get_redis
+from app.services.search_budget import assemble_embeddings, understand_within_budget
+from app.services import qu_cache
 
 logger = logging.getLogger(__name__)
 
@@ -716,6 +718,14 @@ def needs_expansion(query: str, script: str = "ar", has_synonym: bool = False) -
     return False
 
 
+async def _count_budget_outcome(outcome: str) -> None:
+    """Count how often the model answered within the budget, was late or failed (HGETALL lamba:stats:search:<date>)."""
+    try:
+        await qu_cache.count(await get_redis(), f"budget_{outcome}", group="search")
+    except Exception:
+        pass
+
+
 # ── Shared pipeline ────────────────────────────────────────────────
 async def _run_search(
     query_text: str,
@@ -725,17 +735,18 @@ async def _run_search(
     filters: Optional[SearchFilters],
     db: AsyncSession,
     listing_type: Optional[str] = None,
-) -> tuple[List[HybridSearchResultItem], List[float]]:
+) -> tuple[List[HybridSearchResultItem], List[float], bool, bool]:
     """
-    Full pipeline: normalize → expand → embed (multi-query) → RRF retrieval
-    → rerank → language-aware ordering. Returns (scored results, primary
-    query vector for SearchAlert caching).
+    Full pipeline: normalize → query understanding ‖ first embedding (time-budgeted) → expand → embed
+    the rest (multi-query) → RRF retrieval → rerank → language-aware ordering.
+    Returns (scored results, primary query vector for SearchAlert caching, was_intent_query, qu_late);
+    qu_late is True when the model missed the time budget, so the response is not worth caching.
     """
     t0 = time.time()
 
     if not _is_valid_query(query_text):
         logger.debug("[SEARCH VALIDATION] Query %r is invalid (pure punctuation/empty/symbols only)", query_text)
-        return [], []
+        return [], [], False, False
 
     # 1. Normalization & Arabizi transliteration
     from app.services.arabic_norm import arabizi_to_arabic
@@ -761,22 +772,33 @@ async def _run_search(
             if len(words) == 1 and synonym not in synonym_variants and synonym != base_text:
                 synonym_variants.append(synonym)
 
-    # 3. Query Understanding on resolved query
+    # 3. Query understanding, in parallel with the first embedding, under a time budget. The embedding is of
+    #    the whole resolved query (search needs it anyway). Search waits for the model only for what is left of
+    #    the budget (counted from the start of both) and then goes on with the rule-based attributes, so a slow
+    #    or saturated model can never hold a search for longer than the budget. A late model answer is not
+    #    thrown away: it fills the query-understanding cache for the next identical query.
     from app.services.query_understanding import query_understanding_service
     effective_listing_type = listing_type
-    extracted_attrs: Dict[str, Any] = {}
-    query_clean: Optional[str] = None
-    intent_analysis = None
-    try:
-        intent_analysis = await query_understanding_service.analyze_query_async(resolved_query)
-        if not effective_listing_type and intent_analysis.intent in ("product", "service"):
-            effective_listing_type = intent_analysis.intent
-        extracted_attrs = intent_analysis.attributes or {}
-        query_clean = intent_analysis.query_clean
-        if extracted_attrs:
-            logger.info(f"[ATTR FILTER] query={query_text!r} resolved={resolved_query!r} attrs={extracted_attrs} query_clean={query_clean!r}")
-    except Exception as e:
-        logger.warning(f"Query understanding skipped: {e}")
+    parallel = await understand_within_budget(
+        embed_coro=embedding_service.encode_text_async(resolved_query, text_type="query"),
+        qu_coro=query_understanding_service.analyze_query_async(resolved_query),
+        budget_seconds=settings.query_understanding_budget_seconds,
+    )
+    first_embedding = parallel.embedding
+    qu_late = parallel.outcome == "late"
+    intent_analysis = parallel.intent or query_understanding_service.rules_only_intent(resolved_query)
+    if not effective_listing_type and intent_analysis.intent in ("product", "service"):
+        effective_listing_type = intent_analysis.intent
+    extracted_attrs: Dict[str, Any] = intent_analysis.attributes or {}
+    query_clean: Optional[str] = intent_analysis.query_clean
+    logger.info(
+        "[QU BUDGET] outcome=%s embed=%dms waited=%dms budget=%.1fs query=%r",
+        parallel.outcome, parallel.embed_ms, parallel.waited_ms,
+        settings.query_understanding_budget_seconds, query_text,
+    )
+    await _count_budget_outcome(parallel.outcome)
+    if extracted_attrs:
+        logger.info(f"[ATTR FILTER] query={query_text!r} resolved={resolved_query!r} attrs={extracted_attrs} query_clean={query_clean!r} qu={parallel.outcome}")
 
     # ── Resolve category for retrieval branch ────────────────────
     resolved_category_id: Optional[uuid.UUID] = None
@@ -823,22 +845,16 @@ async def _run_search(
         # Use primary_text (query_clean from understanding) so expansion
         # generates variants for the core product term, not the raw query
         # with attribute modifiers that would conflict with JSONB filters.
-        expansion_task = asyncio.create_task(
-            query_expansion_service.expand_async(primary_text)
-        )
-        original_embed_task = asyncio.create_task(
-            embedding_service.encode_text_async(primary_text, text_type="query")
-        )
-        expansion_result, original_embedding = await asyncio.gather(
-            expansion_task, original_embed_task, return_exceptions=True
-        )
-        variants = expansion_result if isinstance(expansion_result, list) else []
-        if isinstance(expansion_result, Exception):
-            logger.warning(f"Query expansion skipped due to error: {expansion_result}")
+        try:
+            variants = await query_expansion_service.expand_async(primary_text)
+        except Exception as exc:
+            logger.warning(f"Query expansion skipped due to error: {exc}")
+            variants = []
+        if not isinstance(variants, list):
+            variants = []
     else:
         logger.info(f"[TIMING] Expansion skipped via needs_expansion (has_synonym={has_synonym}) for query '{query_text}'")
         variants = []
-        original_embedding = await embedding_service.encode_text_async(primary_text, text_type="query")
 
     texts: List[str] = [primary_text]
     for candidate_t in [resolved_query, normalized_input, query_text]:
@@ -863,25 +879,19 @@ async def _run_search(
     )
 
     t2 = time.time()
-    logger.info(f"[TIMING] Expansion + first embed (parallel): {(t2-t1)*1000:.0f}ms")
+    logger.info(f"[TIMING] Expansion: {(t2-t1)*1000:.0f}ms")
 
-    # 2. Batch-embed ONLY the new variants (original is already embedded)
-    variant_texts = [t for t in texts if t != primary_text]
-    if variant_texts:
-        variant_embeddings = await embedding_service.embed_texts_batch(
-            variant_texts, text_type="query"
-        )
-    else:
-        variant_embeddings = []
-
-    # Combine all embeddings
-    all_embeddings = []
-    if not isinstance(original_embedding, Exception) and original_embedding is not None:
-        all_embeddings.append(original_embedding)
-    elif isinstance(original_embedding, Exception):
-        logger.warning(f"Original embedding error: {original_embedding}")
-
-    all_embeddings.extend(variant_embeddings)
+    # Embed only what is not embedded yet. The whole resolved query already was (in parallel with query
+    # understanding); when no `query_clean` came back, that is the primary text too.
+    known_embeddings: Dict[str, Any] = {}
+    if first_embedding is not None and not isinstance(first_embedding, Exception):
+        known_embeddings[resolved_query] = first_embedding
+    elif isinstance(first_embedding, Exception):
+        logger.warning(f"First embedding error: {first_embedding}")
+    all_embeddings = await assemble_embeddings(
+        texts, known_embeddings,
+        lambda missing: embedding_service.embed_texts_batch(missing, text_type="query"),
+    )
 
     primary_raw = (
         all_embeddings[0].tolist()
@@ -1014,7 +1024,7 @@ async def _run_search(
         if len(strong_results) >= 3:
             was_intent_query = False
 
-    return scored, primary_raw, was_intent_query
+    return scored, primary_raw, was_intent_query, qu_late
 
 
 # ── POST /hybrid ────────────────────────────────────────────────
@@ -1052,7 +1062,7 @@ async def hybrid_search(
             logger.info("[SEARCH] Returning L2 cached result — reranker skipped")
             return cached
 
-        scored, primary_vec, was_intent_query = await _run_search(
+        scored, primary_vec, was_intent_query, qu_late = await _run_search(
             query_text=search_request.query_text,
             latitude=search_request.latitude,
             longitude=search_request.longitude,
@@ -1125,13 +1135,14 @@ async def hybrid_search(
                 )
 
         if response_obj is not None:
-            await cache_search(
-                query=search_request.query_text,
-                lat=search_request.latitude,
-                lng=search_request.longitude,
-                listing_type=search_request.listing_type,
-                result=response_obj,
-            )
+            if not qu_late:  # built without the model's full answer: do not keep it for the cache's 5 minutes
+                await cache_search(
+                    query=search_request.query_text,
+                    lat=search_request.latitude,
+                    lng=search_request.longitude,
+                    listing_type=search_request.listing_type,
+                    result=response_obj,
+                )
             return response_obj
 
         # Nothing relevant — cache a SearchAlert (dedup on user_id + query_text).
@@ -1163,13 +1174,14 @@ async def hybrid_search(
             search_mode="exact_matches",
             results=[],
         )
-        await cache_search(
-            query=search_request.query_text,
-            lat=search_request.latitude,
-            lng=search_request.longitude,
-            listing_type=search_request.listing_type,
-            result=no_match_response,
-        )
+        if not qu_late:
+            await cache_search(
+                query=search_request.query_text,
+                lat=search_request.latitude,
+                lng=search_request.longitude,
+                listing_type=search_request.listing_type,
+                result=no_match_response,
+            )
         return no_match_response
 
     except Exception as e:
@@ -1221,7 +1233,7 @@ async def double_check_search(
             f"{search_request.user_refined_details.strip()}"
         )
 
-        scored, _, _intent = await _run_search(
+        scored, _, _intent, _qu_late = await _run_search(
             query_text=refined_query,
             latitude=search_request.latitude,
             longitude=search_request.longitude,
