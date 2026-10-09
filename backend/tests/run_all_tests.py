@@ -61,6 +61,7 @@ from tests.test_refresh_token_store_pg import TestRefreshTokensPostgres, TestAut
 from tests.test_attribute_rules import TestSanitizeMerchantAttributes, TestHelpers, TestPlanAttributeFilters
 from tests.test_attribute_filters import TestAttributeFilters, TestSearchUsesTheSharedFilters
 from tests.test_build_synonym_table import TestBuildSynonymTable
+from tests.test_attributes_version_migration import TestAttributesVersionMigration
 
 
 class TestArabicNorm(unittest.TestCase):
