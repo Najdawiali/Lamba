@@ -4,7 +4,7 @@ Supports strict categories and multi-image galleries while preserving backward c
 """
 
 import uuid
-from sqlalchemy import String, ForeignKey, Text, Computed, Integer, DateTime, Index
+from sqlalchemy import String, ForeignKey, Text, Computed, Integer, SmallInteger, DateTime, Index
 from sqlalchemy.dialects.postgresql import UUID, TSVECTOR, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -31,6 +31,8 @@ class GlobalItem(Base):
         String, nullable=False, server_default="product"
     )
     attributes = mapped_column(JSONB, nullable=True, server_default="{}")
+    # Prompt version that filled `attributes` (NULL = never processed); see app/jobs/enrich_attributes.py
+    attributes_version: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     name_ar: Mapped[str | None] = mapped_column(Text, nullable=True)
     name_en: Mapped[str | None] = mapped_column(Text, nullable=True)
     description_ar: Mapped[str | None] = mapped_column(Text, nullable=True)

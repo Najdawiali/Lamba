@@ -186,7 +186,22 @@ class Settings(BaseSettings):
     # ── LLM Models (Real-time & Offline) ──────────────────────
     # Real-time LLM (fast, used during search)
     query_llm_model: str = "Qwen/Qwen3.6-35B-A3B"
-    query_llm_fallback_model: str = "google/gemma-4-E4B-it"
+    # The model query understanding actually uses in search. gemma-4-E4B-it was saturated at DeepInfra
+    # (read timeouts and 429 "engine_overloaded", 2026-10-09); gemma-4-26B-A4B-it answered 24 of 24 calls,
+    # median 1.8 s, and is what production runs through QUERY_LLM_FALLBACK_MODEL.
+    query_llm_fallback_model: str = "google/gemma-4-26B-A4B-it"
+
+    # ── Query understanding in the search path ─────────────────
+    # Search waits at most this long, counted from the start of the first embedding, for the model; after
+    # that it goes on with the rule-based attributes. Measured on the server (24 calls of the production
+    # prompt): median 1.77 s, 90% within 2.1 s, 96% within 2.3 s, one outlier at 3.8 s.
+    query_understanding_budget_seconds: float = 2.5
+    # The model call itself may outlive the budget, so that a late answer still fills the cache.
+    query_llm_call_timeout_seconds: float = 6.0
+    # DeepInfra answers 429 at once instead of queueing the request when the model is at capacity.
+    query_llm_fail_fast: bool = True
+    # Model calls in flight at the same time; beyond that the rule-based attributes alone are used.
+    query_llm_max_inflight: int = 8
 
     # Offline LLM (smarter, used for enrichment and batch processing)
     offline_llm_model: str = "google/gemma-4-31B-it"
@@ -208,6 +223,7 @@ class Settings(BaseSettings):
     redis_password: str = ""
     cache_expansion_ttl: int = 7200    # 2 hours — expansion results are stable
     cache_search_ttl: int = 300        # 5 minutes — results may change with new products
+    cache_qu_ttl: int = 604800         # 7 days — what a query means does not change; the key holds model + prompt
 
     # ── Search ──────────────────────────────────────────────────
     default_search_radius_km: float = 5.0

@@ -51,6 +51,7 @@ from app.schemas.offer import OfferCreate, OfferUpdate, OfferResponse
 from app.schemas.market_profile import MarketProfileUpdate, EmployeesUpdate, MarketProfileResponse
 from app.services.embedding import embedding_service
 from app.services.alert_service import check_and_trigger_stock_alerts
+from app.services.attribute_rules import sanitize_merchant_attributes
 from app.services.storage import storage_service
 from sqlalchemy.exc import IntegrityError
 from app.services.item_classifier import classify_item_ensemble, restricted_reason_for
@@ -800,6 +801,8 @@ async def create_new_item(
             parsed_attributes = json.loads(attributes) if isinstance(attributes, str) else attributes
         except Exception:
             parsed_attributes = {}
+    # Search filters on these values, so only known keys with the right types are stored.
+    parsed_attributes = sanitize_merchant_attributes(parsed_attributes)
 
     effective_barcode = normalize_barcode(barcode) if listing_type == "product" else None
     if effective_barcode:

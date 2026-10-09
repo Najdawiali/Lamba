@@ -61,7 +61,6 @@ from fastapi import APIRouter, Depends, HTTPException, status, File, Form, Uploa
 from app.rate_limit import limiter
 from geoalchemy2.elements import WKTElement
 from geoalchemy2 import Geometry, Geography
-import sqlalchemy as sa
 from sqlalchemy import select, func, literal, or_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -86,7 +85,14 @@ from app.services.embedding import embedding_service
 from app.services.reranker import reranker_service
 from app.services.query_expansion import query_expansion_service
 from app.services.arabic_norm import normalize_query
-from app.services.cache import get_cached_search, cache_search, lookup_synonym
+from app.services.attribute_filters import build_attribute_clauses
+from app.services.attribute_rules import plan_attribute_filters
+from app.services.cache import get_cached_search, cache_search, lookup_synonym, get_redis
+from app.services.search_budget import assemble_embeddings, understand_within_budget
+from app.services import qu_cache
+from app.services.category_match import (
+    boost_matching_category, exact_category_clause, exact_name_forms,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -155,6 +161,8 @@ async def _retrieve_fused_candidates(
     else:
         semantic_score_expr = literal(0.0)
 
+    attr_plans = plan_attribute_filters(extracted_attrs)
+
     def _base_stmt():
         stmt = (
             select(
@@ -214,55 +222,15 @@ async def _retrieve_fused_candidates(
         else:
             stmt = stmt.where(func.ST_DWithin(geog_location, geog_point, radius_meters))
 
-        # ── Attribute filters — whitelisted JSONB containment + name fallback ──────
-        _ALLOWED_ATTR_KEYS = {
-            "type", "color", "flavor", "origin", "organic", "size",
-            "brand", "temperature", "dietary", "material", "gender",
-        }
-        if extracted_attrs:
-            for attr_key, attr_value in extracted_attrs.items():
-                if attr_key not in _ALLOWED_ATTR_KEYS or attr_value is None:
-                    continue
-                if isinstance(attr_value, bool):
-                    stmt = stmt.where(
-                        func.cast(
-                            GlobalItem.attributes[attr_key].as_string(),
-                            sa.Boolean,
-                        ) == attr_value
-                    )
-                elif attr_key == "brand" and isinstance(attr_value, str):
-                    brand_str = attr_value.strip()
-                    brand_variants = [brand_str]
-                    if brand_str.startswith("ال") and len(brand_str) > 2:
-                        brand_variants.append(brand_str[2:])
-                    elif not brand_str.startswith("ال"):
-                        brand_variants.append("ال" + brand_str)
-
-                    brand_clauses = []
-                    for bv in brand_variants:
-                        brand_clauses.extend([
-                            GlobalItem.attributes["brand"].as_string().ilike(f"%{bv}%"),
-                            GlobalItem.name.ilike(f"%{bv}%"),
-                            GlobalItem.name_ar.ilike(f"%{bv}%"),
-                            GlobalItem.search_terms.ilike(f"%{bv}%"),
-                        ])
-                    stmt = stmt.where(or_(*brand_clauses))
-                elif isinstance(attr_value, str):
-                    val_str = attr_value.strip()
-                    val_variants = [val_str]
-                    if val_str.startswith("ال") and len(val_str) > 2:
-                        val_variants.append(val_str[2:])
-                    elif not val_str.startswith("ال"):
-                        val_variants.append("ال" + val_str)
-
-                    attr_clauses = []
-                    for vv in val_variants:
-                        attr_clauses.extend([
-                            GlobalItem.attributes[attr_key].as_string().ilike(f"%{vv}%"),
-                            GlobalItem.name.ilike(f"%{vv}%"),
-                            GlobalItem.name_ar.ilike(f"%{vv}%"),
-                        ])
-                    stmt = stmt.where(or_(*attr_clauses))
+        # ── Attribute filters — rules in attribute_rules, SQL in attribute_filters ──
+        if attr_plans:
+            stmt = stmt.where(*build_attribute_clauses(
+                attr_plans,
+                attributes=GlobalItem.attributes,
+                name=GlobalItem.name,
+                name_ar=GlobalItem.name_ar,
+                search_terms=GlobalItem.search_terms,
+            ))
 
         return stmt
 
@@ -753,6 +721,14 @@ def needs_expansion(query: str, script: str = "ar", has_synonym: bool = False) -
     return False
 
 
+async def _count_budget_outcome(outcome: str) -> None:
+    """Count how often the model answered within the budget, was late or failed (HGETALL lamba:stats:search:<date>)."""
+    try:
+        await qu_cache.count(await get_redis(), f"budget_{outcome}", group="search")
+    except Exception:
+        pass
+
+
 # ── Shared pipeline ────────────────────────────────────────────────
 async def _run_search(
     query_text: str,
@@ -762,17 +738,18 @@ async def _run_search(
     filters: Optional[SearchFilters],
     db: AsyncSession,
     listing_type: Optional[str] = None,
-) -> tuple[List[HybridSearchResultItem], List[float]]:
+) -> tuple[List[HybridSearchResultItem], List[float], bool, bool]:
     """
-    Full pipeline: normalize → expand → embed (multi-query) → RRF retrieval
-    → rerank → language-aware ordering. Returns (scored results, primary
-    query vector for SearchAlert caching).
+    Full pipeline: normalize → query understanding ‖ first embedding (time-budgeted) → expand → embed
+    the rest (multi-query) → RRF retrieval → rerank → language-aware ordering.
+    Returns (scored results, primary query vector for SearchAlert caching, was_intent_query, qu_late);
+    qu_late is True when the model missed the time budget, so the response is not worth caching.
     """
     t0 = time.time()
 
     if not _is_valid_query(query_text):
         logger.debug("[SEARCH VALIDATION] Query %r is invalid (pure punctuation/empty/symbols only)", query_text)
-        return [], []
+        return [], [], False, False
 
     # 1. Normalization & Arabizi transliteration
     from app.services.arabic_norm import arabizi_to_arabic
@@ -798,52 +775,62 @@ async def _run_search(
             if len(words) == 1 and synonym not in synonym_variants and synonym != base_text:
                 synonym_variants.append(synonym)
 
-    # 3. Query Understanding on resolved query
+    # 3. Query understanding, in parallel with the first embedding, under a time budget. The embedding is of
+    #    the whole resolved query (search needs it anyway). Search waits for the model only for what is left of
+    #    the budget (counted from the start of both) and then goes on with the rule-based attributes, so a slow
+    #    or saturated model can never hold a search for longer than the budget. A late model answer is not
+    #    thrown away: it fills the query-understanding cache for the next identical query.
     from app.services.query_understanding import query_understanding_service
     effective_listing_type = listing_type
-    extracted_attrs: Dict[str, Any] = {}
-    query_clean: Optional[str] = None
-    intent_analysis = None
-    try:
-        intent_analysis = await query_understanding_service.analyze_query_async(resolved_query)
-        if not effective_listing_type and intent_analysis.intent in ("product", "service"):
-            effective_listing_type = intent_analysis.intent
-        extracted_attrs = intent_analysis.attributes or {}
-        query_clean = intent_analysis.query_clean
-        if extracted_attrs:
-            logger.info(f"[ATTR FILTER] query={query_text!r} resolved={resolved_query!r} attrs={extracted_attrs} query_clean={query_clean!r}")
-    except Exception as e:
-        logger.warning(f"Query understanding skipped: {e}")
+    parallel = await understand_within_budget(
+        embed_coro=embedding_service.encode_text_async(resolved_query, text_type="query"),
+        qu_coro=query_understanding_service.analyze_query_async(resolved_query),
+        budget_seconds=settings.query_understanding_budget_seconds,
+    )
+    first_embedding = parallel.embedding
+    qu_late = parallel.outcome == "late"
+    intent_analysis = parallel.intent or query_understanding_service.rules_only_intent(resolved_query)
+    if not effective_listing_type and intent_analysis.intent in ("product", "service"):
+        effective_listing_type = intent_analysis.intent
+    extracted_attrs: Dict[str, Any] = intent_analysis.attributes or {}
+    query_clean: Optional[str] = intent_analysis.query_clean
+    logger.info(
+        "[QU BUDGET] outcome=%s embed=%dms waited=%dms budget=%.1fs query=%r",
+        parallel.outcome, parallel.embed_ms, parallel.waited_ms,
+        settings.query_understanding_budget_seconds, query_text,
+    )
+    await _count_budget_outcome(parallel.outcome)
+    if extracted_attrs:
+        logger.info(f"[ATTR FILTER] query={query_text!r} resolved={resolved_query!r} attrs={extracted_attrs} query_clean={query_clean!r} qu={parallel.outcome}")
 
     # ── Resolve category for retrieval branch ────────────────────
+    # Only an EXACT taxonomy name counts (name / name_ar / name_en, any case; see services/category_match.py).
+    # The model's category is a loose word, or in the other language, and varies from call to call: a substring
+    # match used to give unstable and sometimes wrong boosts ("حليب" matched the baby-formula category).
     resolved_category_id: Optional[uuid.UUID] = None
-    if intent_analysis and getattr(intent_analysis, 'category_name', None):
-        _cat_name = intent_analysis.category_name.strip()
-        if _cat_name:
-            # Exact match (case-insensitive) on name / name_ar / name_en
-            _cat_row = (await db.execute(
-                select(Category.id).where(
+    resolved_category_names: set = set()
+    _cat_name = (getattr(intent_analysis, 'category_name', None) or "").strip()
+    if _cat_name:
+        _cat_row = (await db.execute(
+            select(Category.id)
+            .where(exact_category_clause(Category, _cat_name))
+            .order_by(Category.parent_category_id.is_(None).desc(), Category.id)  # a section before a subcategory
+            .limit(1)
+        )).first()
+        if _cat_row:
+            resolved_category_id = _cat_row[0]
+            _names = (await db.execute(
+                select(Category.name, Category.name_ar, Category.name_en).where(
                     or_(
-                        func.lower(Category.name) == _cat_name.lower(),
-                        func.lower(Category.name_ar) == _cat_name.lower(),
-                        func.lower(Category.name_en) == _cat_name.lower(),
+                        Category.id == resolved_category_id,
+                        Category.parent_category_id == resolved_category_id,
                     )
-                ).limit(1)
-            )).first()
-            if not _cat_row:
-                # Fuzzy fallback — ILIKE substring
-                _cat_row = (await db.execute(
-                    select(Category.id).where(
-                        or_(
-                            Category.name.ilike(f"%{_cat_name}%"),
-                            Category.name_ar.ilike(f"%{_cat_name}%"),
-                            Category.name_en.ilike(f"%{_cat_name}%"),
-                        )
-                    ).limit(1)
-                )).first()
-            if _cat_row:
-                resolved_category_id = _cat_row[0]
-                logger.info(f"[SEARCH] Resolved category '{_cat_name}' → {resolved_category_id}")
+                )
+            )).all()
+            resolved_category_names = exact_name_forms(*(name for row in _names for name in row))
+            logger.info(f"[SEARCH] Resolved category '{_cat_name}' → {resolved_category_id}")
+        else:
+            logger.info(f"[SEARCH] Category '{_cat_name}' from query understanding is not an exact taxonomy name: ignored")
 
     # Primary text for semantic search embedding: use query_clean if modifiers were extracted, else resolved_query
     primary_text = query_clean or resolved_query
@@ -860,22 +847,16 @@ async def _run_search(
         # Use primary_text (query_clean from understanding) so expansion
         # generates variants for the core product term, not the raw query
         # with attribute modifiers that would conflict with JSONB filters.
-        expansion_task = asyncio.create_task(
-            query_expansion_service.expand_async(primary_text)
-        )
-        original_embed_task = asyncio.create_task(
-            embedding_service.encode_text_async(primary_text, text_type="query")
-        )
-        expansion_result, original_embedding = await asyncio.gather(
-            expansion_task, original_embed_task, return_exceptions=True
-        )
-        variants = expansion_result if isinstance(expansion_result, list) else []
-        if isinstance(expansion_result, Exception):
-            logger.warning(f"Query expansion skipped due to error: {expansion_result}")
+        try:
+            variants = await query_expansion_service.expand_async(primary_text)
+        except Exception as exc:
+            logger.warning(f"Query expansion skipped due to error: {exc}")
+            variants = []
+        if not isinstance(variants, list):
+            variants = []
     else:
         logger.info(f"[TIMING] Expansion skipped via needs_expansion (has_synonym={has_synonym}) for query '{query_text}'")
         variants = []
-        original_embedding = await embedding_service.encode_text_async(primary_text, text_type="query")
 
     texts: List[str] = [primary_text]
     for candidate_t in [resolved_query, normalized_input, query_text]:
@@ -900,25 +881,19 @@ async def _run_search(
     )
 
     t2 = time.time()
-    logger.info(f"[TIMING] Expansion + first embed (parallel): {(t2-t1)*1000:.0f}ms")
+    logger.info(f"[TIMING] Expansion: {(t2-t1)*1000:.0f}ms")
 
-    # 2. Batch-embed ONLY the new variants (original is already embedded)
-    variant_texts = [t for t in texts if t != primary_text]
-    if variant_texts:
-        variant_embeddings = await embedding_service.embed_texts_batch(
-            variant_texts, text_type="query"
-        )
-    else:
-        variant_embeddings = []
-
-    # Combine all embeddings
-    all_embeddings = []
-    if not isinstance(original_embedding, Exception) and original_embedding is not None:
-        all_embeddings.append(original_embedding)
-    elif isinstance(original_embedding, Exception):
-        logger.warning(f"Original embedding error: {original_embedding}")
-
-    all_embeddings.extend(variant_embeddings)
+    # Embed only what is not embedded yet. The whole resolved query already was (in parallel with query
+    # understanding); when no `query_clean` came back, that is the primary text too.
+    known_embeddings: Dict[str, Any] = {}
+    if first_embedding is not None and not isinstance(first_embedding, Exception):
+        known_embeddings[resolved_query] = first_embedding
+    elif isinstance(first_embedding, Exception):
+        logger.warning(f"First embedding error: {first_embedding}")
+    all_embeddings = await assemble_embeddings(
+        texts, known_embeddings,
+        lambda missing: embedding_service.embed_texts_batch(missing, text_type="query"),
+    )
 
     primary_raw = (
         all_embeddings[0].tolist()
@@ -976,17 +951,12 @@ async def _run_search(
 
     fused.sort(key=lambda x: x['rrf_score'], reverse=True)
 
-    # ── Category boost: prioritize results matching the extracted category ──
-    if intent_analysis and getattr(intent_analysis, 'category_name', None):
-        cat = intent_analysis.category_name.lower()
-        for r in fused:
-            item_cat = (r.get('category') or '').lower()
-            item_cat_ar = (r.get('category_name_ar') or '').lower()
-            item_cat_en = (r.get('category_name_en') or '').lower()
-            if cat in item_cat or cat in item_cat_ar or cat in item_cat_en:
-                r['rrf_score'] *= 1.5  # 50% boost for category match
-        fused.sort(key=lambda x: x['rrf_score'], reverse=True)
-        logger.info(f"[SEARCH] Category boost applied for: {intent_analysis.category_name}")
+    # ── Category boost: prioritize results in the exactly matched category (and its subcategories) ──
+    if resolved_category_names:
+        boosted = boost_matching_category(fused, resolved_category_names)
+        if boosted:
+            fused.sort(key=lambda x: x['rrf_score'], reverse=True)
+        logger.info(f"[SEARCH] Category boost applied to {boosted} result(s) for category {resolved_category_id}")
 
     candidates = fused
     unique_item_ids_count = len(set(
@@ -1051,7 +1021,7 @@ async def _run_search(
         if len(strong_results) >= 3:
             was_intent_query = False
 
-    return scored, primary_raw, was_intent_query
+    return scored, primary_raw, was_intent_query, qu_late
 
 
 # ── POST /hybrid ────────────────────────────────────────────────
@@ -1089,7 +1059,7 @@ async def hybrid_search(
             logger.info("[SEARCH] Returning L2 cached result — reranker skipped")
             return cached
 
-        scored, primary_vec, was_intent_query = await _run_search(
+        scored, primary_vec, was_intent_query, qu_late = await _run_search(
             query_text=search_request.query_text,
             latitude=search_request.latitude,
             longitude=search_request.longitude,
@@ -1162,13 +1132,14 @@ async def hybrid_search(
                 )
 
         if response_obj is not None:
-            await cache_search(
-                query=search_request.query_text,
-                lat=search_request.latitude,
-                lng=search_request.longitude,
-                listing_type=search_request.listing_type,
-                result=response_obj,
-            )
+            if not qu_late:  # built without the model's full answer: do not keep it for the cache's 5 minutes
+                await cache_search(
+                    query=search_request.query_text,
+                    lat=search_request.latitude,
+                    lng=search_request.longitude,
+                    listing_type=search_request.listing_type,
+                    result=response_obj,
+                )
             return response_obj
 
         # Nothing relevant — cache a SearchAlert (dedup on user_id + query_text).
@@ -1200,13 +1171,14 @@ async def hybrid_search(
             search_mode="exact_matches",
             results=[],
         )
-        await cache_search(
-            query=search_request.query_text,
-            lat=search_request.latitude,
-            lng=search_request.longitude,
-            listing_type=search_request.listing_type,
-            result=no_match_response,
-        )
+        if not qu_late:
+            await cache_search(
+                query=search_request.query_text,
+                lat=search_request.latitude,
+                lng=search_request.longitude,
+                listing_type=search_request.listing_type,
+                result=no_match_response,
+            )
         return no_match_response
 
     except Exception as e:
@@ -1258,7 +1230,7 @@ async def double_check_search(
             f"{search_request.user_refined_details.strip()}"
         )
 
-        scored, _, _intent = await _run_search(
+        scored, _, _intent, _qu_late = await _run_search(
             query_text=refined_query,
             latitude=search_request.latitude,
             longitude=search_request.longitude,

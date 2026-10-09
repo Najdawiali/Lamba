@@ -58,6 +58,26 @@ from tests.test_merchant_market_profile_api import TestMerchantMarketProfileAPI
 from tests.test_password_policy import TestPasswordPolicy
 from tests.test_refresh_tokens import TestRefreshTokens, TestAccessTokens
 from tests.test_refresh_token_store_pg import TestRefreshTokensPostgres, TestAuthFlowPostgres  # skipped without LAMBA_TEST_DATABASE_URL
+from tests.test_attribute_rules import TestSanitizeMerchantAttributes, TestAttributeRuleHelpers, TestPlanAttributeFilters
+from tests.test_attribute_filters import TestAttributeFilters, TestSearchUsesTheSharedFilters
+from tests.test_build_synonym_table import TestBuildSynonymTable
+from tests.test_attributes_version_migration import TestAttributesVersionMigration
+from tests.test_attribute_extraction import (
+    TestAttributeValidator, TestAttributeJsonParser, TestAttributeExtract, TestAttributePrompt,
+)
+from tests.test_enrich_attributes import (  # need SQLAlchemy to import the job; skipped without it
+    TestEnrichProcess, TestEnrichProbeAndGate, TestEnrichReports, TestEnrichSqlText,
+    TestEnrichDatabaseHelpers, TestEnrichRun,
+)
+from tests.test_enrich_attributes_pg import TestEnrichAttributesSql  # skipped without LAMBA_TEST_DATABASE_URL
+from tests.test_query_attributes import TestQueryAttributes
+from tests.test_llm_error_reasons import TestErrorReasons
+from tests.test_qu_cache import TestQuCache
+from tests.test_query_understanding_service import TestQueryUnderstandingService, TestSettingsDefaults
+from tests.test_search_budget import TestUnderstandWithinBudget, TestAssembleEmbeddings
+from tests.test_search_pipeline_structure import TestSearchPipelineStructure
+from tests.test_category_match import TestExactNames, TestBoost, TestRealTaxonomy, TestClause, TestSearchUsesIt
+from tests.test_compare_search_runs import TestCompare, TestEvalSearchOptions, TestFlushSearchCache
 
 
 class TestArabicNorm(unittest.TestCase):
