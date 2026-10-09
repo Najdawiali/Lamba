@@ -186,11 +186,12 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
 ## Status (keep this section current)
 Done: security hardening, Alembic migrations, taxonomy, classifier ensemble, merchant flow fixes,
 report button, account deletion (in app + web page), legal pages, catalog import and enrichment,
-images.lambajo.com, homepage, password policy, email-only auth with keyboard/code-entry fixes,
+images.lambajo.com, homepage, password policy, email-only auth with its fixes (keyboard-aware forms,
+confirm password, code entry with paste, single-language errors; verified on a phone),
 refresh-token sessions (deployed; renewal and the session-ended message verified on a phone).
 
-In progress: phone test of the auth fixes; Google Play personal developer account (identity
-verification pending; personal accounts need a 14-day closed test with 12+ testers).
+In progress: Google Play personal developer account (identity verification pending; personal
+accounts need a 14-day closed test with 12+ testers).
 
 Next before the closed test: review the ~49 held products; monitoring alert for AI/credit
 failures; build the .aab; create review test accounts for Play "App access"; Play data safety form.
