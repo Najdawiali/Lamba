@@ -22,7 +22,16 @@ from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Optional
 
 from app.services.arabic_norm import normalize_arabic
-from app.services.attribute_rules import canonical_enum_value, clean_text
+from app.services.attribute_rules import (
+    DIETARY_EVIDENCE,
+    DIETARY_VALUES,
+    GENDER_EVIDENCE,
+    ORGANIC_EVIDENCE,
+    TEMPERATURE_EVIDENCE,
+    canonical_enum_value,
+    clean_text,
+    has_evidence,
+)
 
 PROMPT_VERSION = 1
 
@@ -94,29 +103,6 @@ RESPONSE_FORMATS: dict[str, Optional[dict]] = {
     "none": None,
 }
 
-# ── Evidence: a word in the name that backs the value ───────────────────────────────────────────
-_GENDER_EVIDENCE = {
-    "male": ("رجالي", "رجال", "للرجال", "men", "man", "male", "gents"),
-    "female": ("نسائي", "نساء", "للنساء", "حريمي", "بناتي", "women", "woman", "female", "ladies", "lady"),
-    "unisex": ("للجنسين", "unisex"),
-}
-_TEMPERATURE_EVIDENCE = {
-    "hot": ("ساخن", "سخن"),
-    "cold": ("بارد", "باردة", "cold"),
-    "iced": ("مثلج", "مثلجة", "iced", "ايس تي", "ice tea"),
-}
-_ORGANIC_EVIDENCE = ("عضوي", "عضوية", "organic", "bio")
-_DIETARY_EVIDENCE = {
-    "قليل الدسم": ("قليل الدسم", "low fat", "lowfat", "لو فات"),
-    "كامل الدسم": ("كامل الدسم", "full fat", "full cream", "فول كريم"),
-    "خالي من الدسم": ("خالي من الدسم", "خال من الدسم", "fat free", "non fat"),
-    "خالي من الغلوتين": ("غلوتين", "gluten free", "gluten-free"),
-    "بدون سكر": ("بدون سكر", "خالي من السكر", "خال من السكر", "sugar free", "no sugar", "دايت", "diet", "zero"),
-    "بدون كافيين": ("بدون كافيين", "خالي من الكافيين", "decaf", "decaffeinated"),
-    "خالي من اللاكتوز": ("لاكتوز", "lactose free"),
-    "نباتي": ("نباتي", "vegan", "plant based"),
-}
-DIETARY_VALUES = tuple(_DIETARY_EVIDENCE)
 
 _PLACEHOLDERS = frozenset({
     "منتج", "عادي", "غير معروف", "لا يوجد", "غير محدد", "none", "null", "n/a", "na", "unknown", "-", "--",
@@ -124,23 +110,8 @@ _PLACEHOLDERS = frozenset({
 _SEPARATORS = ("/", "|", "،", ",", ";", "؛", "\\")
 _DIGIT_RE = re.compile(r"[0-9\u0660-\u0669\u06f0-\u06f9]")
 _ARABIC_RE = re.compile(r"[\u0600-\u06ff]")
-_LATIN_RE = re.compile(r"[a-z]")
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 _FENCE_RE = re.compile(r"^```[a-zA-Z]*\s*|\s*```$")
-
-
-def _has_evidence(normalized_name: str, phrases) -> bool:
-    """True if one of the phrases is in the name; Latin phrases must be whole words."""
-    for phrase in phrases:
-        p = normalize_arabic(phrase)
-        if not p:
-            continue
-        if _LATIN_RE.search(p):
-            if re.search(r"(?<![a-z0-9])" + re.escape(p) + r"(?![a-z0-9])", normalized_name):
-                return True
-        elif p in normalized_name:
-            return True
-    return False
 
 
 def validate_extracted(raw: Any, name: str, keys=EXTRACT_KEYS) -> tuple[dict, list[str]]:
@@ -167,17 +138,17 @@ def validate_extracted(raw: Any, name: str, keys=EXTRACT_KEYS) -> tuple[dict, li
         if key == "organic":
             if value is not True:
                 dropped.append("organic:not_true")
-            elif not _has_evidence(norm_name, _ORGANIC_EVIDENCE):
+            elif not has_evidence(norm_name, ORGANIC_EVIDENCE):
                 dropped.append("organic:no_evidence")
             else:
                 clean[key] = True
 
         elif key in ("gender", "temperature"):
             canonical = canonical_enum_value(key, value)
-            evidence = _GENDER_EVIDENCE if key == "gender" else _TEMPERATURE_EVIDENCE
+            evidence = GENDER_EVIDENCE if key == "gender" else TEMPERATURE_EVIDENCE
             if canonical is None or canonical not in evidence:
                 dropped.append(f"{key}:bad_value")
-            elif not _has_evidence(norm_name, evidence[canonical]):
+            elif not has_evidence(norm_name, evidence[canonical]):
                 dropped.append(f"{key}:no_evidence")
             else:
                 clean[key] = canonical
@@ -186,7 +157,7 @@ def validate_extracted(raw: Any, name: str, keys=EXTRACT_KEYS) -> tuple[dict, li
             text = clean_text(value)
             if text not in DIETARY_VALUES:
                 dropped.append("dietary:not_canonical")
-            elif not _has_evidence(norm_name, _DIETARY_EVIDENCE[text]):
+            elif not has_evidence(norm_name, DIETARY_EVIDENCE[text]):
                 dropped.append("dietary:no_evidence")
             else:
                 clean[key] = text

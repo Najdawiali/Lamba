@@ -70,6 +70,7 @@ from tests.test_enrich_attributes import (  # need SQLAlchemy to import the job;
     TestEnrichDatabaseHelpers, TestEnrichRun,
 )
 from tests.test_enrich_attributes_pg import TestEnrichAttributesSql  # skipped without LAMBA_TEST_DATABASE_URL
+from tests.test_query_attributes import TestQueryAttributes
 
 
 class TestArabicNorm(unittest.TestCase):

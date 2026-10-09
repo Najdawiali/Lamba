@@ -136,6 +136,47 @@ def sanitize_merchant_attributes(raw: Any) -> dict:
     return clean
 
 
+# ── Evidence: words that back a claim (in a product name, or in a search query) ─────────────────
+GENDER_EVIDENCE = {
+    "male": ("رجالي", "رجال", "للرجال", "men", "man", "male", "gents"),
+    "female": ("نسائي", "نساء", "للنساء", "حريمي", "بناتي", "women", "woman", "female", "ladies", "lady"),
+    "unisex": ("للجنسين", "unisex"),
+}
+TEMPERATURE_EVIDENCE = {
+    "hot": ("ساخن", "سخن"),
+    "cold": ("بارد", "باردة", "cold"),
+    "iced": ("مثلج", "مثلجة", "iced", "ايس تي", "ice tea"),
+}
+ORGANIC_EVIDENCE = ("عضوي", "عضوية", "organic", "bio")
+DIETARY_EVIDENCE = {
+    "قليل الدسم": ("قليل الدسم", "low fat", "lowfat", "لو فات"),
+    "كامل الدسم": ("كامل الدسم", "full fat", "full cream", "فول كريم"),
+    "خالي من الدسم": ("خالي من الدسم", "خال من الدسم", "fat free", "non fat"),
+    "خالي من الغلوتين": ("غلوتين", "gluten free", "gluten-free"),
+    "بدون سكر": ("بدون سكر", "خالي من السكر", "خال من السكر", "sugar free", "no sugar", "دايت", "diet", "zero"),
+    "بدون كافيين": ("بدون كافيين", "خالي من الكافيين", "decaf", "decaffeinated"),
+    "خالي من اللاكتوز": ("لاكتوز", "lactose free"),
+    "نباتي": ("نباتي", "vegan", "plant based"),
+}
+DIETARY_VALUES = tuple(DIETARY_EVIDENCE)
+
+_LATIN_RE = re.compile(r"[a-z]")
+
+
+def has_evidence(normalized_name: str, phrases) -> bool:
+    """True if one of the phrases is in the name; Latin phrases must be whole words."""
+    for phrase in phrases:
+        p = normalize_arabic(phrase)
+        if not p:
+            continue
+        if _LATIN_RE.search(p):
+            if re.search(r"(?<![a-z0-9])" + re.escape(p) + r"(?![a-z0-9])", normalized_name):
+                return True
+        elif p in normalized_name:
+            return True
+    return False
+
+
 # ── Search side: what the query model asked for, as a plan the SQL layer turns into clauses ──
 
 @dataclass(frozen=True)
