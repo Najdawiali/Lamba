@@ -61,7 +61,6 @@ from fastapi import APIRouter, Depends, HTTPException, status, File, Form, Uploa
 from app.rate_limit import limiter
 from geoalchemy2.elements import WKTElement
 from geoalchemy2 import Geometry, Geography
-import sqlalchemy as sa
 from sqlalchemy import select, func, literal, or_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -86,6 +85,8 @@ from app.services.embedding import embedding_service
 from app.services.reranker import reranker_service
 from app.services.query_expansion import query_expansion_service
 from app.services.arabic_norm import normalize_query
+from app.services.attribute_filters import build_attribute_clauses
+from app.services.attribute_rules import plan_attribute_filters
 from app.services.cache import get_cached_search, cache_search, lookup_synonym
 
 logger = logging.getLogger(__name__)
@@ -155,6 +156,8 @@ async def _retrieve_fused_candidates(
     else:
         semantic_score_expr = literal(0.0)
 
+    attr_plans = plan_attribute_filters(extracted_attrs)
+
     def _base_stmt():
         stmt = (
             select(
@@ -214,55 +217,15 @@ async def _retrieve_fused_candidates(
         else:
             stmt = stmt.where(func.ST_DWithin(geog_location, geog_point, radius_meters))
 
-        # ── Attribute filters — whitelisted JSONB containment + name fallback ──────
-        _ALLOWED_ATTR_KEYS = {
-            "type", "color", "flavor", "origin", "organic", "size",
-            "brand", "temperature", "dietary", "material", "gender",
-        }
-        if extracted_attrs:
-            for attr_key, attr_value in extracted_attrs.items():
-                if attr_key not in _ALLOWED_ATTR_KEYS or attr_value is None:
-                    continue
-                if isinstance(attr_value, bool):
-                    stmt = stmt.where(
-                        func.cast(
-                            GlobalItem.attributes[attr_key].as_string(),
-                            sa.Boolean,
-                        ) == attr_value
-                    )
-                elif attr_key == "brand" and isinstance(attr_value, str):
-                    brand_str = attr_value.strip()
-                    brand_variants = [brand_str]
-                    if brand_str.startswith("ال") and len(brand_str) > 2:
-                        brand_variants.append(brand_str[2:])
-                    elif not brand_str.startswith("ال"):
-                        brand_variants.append("ال" + brand_str)
-
-                    brand_clauses = []
-                    for bv in brand_variants:
-                        brand_clauses.extend([
-                            GlobalItem.attributes["brand"].as_string().ilike(f"%{bv}%"),
-                            GlobalItem.name.ilike(f"%{bv}%"),
-                            GlobalItem.name_ar.ilike(f"%{bv}%"),
-                            GlobalItem.search_terms.ilike(f"%{bv}%"),
-                        ])
-                    stmt = stmt.where(or_(*brand_clauses))
-                elif isinstance(attr_value, str):
-                    val_str = attr_value.strip()
-                    val_variants = [val_str]
-                    if val_str.startswith("ال") and len(val_str) > 2:
-                        val_variants.append(val_str[2:])
-                    elif not val_str.startswith("ال"):
-                        val_variants.append("ال" + val_str)
-
-                    attr_clauses = []
-                    for vv in val_variants:
-                        attr_clauses.extend([
-                            GlobalItem.attributes[attr_key].as_string().ilike(f"%{vv}%"),
-                            GlobalItem.name.ilike(f"%{vv}%"),
-                            GlobalItem.name_ar.ilike(f"%{vv}%"),
-                        ])
-                    stmt = stmt.where(or_(*attr_clauses))
+        # ── Attribute filters — rules in attribute_rules, SQL in attribute_filters ──
+        if attr_plans:
+            stmt = stmt.where(*build_attribute_clauses(
+                attr_plans,
+                attributes=GlobalItem.attributes,
+                name=GlobalItem.name,
+                name_ar=GlobalItem.name_ar,
+                search_terms=GlobalItem.search_terms,
+            ))
 
         return stmt
 
