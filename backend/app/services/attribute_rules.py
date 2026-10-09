@@ -15,6 +15,8 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from app.services.arabic_norm import normalize_arabic
+
 # Keys search may filter on (the same whitelist as query_understanding._ALLOWED_ATTR_KEYS).
 SEARCH_ATTR_KEYS = frozenset({
     "type", "color", "flavor", "origin", "organic", "size",
@@ -68,12 +70,21 @@ _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
 _SPACE_RE = re.compile(r"\s+")
 
 
+# The aliases also under their normalised spelling: the query model sees alef/hamza-normalised text,
+# so it may answer "نساءي" (normalised) as readily as "نسائي".
+_ENUM_LOOKUP: dict[str, dict[str, str]] = {
+    key: {**aliases, **{normalize_arabic(alias): canonical for alias, canonical in aliases.items()}}
+    for key, aliases in _ENUM_ALIASES.items()
+}
+
+
 def canonical_enum_value(key: str, value: Any) -> str | None:
     """The canonical English value of an enumerated attribute, or None if it is not one."""
-    aliases = _ENUM_ALIASES.get(key)
-    if aliases is None or not isinstance(value, str):
+    lookup = _ENUM_LOOKUP.get(key)
+    if lookup is None or not isinstance(value, str):
         return None
-    return aliases.get(value.strip().lower())
+    word = value.strip().lower()
+    return lookup.get(word) or lookup.get(normalize_arabic(word))
 
 
 def clean_text(value: Any, max_length: int = MAX_TEXT_LENGTH) -> str | None:
@@ -134,7 +145,7 @@ class AttrFilter:
     value: Any = None              # bool: the wanted boolean. enum: the canonical value
     stored: tuple[str, ...] = ()   # enum: stored values that satisfy it
     name_words: tuple[str, ...] = ()  # enum: words in a name that also satisfy it
-    variants: tuple[str, ...] = ()    # brand/text: the value with and without the Arabic "ال"
+    variants: tuple[str, ...] = ()    # brand/text: the value in every spelling worth trying (see match_variants)
 
 
 def _with_and_without_al(value: str) -> tuple[str, ...]:
@@ -144,6 +155,49 @@ def _with_and_without_al(value: str) -> tuple[str, ...]:
     elif not value.startswith("ال"):
         variants.append("ال" + value)
     return tuple(variants)
+
+
+# Spelling of alef and hamza. The query model is shown alef/hamza-normalised text ("شاي اخضر") but tends
+# to answer in the usual spelling ("أخضر"), while product names and stored values may use either, and
+# ILIKE tells them apart. So a value is tried in its raw and normalised form and with every plausible
+# original letter put back, one letter at a time (a word-initial bare alef was أ or إ; a bare hamza was ئ or ؤ).
+_ALEF, _ALEF_HAMZA_ABOVE, _ALEF_HAMZA_BELOW = chr(0x0627), chr(0x0623), chr(0x0625)
+_HAMZA, _YEH_HAMZA, _WAW_HAMZA = chr(0x0621), chr(0x0626), chr(0x0624)
+MAX_MATCH_VARIANTS = 16
+
+
+def _single_letter_restorations(form: str) -> list[str]:
+    out = []
+    for i, ch in enumerate(form):
+        if ch == _ALEF:
+            starts_word = i == 0 or form[i - 1] == " "
+            after_article = i >= 2 and form[i - 2:i] == "ال" and (i == 2 or form[i - 3] == " ")
+            is_the_article_itself = starts_word and form[i:i + 2] == "ال"
+            if (starts_word or after_article) and not is_the_article_itself:
+                out.extend(form[:i] + rep + form[i + 1:] for rep in (_ALEF_HAMZA_ABOVE, _ALEF_HAMZA_BELOW))
+        elif ch == _HAMZA:
+            out.extend(form[:i] + rep + form[i + 1:] for rep in (_YEH_HAMZA, _WAW_HAMZA))
+    return out
+
+
+def spelling_variants(value: str) -> tuple[str, ...]:
+    """The value as given, normalised, and with original alef/hamza letters put back (case-insensitive unique)."""
+    seen: dict[str, str] = {}
+    for form in (value, normalize_arabic(value)):
+        seen.setdefault(form.lower(), form)
+    for form in list(seen.values()):
+        for restored in _single_letter_restorations(form):
+            seen.setdefault(restored.lower(), restored)
+    return tuple(form for form in seen.values() if form.strip())
+
+
+def match_variants(value: str) -> tuple[str, ...]:
+    """Every form of a query value worth matching: spelling variants, with and without "ال"."""
+    variants: dict[str, str] = {}
+    for base in _with_and_without_al(value):
+        for form in spelling_variants(base):
+            variants.setdefault(form.lower(), form)
+    return tuple(variants.values())[:MAX_MATCH_VARIANTS]
 
 
 def plan_attribute_filters(extracted_attrs: Any) -> list[AttrFilter]:
@@ -174,6 +228,6 @@ def plan_attribute_filters(extracted_attrs: Any) -> list[AttrFilter]:
             text = value.strip()
             if text:
                 plans.append(AttrFilter(
-                    "brand" if key == "brand" else "text", key, variants=_with_and_without_al(text),
+                    "brand" if key == "brand" else "text", key, variants=match_variants(text),
                 ))
     return plans

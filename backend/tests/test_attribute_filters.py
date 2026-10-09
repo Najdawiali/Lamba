@@ -99,9 +99,17 @@ class TestAttributeFilters(unittest.TestCase):
         self.assertIn("global_items.name_ar", sql)
         self.assertNotIn("search_terms", sql)
         values = list(params.values())
-        for pattern in ("%أخضر%", "%الأخضر%"):
+        for pattern in ("%أخضر%", "%الأخضر%", "%اخضر%"):  # with/without the article and the hamza
             self.assertIn(pattern, values)
         self.assertIn("type", values)
+
+    def test_a_bare_alef_value_also_matches_names_spelled_with_the_hamza(self):
+        ((sql, params),) = compile_filters({"type": "اخضر"})
+        values = list(params.values())
+        self.assertIn("%أخضر%", values)
+        (plan,) = plan_attribute_filters({"type": "اخضر"})
+        # one substring test per spelling in each of the attribute, name and name_ar columns
+        self.assertEqual(sql.upper().count(" ILIKE "), 3 * len(plan.variants))
 
     def test_brand_also_looks_in_search_terms(self):
         ((sql, params),) = compile_filters({"brand": "مرسيدس"})
