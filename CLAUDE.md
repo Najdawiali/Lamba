@@ -169,10 +169,14 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
   spelling (seen on the server 2026-10-09: "شاي اخضر" -> type "أخضر"), while names and stored values may use
   either, so `match_variants` tries every text/brand value as given, normalized and with the original
   alef/hamza letters put back, with and without "ال". Stored values stay as the model wrote them.
-  LATENCY WARNING: on the same check the query model (gemma-4-E4B-it, 3 s timeout) timed out on 3 of 4
-  calls and the circuit breaker then skipped the rest, and the retained api logs held no `[ATTR FILTER]`
-  line. If that is typical, attribute filters rarely fire and filling attributes will not change results;
-  measure it before judging the fill.
+  QUERY MODEL LATENCY (measured on the server 2026-10-09, 16 calls with the production prompt, model and
+  max_tokens): `query_llm_fallback_model` (gemma-4-E4B-it) answered correctly every time (organic true,
+  gender, temperature, dietary, type) but took 2.5-7.6 s, median about 3.9 s, while `analyze_query_async`
+  allows 3 s per attempt and 4 s overall. Only 2 of the 16 calls were under 3 s, so most attribute queries
+  time out silently and search runs unfiltered (the retained api logs held no `[ATTR FILTER]` line). Until
+  that is fixed, filling attributes changes few results. Free-text values from the query model can be
+  longer than what is stored ("جبنة بيضاء بلدية" -> type "بيضاء بلدية"), and the contiguous substring match
+  never finds those; the reliable keys are organic, gender, temperature, dietary and brand.
 - Synonyms: search looks words up in the Redis hash `lamba:synonyms`. It was EMPTY in production on
   2026-10-09 (HLEN 0): `scripts/` is not in the Docker image, so nothing loads it and search runs without
   dialect rewriting. The curated list is `CORE_SYNONYMS` (30 pairs) in `scripts/build_synonym_table.py`, which
