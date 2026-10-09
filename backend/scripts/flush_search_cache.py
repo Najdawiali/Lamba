@@ -21,7 +21,7 @@ async def main():
         else:
             print("No cached search keys found in Redis.")
     
-    # Rebuild synonym table
+    # Reload the curated synonym table (CORE_SYNONYMS only, nothing mined from the catalog)
     await build_synonym_table()
     print("Synonym table ready.")
 
