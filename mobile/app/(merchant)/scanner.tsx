@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
+import { categoryLabel } from '../../utils/categoryLabel';
 import {
   lookupItemByBarcode,
   linkBarcodeToMarket,
@@ -1290,7 +1291,7 @@ const styles = useMemo(() => StyleSheet.create({
                         {i18n.locale?.startsWith('ar') ? (scanResult.name_ar || scanResult.name) : (scanResult.name_en || scanResult.name)}
                       </Text>
                       <Text style={styles.itemCategory}>
-                        {(i18n.locale?.startsWith('ar') ? (scanResult.category_name_ar || scanResult.category) : (scanResult.category_name_en || scanResult.category)) || t('common.general', 'General')}
+                        {categoryLabel(scanResult, isArUI, t('common.general', 'General'))}
                       </Text>
                       <View style={styles.badgeRow}>
                         <View style={[styles.badge, scanResult.exists_in_branch ? styles.badgeSuccess : styles.badgeInfo]}>

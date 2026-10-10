@@ -38,6 +38,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { formatPrice } from '../../services/currency';
 import { t, i18n } from '../../services/i18n';
+import { categoryLabel } from '../../utils/categoryLabel';
 import { useThemeColors } from '../../context/ThemeContext';
 import { Spacing, BorderRadius, Typography, Shadows, TAB_BAR_OVERFLOW } from '../../constants/theme';
 import { resolveImageUrl } from '../../services/utils';
@@ -737,7 +738,7 @@ export default function MerchantOffersScreen() {
                           {item.name}
                         </Text>
                         <Text style={[styles.pickProductMeta, { color: Colors.textMuted }]}>
-                          {item.category || (isAr ? 'منتج عام' : 'General')} • {isAr ? 'المتوفر:' : 'Stock:'}{' '}
+                          {categoryLabel(item, isAr, isAr ? 'منتج عام' : 'General')} • {isAr ? 'المتوفر:' : 'Stock:'}{' '}
                           <Text style={{ color: Colors.textSecondary, fontWeight: '600' }}>
                             {item.stock_count}
                           </Text>

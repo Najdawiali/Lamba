@@ -29,7 +29,7 @@ import { t, toggleLanguage, i18n } from '../../services/i18n';
 import { resolveImageUrl } from '../../services/utils';
 import { formatStoreAddress } from '../../utils/jordanAddress';
 import { formatPrice, getCurrencyCode } from '../../services/currency';
-import { CATEGORY_AR_FALLBACK } from '../../constants/categories';
+import { categoryLabel } from '../../utils/categoryLabel';
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -353,8 +353,8 @@ export default function DashboardScreen() {
       if (p.category && !map.has(p.category)) {
         map.set(p.category, {
           name: p.category,
-          name_ar: p.category_name_ar || CATEGORY_AR_FALLBACK[p.category] || p.category,
-          name_en: p.category_name_en || p.category,
+          name_ar: categoryLabel(p, true),
+          name_en: categoryLabel(p, false),
         });
       }
     });
@@ -1076,7 +1076,7 @@ export default function DashboardScreen() {
       >
         {categories.map((cat) => {
           const displayName = isAr
-            ? (cat.name_ar || CATEGORY_AR_FALLBACK[cat.name] || cat.name)
+            ? (cat.name_ar || cat.name)
             : (cat.name_en || cat.name);
           const isSelected = activeCategory === cat.name;
           return (
@@ -1145,9 +1145,7 @@ export default function DashboardScreen() {
                 {isAr ? (item.name_ar || truncatedName) : (item.name_en || truncatedName)}
               </Text>
               <Text style={styles.categoryLabel}>
-                {(isAr
-                  ? (item.category_name_ar || CATEGORY_AR_FALLBACK[item.category || ''] || item.category)
-                  : (item.category_name_en || item.category)) || t('common.general', 'عام')}
+                {categoryLabel(item, isAr, t('common.general', 'عام'))}
               </Text>
               <Text style={styles.priceText}>{formatPrice(item.price)}</Text>
               <Text style={styles.stockCountText}>{t('dashboard.stock_label', 'المخزون')}: {item.stock_count}</Text>

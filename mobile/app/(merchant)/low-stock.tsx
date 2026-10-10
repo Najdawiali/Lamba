@@ -15,7 +15,7 @@ import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/them
 import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
 import { resolveImageUrl } from '../../services/utils';
-import { CATEGORY_AR_FALLBACK } from '../../constants/categories';
+import { categoryLabel } from '../../utils/categoryLabel';
 
 type StockFilterMode = 'all' | 'out_of_stock' | 'critical' | 'low';
 
@@ -117,9 +117,7 @@ export default function LowStockScreen() {
     // 4. Group sorted items by category
     const categoriesMap: Record<string, MarketItemDashboardResponse[]> = {};
     sortedItems.forEach(item => {
-      const cat = (i18n.locale?.startsWith('ar')
-        ? (item.category_name_ar || CATEGORY_AR_FALLBACK[item.category || ''] || item.category)
-        : (item.category_name_en || item.category)) || t('market.all_items', 'عام');
+      const cat = categoryLabel(item, i18n.locale?.startsWith('ar'), t('market.all_items', 'عام'));
       if (!categoriesMap[cat]) {
         categoriesMap[cat] = [];
       }

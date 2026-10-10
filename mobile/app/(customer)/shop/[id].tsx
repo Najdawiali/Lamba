@@ -14,6 +14,7 @@ import {
   getNearMarkets
 } from '../../../services/api';
 import { t, i18n } from '../../../services/i18n';
+import { categoryLabel } from '../../../utils/categoryLabel';
 import { formatPrice } from '../../../services/currency';
 import { resolveImageUrl, openMapDirections } from '../../../services/utils';
 import * as Location from 'expo-location';
@@ -317,9 +318,11 @@ export default function ShopCatalogScreen() {
                 </TouchableOpacity>
                 {categories.map((cat) => {
                   const catFirstItem = catalog[cat]?.[0];
-                  const catDisplayName = isAr
-                    ? (catFirstItem?.category_name_ar || cat)
-                    : (catFirstItem?.category_name_en || cat);
+                  const catDisplayName = categoryLabel({
+                    category: cat,
+                    category_name_ar: catFirstItem?.category_name_ar,
+                    category_name_en: catFirstItem?.category_name_en,
+                  }, isAr);
 
                   return (
                     <TouchableOpacity

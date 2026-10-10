@@ -14,6 +14,7 @@ import { SearchResultItem, isFavorite, addFavorite, removeFavorite, startConvers
 import { Spacing, BorderRadius, Typography, Shadows } from '../constants/theme';
 import { useThemeColors } from '../context/ThemeContext';
 import { t, i18n } from '../services/i18n';
+import { categoryLabel } from '../utils/categoryLabel';
 import { resolveImageUrl, formatDistanceKm } from '../services/utils';
 import { formatPrice } from '../services/currency';
 
@@ -337,9 +338,7 @@ export default function ProductCard({ item }: Props) {
             {Boolean(item.category) ? (
               <View style={styles.categoryBadge}>
                 <Text style={styles.categoryText}>
-                  {i18n.locale?.startsWith('ar')
-                    ? (item.category_name_ar || item.category)
-                    : (item.category_name_en || item.category)}
+                  {categoryLabel(item, i18n.locale?.startsWith('ar'))}
                 </Text>
               </View>
             ) : null}
