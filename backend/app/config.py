@@ -198,8 +198,11 @@ class Settings(BaseSettings):
     query_understanding_budget_seconds: float = 2.5
     # The model call itself may outlive the budget, so that a late answer still fills the cache.
     query_llm_call_timeout_seconds: float = 6.0
-    # DeepInfra answers 429 at once instead of queueing the request when the model is at capacity.
-    query_llm_fail_fast: bool = True
+    # DeepInfra's "fail_fast": answer 429 "engine_overloaded" at once instead of queueing the request when the
+    # model has no free capacity. Off: it rejected the first two production calls on gemma-4-26B-A4B that the
+    # queue would have served, and it only pays off for an app that can fail over to another provider. The
+    # budget already bounds how long search waits, and a late answer still lands in the cache.
+    query_llm_fail_fast: bool = False
     # Model calls in flight at the same time; beyond that the rule-based attributes alone are used.
     query_llm_max_inflight: int = 8
 

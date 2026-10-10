@@ -83,7 +83,7 @@ class TestQueryUnderstandingService(unittest.TestCase):
         self.adapter = FakeAdapter()
         self.config = make_config(
             query_llm_fallback_model="google/gemma-4-26B-A4B-it", query_llm_call_timeout_seconds=6.0,
-            query_llm_fail_fast=True, query_llm_max_inflight=8, cache_qu_ttl=604800,
+            query_llm_fail_fast=False, query_llm_max_inflight=8, cache_qu_ttl=604800,
             query_llm_service_tier="priority",
         )
 
@@ -120,7 +120,7 @@ class TestQueryUnderstandingService(unittest.TestCase):
         self.assertEqual(self.redis.counts(), {"not_needed": 1})
 
     # ── the model call ────────────────────────────────────────────────────────────────────────────
-    def test_the_call_has_one_attempt_its_own_breaker_fail_fast_and_a_sink(self):
+    def test_the_call_has_one_attempt_its_own_breaker_and_a_sink(self):
         self.adapter.reply = answer()
         intent = self.analyze("شاي اخضر")
         (call,) = self.adapter.calls
@@ -128,7 +128,7 @@ class TestQueryUnderstandingService(unittest.TestCase):
         self.assertEqual(call["max_retries"], 1)                     # no retry inside the search's budget
         self.assertEqual(call["timeout"], 6.0)
         self.assertIs(call["breaker"], self.pool.deepinfra_query_breaker)
-        self.assertIs(call["fail_fast"], True)
+        self.assertNotIn("fail_fast", call)                          # the queue serves a busy moment, see config.py
         self.assertEqual(call["service_tier"], "priority")           # the query path's tier setting
         self.assertEqual(call["temperature"], 0.0)
         self.assertEqual(call["chat_template_kwargs"], {"enable_thinking": False})
@@ -137,11 +137,11 @@ class TestQueryUnderstandingService(unittest.TestCase):
         self.assertEqual((intent.intent, intent.query_clean, intent.attributes), ("product", "شاي", {"type": "أخضر"}))
         self.assertEqual(self.redis.counts(), {"ok": 1})
 
-    def test_fail_fast_can_be_switched_off(self):
-        self.config.settings.query_llm_fail_fast = False
+    def test_fail_fast_can_be_switched_on(self):
+        self.config.settings.query_llm_fail_fast = True
         self.adapter.reply = answer()
         self.analyze("شاي اخضر")
-        self.assertNotIn("fail_fast", self.adapter.calls[0])
+        self.assertIs(self.adapter.calls[0]["fail_fast"], True)
 
     def test_the_service_tier_is_a_setting_of_this_call_path(self):
         self.config.settings.query_llm_service_tier = ""
@@ -298,7 +298,7 @@ class TestSettingsDefaults(unittest.TestCase):
         self.assertEqual(d["query_understanding_budget_seconds"], 2.5)
         self.assertEqual(d["query_llm_call_timeout_seconds"], 6.0)
         self.assertGreater(d["query_llm_call_timeout_seconds"], d["query_understanding_budget_seconds"])  # a late answer can still be cached
-        self.assertIs(d["query_llm_fail_fast"], True)
+        self.assertIs(d["query_llm_fail_fast"], False)   # it rejected calls the queue would have served
         self.assertEqual(d["query_llm_max_inflight"], 8)
         self.assertEqual(d["query_llm_service_tier"], "priority")
         self.assertEqual(d["cache_qu_ttl"], 604800)
