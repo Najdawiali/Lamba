@@ -56,7 +56,7 @@ def load_migration(op):
 
 
 class TestAttributesVersionMigration(unittest.TestCase):
-    def test_chain_continues_from_0003_and_is_a_single_head(self):
+    def test_chain_continues_from_0003_and_stays_a_single_head(self):
         revisions = {}
         for fname in os.listdir(VERSIONS):
             if not fname.endswith(".py"):
@@ -72,7 +72,7 @@ class TestAttributesVersionMigration(unittest.TestCase):
         self.assertEqual(revisions["0004"], "0003")
         parents = set(revisions.values())
         heads = [rev for rev in revisions if rev not in parents]
-        self.assertEqual(heads, ["0004"])
+        self.assertEqual(len(heads), 1, heads)  # later migrations extend the chain; it stays linear
 
     @unittest.skipUnless(HAVE_SQLALCHEMY, "SQLAlchemy is not installed")
     def test_upgrade_adds_a_nullable_smallint_and_downgrade_drops_it(self):

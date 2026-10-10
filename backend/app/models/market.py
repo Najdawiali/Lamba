@@ -29,8 +29,15 @@ class Market(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     business_nature: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # One-line fallback text, composed by the server from the structured fields below.
     address: Mapped[str] = mapped_column(Text, nullable=False)
-    
+    # Structured address (migration 0005). Nullable: rows from before it have only `address`.
+    # `governorate` is a key from app/jordan_geo.py; area/street/landmark are stored as typed.
+    governorate: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    area: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    street: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    landmark: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
     # PostGIS geometry POINT (longitude, latitude) with standard SRID 4326
     location = mapped_column(
         Geometry(geometry_type="POINT", srid=4326),
