@@ -6,6 +6,8 @@ import uuid
 from typing import Optional, List
 from pydantic import BaseModel, Field
 
+from app.schemas.address import AddressParts
+
 
 class SearchFilters(BaseModel):
     max_distance_km: Optional[float] = Field(None, ge=0.0, description="Geographic proximity radius limit in kilometers")
@@ -56,6 +58,7 @@ class HybridSearchResultItem(BaseModel):
     market_id: uuid.UUID
     market_name: str
     market_address: str
+    market_address_parts: Optional[AddressParts] = None
     latitude: float
     longitude: float
     market_is_open: bool

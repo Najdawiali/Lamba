@@ -3,16 +3,14 @@ from typing import Optional, List
 from datetime import datetime
 
 class MarketProfileUpdate(BaseModel):
-    """Update store name, address, and contact info.
-    Name/address changes only allowed if profile_edited_at is NULL (checked in endpoint)."""
+    """Update store name and contact info. The name can be changed once (checked in the endpoint).
+    The location has its own endpoint: PUT /api/v1/merchant/market/location."""
     name: Optional[str] = None
     name_ar: Optional[str] = None
-    address: Optional[str] = None
-    address_ar: Optional[str] = None
     contact_phone: Optional[str] = None
     contact_email: Optional[str] = None
 
-    @field_validator('name', 'name_ar', 'address', 'address_ar')
+    @field_validator('name', 'name_ar')
     @classmethod
     def validate_non_empty_string(cls, v):
         if v is not None:
@@ -61,16 +59,11 @@ class EmployeesUpdate(BaseModel):
 class MarketProfileResponse(BaseModel):
     name: Optional[str] = None
     name_ar: Optional[str] = None
-    address: Optional[str] = None
-    address_ar: Optional[str] = None
     contact_phone: Optional[str] = None
     contact_email: Optional[str] = None
     employees: List[str] = []
     profile_edited_at: Optional[datetime] = None
     name_edited_at: Optional[datetime] = None
-    address_edited_at: Optional[datetime] = None
     is_name_locked: bool = False
-    is_address_locked: bool = False
-    is_profile_locked: bool = False
 
     model_config = {"from_attributes": True}

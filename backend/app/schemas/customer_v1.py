@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 
+from app.schemas.address import AddressParts
+
 
 class NearMarketResponse(BaseModel):
     id: uuid.UUID
@@ -13,6 +15,7 @@ class NearMarketResponse(BaseModel):
     name_ar: Optional[str] = None
     name_en: Optional[str] = None
     address: str
+    address_parts: Optional[AddressParts] = None
     latitude: float
     longitude: float
     distance_km: float
@@ -128,6 +131,7 @@ class ShopDetails(BaseModel):
     id: uuid.UUID
     name: str
     address: str
+    address_parts: Optional[AddressParts] = None
     latitude: float
     longitude: float
     phone: Optional[str] = None

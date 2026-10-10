@@ -3,12 +3,15 @@
  */
 
 import api from './client';
+import type { AddressParts } from '../../utils/jordanAddress';
 
 // ── Types ──────────────────────────────────────────────────────
 export interface ShopInfo {
   id: string;
   name: string;
   address: string;
+  /** The structured address (governorate key, area, street, landmark); null for a store without one. */
+  address_parts?: AddressParts | null;
   latitude: number;
   longitude: number;
   phone: string | null;
@@ -108,6 +111,7 @@ export async function textSearch(
       id: item.market_id,
       name: item.market_name || 'Unknown Store',
       address: item.market_address || '',
+      address_parts: item.market_address_parts ?? null,
       latitude: item.latitude || 0.0,
       longitude: item.longitude || 0.0,
       phone: null,
@@ -176,6 +180,7 @@ export async function imageSearch(
       id: item.market_id,
       name: item.market_name,
       address: item.market_address,
+      address_parts: item.market_address_parts ?? null,
       latitude: item.latitude,
       longitude: item.longitude,
       phone: null,

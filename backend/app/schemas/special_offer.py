@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import Optional, Any, Dict
 from pydantic import BaseModel, Field
 
+from app.schemas.address import AddressParts
+
 
 class SpecialOfferCreate(BaseModel):
     market_item_id: uuid.UUID = Field(..., description="ID of the market item listing")
@@ -69,6 +71,7 @@ class CustomerSpecialOfferResponse(BaseModel):
     shop_id: uuid.UUID
     shop_name: str
     shop_address: str
+    shop_address_parts: Optional[AddressParts] = None
     latitude: float
     longitude: float
     shop_is_open: bool

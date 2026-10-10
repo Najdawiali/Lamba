@@ -19,8 +19,6 @@ class TestMarketProfileModelAndSchemas(unittest.TestCase):
         update_data = MarketProfileUpdate(
             name="Super Market",
             name_ar="سوبر ماركت",
-            address="Amman, Jordan",
-            address_ar="عمان، الأردن",
             contact_phone="+962791234567",
             contact_email="owner@supermarket.jo",
         )
@@ -60,10 +58,6 @@ class TestMarketProfileModelAndSchemas(unittest.TestCase):
         with self.assertRaises(ValidationError):
             MarketProfileUpdate(name="   ")
 
-        # Empty address rejected
-        with self.assertRaises(ValidationError):
-            MarketProfileUpdate(address="")
-
         # Empty phone rejected
         with self.assertRaises(ValidationError):
             MarketProfileUpdate(contact_phone="  ")
@@ -95,29 +89,25 @@ class TestMarketProfileModelAndSchemas(unittest.TestCase):
         resp = MarketProfileResponse(
             name="Downtown Bakery",
             name_ar="مخبز وسط البلد",
-            address="Downtown Amman",
-            address_ar="وسط البلد عمان",
             contact_phone="0791234567",
             contact_email="bakery@mail.com",
             employees=["Chef Omar", "Cashier Lana"],
             profile_edited_at=now,
             name_edited_at=now,
-            address_edited_at=None,
             is_name_locked=True,
-            is_address_locked=False,
-            is_profile_locked=False,
         )
         self.assertEqual(resp.name, "Downtown Bakery")
         self.assertEqual(resp.employees, ["Chef Omar", "Cashier Lana"])
         self.assertTrue(resp.is_name_locked)
-        self.assertFalse(resp.is_address_locked)
         self.assertEqual(resp.name_edited_at, now)
-        self.assertIsNone(resp.address_edited_at)
 
     def test_market_model_has_columns(self):
         self.assertTrue(hasattr(Market, "profile_edited_at"))
         self.assertTrue(hasattr(Market, "name_edited_at"))
         self.assertTrue(hasattr(Market, "address_edited_at"))
+        for column in ("governorate", "area", "street", "landmark"):
+            self.assertTrue(hasattr(Market, column), column)
+        self.assertFalse(hasattr(Market, "address_ar"))
         self.assertTrue(hasattr(Market, "contact_phone"))
         self.assertTrue(hasattr(Market, "contact_email"))
         self.assertTrue(hasattr(Market, "employees"))
@@ -132,7 +122,10 @@ class TestMarketProfileModelAndSchemas(unittest.TestCase):
             name="My Store",
             name_ar="متجري",
             address="King Abdullah St",
-            address_ar="شارع الملك عبدالله",
+            governorate="amman",
+            area="عبدون",
+            street="King Abdullah St",
+            landmark="مقابل المسجد",
             latitude=31.95,
             longitude=35.91,
             is_currently_open=True,
@@ -143,14 +136,12 @@ class TestMarketProfileModelAndSchemas(unittest.TestCase):
             employees=["Staff A"],
             profile_edited_at=now,
             name_edited_at=now,
-            address_edited_at=None,
             is_name_locked=True,
-            is_address_locked=False,
-            is_profile_locked=False,
         )
         self.assertEqual(resp.contact_phone, "0791112233")
         self.assertEqual(resp.contact_email, "store@lamba.app")
         self.assertEqual(resp.employees, ["Staff A"])
         self.assertEqual(resp.name_edited_at, now)
         self.assertTrue(resp.is_name_locked)
-        self.assertFalse(resp.is_address_locked)
+        self.assertEqual((resp.governorate, resp.area, resp.street), ("amman", "عبدون", "King Abdullah St"))
+        self.assertEqual(resp.landmark, "مقابل المسجد")

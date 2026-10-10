@@ -4,6 +4,7 @@
 
 import api from './client';
 import { saveToken, saveUser, getUser } from './client';
+import type { StoreLocationPayload } from '../../utils/jordanAddress';
 
 // ── Types ──────────────────────────────────────────────────────
 export interface MarketResponse {
@@ -12,7 +13,11 @@ export interface MarketResponse {
   name: string;
   name_ar?: string | null;
   address: string;
-  address_ar?: string | null;
+  /** Structured address: governorate is a key (see utils/jordanAddress); all absent for a store without one. */
+  governorate?: string | null;
+  area?: string | null;
+  street?: string | null;
+  landmark?: string | null;
   latitude: number;
   longitude: number;
   business_nature?: string | null;
@@ -24,10 +29,7 @@ export interface MarketResponse {
   employees?: string[];
   profile_edited_at?: string | null;
   name_edited_at?: string | null;
-  address_edited_at?: string | null;
   is_name_locked?: boolean;
-  is_address_locked?: boolean;
-  is_profile_locked?: boolean;
   is_currently_open: boolean;
   is_manual_override: boolean;
   override_set_at: string | null;
@@ -38,24 +40,17 @@ export interface MarketResponse {
 export interface MarketProfileResponse {
   name?: string;
   name_ar?: string;
-  address?: string;
-  address_ar?: string;
   contact_phone?: string;
   contact_email?: string;
   employees: string[];
   profile_edited_at?: string;
   name_edited_at?: string;
-  address_edited_at?: string;
   is_name_locked: boolean;
-  is_address_locked: boolean;
-  is_profile_locked: boolean;
 }
 
 export interface MarketProfileUpdatePayload {
   name?: string;
   name_ar?: string;
-  address?: string;
-  address_ar?: string;
   contact_phone?: string;
   contact_email?: string;
 }
@@ -177,9 +172,7 @@ export async function getMyStore(): Promise<MarketResponse | null> {
 
 export async function createMarket(
   name: string,
-  address: string,
-  latitude: number,
-  longitude: number,
+  location: StoreLocationPayload,
   options?: {
     business_nature?: string;
     phone?: string;
@@ -188,7 +181,7 @@ export async function createMarket(
   },
 ): Promise<MarketResponse> {
   const { data } = await api.post<MarketResponse>('/api/v1/merchant/market', {
-    name, address, latitude, longitude,
+    name, ...location,
     business_nature: options?.business_nature,
     phone: options?.phone,
     operating_hours: options?.operating_hours ?? null,
@@ -202,6 +195,15 @@ export async function createMarket(
     const updatedUser = { ...currentUser, role: 'merchant', user_type: 'merchant' };
     await saveUser(updatedUser);
   }
+  return data;
+}
+
+/**
+ * Move the store pin / edit its address. The server allows pin moves up to 200 m and free edits of
+ * area, street and landmark; anything else answers 403 with a bilingual message about support.
+ */
+export async function updateMarketLocation(location: StoreLocationPayload): Promise<MarketResponse> {
+  const { data } = await api.put<MarketResponse>('/api/v1/merchant/market/location', location);
   return data;
 }
 

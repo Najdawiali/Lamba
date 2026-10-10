@@ -6,6 +6,7 @@
  */
 
 import api from './client';
+import type { AddressParts } from '../../utils/jordanAddress';
 
 // ── Merchant Offer Types ───────────────────────────────────────
 export interface OfferConfig {
@@ -71,6 +72,7 @@ export interface CustomerSpecialOfferResponse {
   shop_id: string;
   shop_name: string;
   shop_address: string;
+  shop_address_parts?: AddressParts | null;
   latitude: number;
   longitude: number;
   shop_is_open: boolean;

@@ -1,7 +1,7 @@
 /**
  * Merchant Profile Screen — Account info, market details, settings, and logout.
- * Redesigned with inline edit sheets, GPS address detection, lock on first edit,
- * employee management, analytics, and RTL support.
+ * Redesigned with inline edit sheets, the store location editor (pin + structured address),
+ * lock on first edit, employee management, analytics, and RTL support.
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -13,7 +13,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
 import {
   getUser, logout, deleteAccount,
   getMarketProfile, updateMarketProfile, updateEmployees,
@@ -34,6 +33,8 @@ import Divider from '../../components/Divider';
 import LegalModal from '../../components/LegalModal';
 import PickerModal from '../../components/PickerModal';
 import EmployeesModal from '../../components/EmployeesModal';
+import StoreLocationEditModal from '../../components/StoreLocationEditModal';
+import { formatStoreAddress } from '../../utils/jordanAddress';
 import Constants from 'expo-constants';
 
 // ── Sub-components for Grouped Layout ─────────────────────────
@@ -178,10 +179,10 @@ export default function MerchantProfileScreen() {
   const [employeesModalVisible, setEmployeesModalVisible] = useState(false);
 
   // Inline edit bottom sheet states
-  const [editField, setEditField] = useState<'name' | 'address' | 'phone' | 'email' | null>(null);
+  const [editField, setEditField] = useState<'name' | 'phone' | 'email' | null>(null);
+  const [locationEditVisible, setLocationEditVisible] = useState(false);
   const [editValue, setEditValue] = useState('');
   const [savingField, setSavingField] = useState(false);
-  const [detectingLocation, setDetectingLocation] = useState(false);
 
   // Employees states
   const [employeeList, setEmployeeList] = useState<string[]>([]);
@@ -318,16 +319,12 @@ export default function MerchantProfileScreen() {
   }, [loadProfileData]);
 
   // Open Edit Sheet
-  const openEditSheet = (field: 'name' | 'address' | 'phone' | 'email') => {
+  const openEditSheet = (field: 'name' | 'phone' | 'email') => {
     if (field === 'name' && profileData?.is_name_locked) return;
-    if (field === 'address' && profileData?.is_address_locked) return;
 
     switch (field) {
       case 'name':
         setEditValue(market?.name || market?.name_ar || '');
-        break;
-      case 'address':
-        setEditValue(market?.address || market?.address_ar || '');
         break;
       case 'phone':
         setEditValue(profileData?.contact_phone || market?.contact_phone || market?.phone || '');
@@ -345,8 +342,8 @@ export default function MerchantProfileScreen() {
 
     const trimmed = editValue.trim();
 
-    // Mandatory fields validation: name, address, phone cannot be empty
-    if ((editField === 'name' || editField === 'address' || editField === 'phone') && !trimmed) {
+    // Mandatory fields validation: name and phone cannot be empty
+    if ((editField === 'name' || editField === 'phone') && !trimmed) {
       Alert.alert(
         isAr ? 'حقل إلزامي' : 'Mandatory Field',
         isAr ? 'هذا الحقل إلزامي ولا يمكن تركه فارغاً' : 'This field is required and cannot be left empty'
@@ -375,9 +372,6 @@ export default function MerchantProfileScreen() {
         case 'name':
           payload = { name: trimmed, name_ar: trimmed };
           break;
-        case 'address':
-          payload = { address: trimmed, address_ar: trimmed };
-          break;
         case 'phone':
           payload = { contact_phone: trimmed };
           break;
@@ -405,41 +399,6 @@ export default function MerchantProfileScreen() {
       }
     } finally {
       setSavingField(false);
-    }
-  };
-
-  // GPS Location Detection
-  const detectLocation = async () => {
-    setDetectingLocation(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(
-          isAr ? 'صلاحية الموقع' : 'Location Permission',
-          isAr ? 'يرجى السماح بالوصول إلى موقعك لتحديد عنوان المتجر تلقائياً' : 'Please allow location access to auto-detect your store address'
-        );
-        return;
-      }
-
-      const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      const [result] = await Location.reverseGeocodeAsync({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-      });
-
-      if (result) {
-        const parts = [result.street, result.district, result.city, result.region].filter(Boolean);
-        const address = parts.join(', ');
-        setEditValue(address);
-      }
-    } catch (err) {
-      console.warn('Location detection failed:', err);
-      Alert.alert(
-        isAr ? 'خطأ' : 'Error',
-        isAr ? 'فشل تحديد الموقع. يرجى إدخال العنوان يدوياً.' : 'Failed to detect location. Please enter address manually.'
-      );
-    } finally {
-      setDetectingLocation(false);
     }
   };
 
@@ -589,23 +548,6 @@ export default function MerchantProfileScreen() {
       ...Typography.button,
       color: '#FFF',
       fontWeight: '700',
-    },
-    detectLocationBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      paddingVertical: Spacing.sm,
-      paddingHorizontal: Spacing.md,
-      borderRadius: BorderRadius.md,
-      backgroundColor: 'rgba(108, 99, 255, 0.08)',
-      borderWidth: 1,
-      borderColor: 'rgba(108, 99, 255, 0.2)',
-      marginBottom: Spacing.md,
-    },
-    detectLocationText: {
-      ...Typography.bodySmall,
-      color: Colors.primary,
-      fontWeight: '600',
     },
     lockedNote: {
       ...Typography.caption,
@@ -913,20 +855,9 @@ export default function MerchantProfileScreen() {
                 iconColor={Colors.primary}
                 iconBgColor="rgba(108, 99, 255, 0.12)"
                 label={isAr ? 'عنوان المتجر' : 'Store Address'}
-                value={
-                  (isAr && (profileData?.address_ar || market.address_ar))
-                    ? (profileData?.address_ar || market.address_ar)
-                    : (profileData?.address || market.address || (isAr ? 'غير متوفر' : 'N/A'))
-                }
-                isLocked={profileData?.is_address_locked}
-                showChevron={!profileData?.is_address_locked}
-                onPress={() => openEditSheet('address')}
+                value={formatStoreAddress(market, market.address, isAr).line || (isAr ? 'غير متوفر' : 'N/A')}
+                onPress={() => setLocationEditVisible(true)}
               />
-              {profileData?.is_address_locked && (
-                <Text style={styles.lockedNote}>
-                  {isAr ? 'تم تعديل عنوان المتجر — للتعديل تواصل مع الدعم' : 'Store address locked — contact support to change'}
-                </Text>
-              )}
               <Divider />
 
               {/* Row 3 — Phone */}
@@ -1120,6 +1051,19 @@ export default function MerchantProfileScreen() {
         </Text>
       </ScrollView>
 
+      {/* ════════ MODAL: Store location (pin + structured address) ════════ */}
+      {market ? (
+        <StoreLocationEditModal
+          visible={locationEditVisible}
+          market={market}
+          onClose={() => setLocationEditVisible(false)}
+          onSaved={() => {
+            setLocationEditVisible(false);
+            queryClient.invalidateQueries({ queryKey: merchantKeys.market });
+          }}
+        />
+      ) : null}
+
       {/* ════════ MODAL: Inline Edit Bottom Sheet ════════ */}
       <Modal
         visible={editField !== null}
@@ -1137,31 +1081,9 @@ export default function MerchantProfileScreen() {
                 {/* Title */}
                 <Text style={styles.sheetTitle}>
                   {editField === 'name' && (isAr ? 'اسم المتجر' : 'Store Name')}
-                  {editField === 'address' && (isAr ? 'عنوان المتجر' : 'Store Address')}
                   {editField === 'phone' && (isAr ? 'رقم الهاتف' : 'Phone Number')}
                   {editField === 'email' && (isAr ? 'البريد الإلكتروني' : 'Email')}
                 </Text>
-
-                {/* GPS button for address only */}
-                {editField === 'address' && (
-                  <TouchableOpacity
-                    style={styles.detectLocationBtn}
-                    onPress={detectLocation}
-                    disabled={detectingLocation}
-                    activeOpacity={0.7}
-                  >
-                    {detectingLocation ? (
-                      <ActivityIndicator size="small" color={Colors.primary} />
-                    ) : (
-                      <Ionicons name="locate-outline" size={18} color={Colors.primary} />
-                    )}
-                    <Text style={styles.detectLocationText}>
-                      {detectingLocation
-                        ? (isAr ? 'جاري تحديد الموقع...' : 'Detecting location...')
-                        : (isAr ? 'تحديد موقعي الحالي' : 'Detect my current location')}
-                    </Text>
-                  </TouchableOpacity>
-                )}
 
                 {/* Input */}
                 <View style={styles.sheetInputWrapper}>
@@ -1171,7 +1093,6 @@ export default function MerchantProfileScreen() {
                     onChangeText={setEditValue}
                     placeholder={
                       editField === 'name' ? (isAr ? 'مثال: سوبرماركت القدس' : 'e.g. Quds Supermarket') :
-                      editField === 'address' ? (isAr ? 'مثال: السلط، شارع اليرموك' : 'e.g. As-Salt, Yarmouk St.') :
                       editField === 'phone' ? (isAr ? 'مثال: 0790871034' : 'e.g. 0790871034') :
                       (isAr ? 'مثال: store@lamba.com' : 'e.g. store@lamba.com')
                     }
@@ -1189,11 +1110,6 @@ export default function MerchantProfileScreen() {
                 {editField === 'name' && (
                   <Text style={styles.sheetWarning}>
                     {isAr ? '⚠️ يمكنك تعديل اسم المتجر مرة واحدة فقط' : '⚠️ Store name can only be edited once'}
-                  </Text>
-                )}
-                {editField === 'address' && (
-                  <Text style={styles.sheetWarning}>
-                    {isAr ? '⚠️ يمكنك تعديل عنوان المتجر مرة واحدة فقط' : '⚠️ Store address can only be edited once'}
                   </Text>
                 )}
 

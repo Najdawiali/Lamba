@@ -4,6 +4,7 @@ Merchant V1 API — Market initialization, inventory checks, linking, and AI-dri
 Endpoints:
   GET  /api/v1/merchant/market              — Check if merchant has a market
   POST /api/v1/merchant/market              — Register physical store parameters (PostGIS)
+  PUT  /api/v1/merchant/market/location     — Move the pin / edit the structured address (lock policy)
   GET  /api/v1/merchant/market/items        — Fetch all merchant stocked inventory
   PATCH /api/v1/merchant/market/items/{id}/stock — Toggle stock status
   POST /api/v1/merchant/items/check          — Case-insensitive fuzzy name search
@@ -33,6 +34,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models.user import User
 from app.models.market import Market
+from app.models.market_location_change import MarketLocationChange
 from app.models.category import Category
 from app.models.global_item import GlobalItem
 from app.models.product_image import ProductImage
@@ -41,7 +43,7 @@ from app.models.pos_receipt import POSReceipt, POSReceiptItem
 from app.models.offer import Offer
 from app.api.auth import get_current_user
 from app.schemas.merchant_v1 import (
-    MarketCreate, MarketResponse, MarketStatusUpdateRequest,
+    MarketCreate, MarketResponse, MarketStatusUpdateRequest, MarketLocationUpdate,
     ItemCheckRequest, ItemCheckResponse, CatalogItemMatch,
     ItemLinkRequest, ItemLinkResponse,
     MarketItemDashboardResponse, StockToggleRequest,
@@ -49,6 +51,8 @@ from app.schemas.merchant_v1 import (
 )
 from app.schemas.offer import OfferCreate, OfferUpdate, OfferResponse
 from app.schemas.market_profile import MarketProfileUpdate, EmployeesUpdate, MarketProfileResponse
+from app.jordan_geo import compose_address
+from app.services.market_location import LocationChangeRefused, apply_location_update
 from app.services.embedding import embedding_service
 from app.services.alert_service import check_and_trigger_stock_alerts
 from app.services.attribute_rules import sanitize_merchant_attributes
@@ -91,6 +95,53 @@ async def get_user_market(user: User, db: AsyncSession) -> Market:
     return market
 
 
+def _market_response(
+    market: Market, lat: float, lng: float, access_token: Optional[str] = None
+) -> MarketResponse:
+    """The merchant view of a market row; `lat`/`lng` come from its PostGIS point."""
+    return MarketResponse(
+        id=market.id,
+        merchant_id=market.merchant_id,
+        name=market.name,
+        name_ar=getattr(market, 'name_ar', None),
+        address=market.address,
+        governorate=market.governorate,
+        area=market.area,
+        street=market.street,
+        landmark=market.landmark,
+        latitude=float(lat),
+        longitude=float(lng),
+        business_nature=market.business_nature,
+        operating_hours=market.operating_hours,
+        employee_directory=market.employee_directory,
+        phone=market.phone,
+        contact_phone=market.contact_phone,
+        contact_email=market.contact_email,
+        employees=market.employees or [],
+        profile_edited_at=market.profile_edited_at,
+        name_edited_at=market.name_edited_at,
+        is_name_locked=market.name_edited_at is not None,
+        is_currently_open=market.is_currently_open,
+        is_manual_override=market.is_manual_override,
+        override_set_at=market.override_set_at,
+        created_at=market.created_at,
+        access_token=access_token,
+    )
+
+
+def _profile_response(market: Market) -> MarketProfileResponse:
+    return MarketProfileResponse(
+        name=market.name,
+        name_ar=getattr(market, 'name_ar', None),
+        contact_phone=market.contact_phone,
+        contact_email=market.contact_email,
+        employees=market.employees or [],
+        profile_edited_at=market.profile_edited_at,
+        name_edited_at=market.name_edited_at,
+        is_name_locked=market.name_edited_at is not None,
+    )
+
+
 # ── GET /market ─────────────────────────────────────────────────
 @router.get("/market", response_model=MarketResponse)
 async def get_market(
@@ -118,33 +169,7 @@ async def get_market(
     from app.utils.schedule import check_and_update_markets_schedule
     await check_and_update_markets_schedule(db, [market])
     
-    return MarketResponse(
-        id=market.id,
-        merchant_id=market.merchant_id,
-        name=market.name,
-        name_ar=getattr(market, 'name_ar', None),
-        address=market.address,
-        address_ar=getattr(market, 'address_ar', None),
-        latitude=float(lat),
-        longitude=float(lng),
-        business_nature=market.business_nature,
-        operating_hours=market.operating_hours,
-        employee_directory=market.employee_directory,
-        phone=market.phone,
-        contact_phone=market.contact_phone,
-        contact_email=market.contact_email,
-        employees=market.employees or [],
-        profile_edited_at=market.profile_edited_at,
-        name_edited_at=market.name_edited_at,
-        address_edited_at=market.address_edited_at,
-        is_name_locked=market.name_edited_at is not None,
-        is_address_locked=market.address_edited_at is not None,
-        is_profile_locked=(market.name_edited_at is not None and market.address_edited_at is not None),
-        is_currently_open=market.is_currently_open,
-        is_manual_override=market.is_manual_override,
-        override_set_at=market.override_set_at,
-        created_at=market.created_at,
-    )
+    return _market_response(market, lat, lng)
 
 
 # ── POST /market ────────────────────────────────────────────────
@@ -177,7 +202,11 @@ async def create_market(
     market = Market(
         merchant_id=user.id,
         name=data.name,
-        address=data.address,
+        address=compose_address(data.governorate, data.area, data.street),
+        governorate=data.governorate,
+        area=data.area,
+        street=data.street,
+        landmark=data.landmark,
         business_nature=data.business_nature,
         operating_hours=data.operating_hours,
         employee_directory=data.employee_directory,
@@ -192,34 +221,7 @@ async def create_market(
     # Generate fresh JWT token with upgraded 'merchant' role
     new_token = create_access_token(user.id, "merchant")
     
-    return MarketResponse(
-        id=market.id,
-        merchant_id=market.merchant_id,
-        name=market.name,
-        name_ar=getattr(market, 'name_ar', None),
-        address=market.address,
-        address_ar=getattr(market, 'address_ar', None),
-        latitude=data.latitude,
-        longitude=data.longitude,
-        business_nature=market.business_nature,
-        operating_hours=market.operating_hours,
-        employee_directory=market.employee_directory,
-        phone=market.phone,
-        contact_phone=market.contact_phone,
-        contact_email=market.contact_email,
-        employees=market.employees or [],
-        profile_edited_at=market.profile_edited_at,
-        name_edited_at=market.name_edited_at,
-        address_edited_at=market.address_edited_at,
-        is_name_locked=market.name_edited_at is not None,
-        is_address_locked=market.address_edited_at is not None,
-        is_profile_locked=(market.name_edited_at is not None and market.address_edited_at is not None),
-        is_currently_open=market.is_currently_open,
-        is_manual_override=market.is_manual_override,
-        override_set_at=market.override_set_at,
-        created_at=market.created_at,
-        access_token=new_token,
-    )
+    return _market_response(market, data.latitude, data.longitude, access_token=new_token)
 
 
 # ── PATCH /market/status ────────────────────────────────────────
@@ -269,33 +271,65 @@ async def update_market_status(
     row = result.first()
     market, lat, lng = row[0], row[1], row[2]
     
-    return MarketResponse(
-        id=market.id,
-        merchant_id=market.merchant_id,
-        name=market.name,
-        name_ar=getattr(market, 'name_ar', None),
-        address=market.address,
-        address_ar=getattr(market, 'address_ar', None),
-        latitude=float(lat),
-        longitude=float(lng),
-        business_nature=market.business_nature,
-        operating_hours=market.operating_hours,
-        employee_directory=market.employee_directory,
-        phone=market.phone,
-        contact_phone=market.contact_phone,
-        contact_email=market.contact_email,
-        employees=market.employees or [],
-        profile_edited_at=market.profile_edited_at,
-        name_edited_at=market.name_edited_at,
-        address_edited_at=market.address_edited_at,
-        is_name_locked=market.name_edited_at is not None,
-        is_address_locked=market.address_edited_at is not None,
-        is_profile_locked=(market.name_edited_at is not None and market.address_edited_at is not None),
-        is_currently_open=market.is_currently_open,
-        is_manual_override=market.is_manual_override,
-        override_set_at=market.override_set_at,
-        created_at=market.created_at,
+    return _market_response(market, lat, lng)
+
+
+# ── PUT /market/location ────────────────────────────────────────
+@router.put("/market/location", response_model=MarketResponse)
+async def update_market_location(
+    payload: MarketLocationUpdate,
+    user: User = Depends(get_merchant),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Move the store pin and/or edit its structured address. Pin moves up to 200 m and any edit of
+    area, street and landmark are free; a bigger move or a different governorate is refused (HTTP
+    403, bilingual message) and goes through support. Every accepted change is logged in
+    market_location_changes. The rules are in app/services/market_location.py.
+    """
+    result = await db.execute(
+        select(
+            Market,
+            func.ST_Y(Market.location.cast(Geometry)).label("lat"),
+            func.ST_X(Market.location.cast(Geometry)).label("lng"),
+        ).where(Market.merchant_id == user.id).order_by(Market.created_at.desc())
     )
+    row = result.first()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Market not found. Complete onboarding first.",
+        )
+    market, old_lat, old_lng = row[0], float(row[1]), float(row[2])
+
+    try:
+        change = apply_location_update(market, old_lat, old_lng, payload)
+    except LocationChangeRefused as refusal:
+        logger.info(
+            "Location change refused for market %s: %s (%.0f m)", market.id, refusal.reason, refusal.moved_m
+        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=refusal.message)
+
+    if not change.changed:
+        return _market_response(market, old_lat, old_lng)
+
+    market.location = WKTElement(f"POINT({payload.longitude} {payload.latitude})", srid=4326)
+    market.address_edited_at = datetime.now(timezone.utc)  # time of the last location edit
+    db.add(MarketLocationChange(
+        market_id=market.id,
+        user_id=user.id,
+        old_latitude=change.old_latitude,
+        old_longitude=change.old_longitude,
+        new_latitude=change.new_latitude,
+        new_longitude=change.new_longitude,
+        moved_m=change.moved_m,
+        old_fields=change.old_fields,
+        new_fields=change.new_fields,
+    ))
+    await db.commit()
+    await db.refresh(market)
+    logger.info("Market %s location changed, pin moved %.0f m", market.id, change.moved_m)
+    return _market_response(market, payload.latitude, payload.longitude)
 
 
 # ── Market Profile & Employee Management ─────────────────────────
@@ -308,60 +342,30 @@ async def update_market_profile(
     market = await get_user_market(current_user, db)
     update_data = payload.model_dump(exclude_unset=True)
 
-    # Separate name fields, address fields, and contact fields
+    # The name can be changed once; contact details are free. The location (pin and address) has
+    # its own endpoint, PUT /market/location, with its own rules.
     name_fields = {'name', 'name_ar'}
-    address_fields = {'address', 'address_ar'}
     has_name_changes = bool(name_fields & set(update_data.keys()))
-    has_address_changes = bool(address_fields & set(update_data.keys()))
 
-    # Check independent locks
     if has_name_changes and market.name_edited_at is not None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Store name can only be edited once. Contact support for further changes."
         )
 
-    if has_address_changes and market.address_edited_at is not None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Store address can only be edited once. Contact support for further changes."
-        )
-
-    # Apply all updates
     for field, value in update_data.items():
         if hasattr(market, field):
             setattr(market, field, value)
 
-    # Lock name if changed
     if has_name_changes:
-        market.name_edited_at = datetime.now(timezone.utc)
-
-    # Lock address if changed
-    if has_address_changes:
-        market.address_edited_at = datetime.now(timezone.utc)
-
-    # Keep profile_edited_at updated if any identity field changed
-    if has_name_changes or has_address_changes:
-        market.profile_edited_at = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc)
+        market.name_edited_at = now
+        market.profile_edited_at = now
 
     await db.commit()
     await db.refresh(market)
 
-    return MarketProfileResponse(
-        name=market.name,
-        name_ar=getattr(market, 'name_ar', None),
-        address=market.address,
-        address_ar=getattr(market, 'address_ar', None),
-        contact_phone=market.contact_phone,
-        contact_email=market.contact_email,
-        employees=market.employees or [],
-        profile_edited_at=market.profile_edited_at,
-        name_edited_at=market.name_edited_at,
-        address_edited_at=market.address_edited_at,
-        is_name_locked=market.name_edited_at is not None,
-        is_address_locked=market.address_edited_at is not None,
-        is_profile_locked=(market.name_edited_at is not None and market.address_edited_at is not None),
-    )
+    return _profile_response(market)
 
 
 @router.put("/market/employees", response_model=MarketProfileResponse)
@@ -375,21 +379,7 @@ async def update_employees(
     await db.commit()
     await db.refresh(market)
 
-    return MarketProfileResponse(
-        name=market.name,
-        name_ar=getattr(market, 'name_ar', None),
-        address=market.address,
-        address_ar=getattr(market, 'address_ar', None),
-        contact_phone=market.contact_phone,
-        contact_email=market.contact_email,
-        employees=market.employees or [],
-        profile_edited_at=market.profile_edited_at,
-        name_edited_at=market.name_edited_at,
-        address_edited_at=market.address_edited_at,
-        is_name_locked=market.name_edited_at is not None,
-        is_address_locked=market.address_edited_at is not None,
-        is_profile_locked=(market.name_edited_at is not None and market.address_edited_at is not None),
-    )
+    return _profile_response(market)
 
 
 @router.get("/market/profile", response_model=MarketProfileResponse)
@@ -399,21 +389,7 @@ async def get_market_profile(
 ):
     market = await get_user_market(current_user, db)
 
-    return MarketProfileResponse(
-        name=market.name,
-        name_ar=getattr(market, 'name_ar', None),
-        address=market.address,
-        address_ar=getattr(market, 'address_ar', None),
-        contact_phone=market.contact_phone,
-        contact_email=market.contact_email,
-        employees=market.employees or [],
-        profile_edited_at=market.profile_edited_at,
-        name_edited_at=market.name_edited_at,
-        address_edited_at=market.address_edited_at,
-        is_name_locked=market.name_edited_at is not None,
-        is_address_locked=market.address_edited_at is not None,
-        is_profile_locked=(market.name_edited_at is not None and market.address_edited_at is not None),
-    )
+    return _profile_response(market)
 
 
 # ── Catalog helpers (classification, categories, moderation) ────

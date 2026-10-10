@@ -18,17 +18,19 @@
 import React, { useState, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, ScrollView
+  Alert, ActivityIndicator
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { createMarket } from '../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../constants/theme';
 import { useThemeColors } from '../context/ThemeContext';
 import { t, i18n } from '../services/i18n';
+import KeyboardForm from '../components/KeyboardForm';
+import StoreLocationForm from '../components/StoreLocationForm';
+import { EMPTY_LOCATION, locationProblems, toLocationPayload, type LocationProblem, type StoreLocationValue } from '../utils/jordanAddress';
 
 interface CategoryOption {
   id: string;
@@ -56,15 +58,13 @@ export default function CreateStoreScreen() {
   const isAr = i18n.locale?.startsWith('ar');
 
   const [name, setName] = useState('');
-  const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Cooking Essentials');
-  const [latitude, setLatitude] = useState('');
-  const [longitude, setLongitude] = useState('');
+  const [location, setLocation] = useState<StoreLocationValue>(EMPTY_LOCATION);
+  const [problems, setProblems] = useState<LocationProblem[]>([]);
   const [hoursPreset, setHoursPreset] = useState<'standard' | 'open_24_7' | 'weekdays'>('standard');
 
   const [loading, setLoading] = useState(false);
-  const [geolocating, setGeolocating] = useState(false);
 
   // Build structured operating hours
   const buildOperatingHours = (): Record<string, string> | null => {
@@ -73,49 +73,8 @@ export default function CreateStoreScreen() {
     return { 'Sat-Thu': '08:00-22:00', 'Fri': '09:00-22:00' };
   };
 
-  const handleGeolocate = async () => {
-    setGeolocating(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(
-          isAr ? 'صلاحية الموقع' : 'Location Permission',
-          isAr ? 'يرجى السماح بالوصول إلى موقعك لتحديد إحداثيات المتجر' : 'Please allow location access to detect store coordinates'
-        );
-        return;
-      }
-      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const latStr = position.coords.latitude.toFixed(6);
-      const lngStr = position.coords.longitude.toFixed(6);
-      setLatitude(latStr);
-      setLongitude(lngStr);
-      try {
-        const [geo] = await Location.reverseGeocodeAsync({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        });
-        if (geo && !address.trim()) {
-          const parts = [geo.street, geo.district, geo.city, geo.region].filter(Boolean);
-          if (parts.length > 0) setAddress(parts.join(', '));
-        }
-      } catch {}
-      Alert.alert(
-        isAr ? 'تم تحديد الموقع بنجاح' : 'Location Acquired',
-        isAr ? `تم جلب إحداثيات موقع متجرك (${latStr}, ${lngStr}).` : `Store coordinates successfully set to (${latStr}, ${lngStr}).`
-      );
-    } catch {
-      Alert.alert(
-        isAr ? 'خطأ' : 'Error',
-        isAr ? 'فشل تحديد الموقع تلقائياً. يرجى إدخال الإحداثيات يدوياً.' : 'Failed to detect location. Please enter coordinates manually.'
-      );
-    } finally {
-      setGeolocating(false);
-    }
-  };
-
   const handleCreateStore = async () => {
     const trimmedName = name.trim();
-    const trimmedAddress = address.trim();
     const trimmedPhone = phone.trim();
 
     if (!trimmedName) {
@@ -123,19 +82,11 @@ export default function CreateStoreScreen() {
       return;
     }
 
-    if (!trimmedAddress) {
-      Alert.alert(t('common.error', 'Error'), isAr ? 'يرجى إدخال عنوان المتجر' : 'Please enter the store address');
-      return;
-    }
-
-    const latVal = parseFloat(latitude);
-    const lngVal = parseFloat(longitude);
-
-    if (isNaN(latVal) || latVal < -90 || latVal > 90 || isNaN(lngVal) || lngVal < -180 || lngVal > 180) {
-      Alert.alert(
-        t('common.error', 'Error'),
-        isAr ? 'يرجى تحديد موقع المتجر على الخريطة أو استخدام زر تحديد الموقع' : 'Please provide valid store GPS coordinates or use the location button'
-      );
+    const found = locationProblems(location);
+    const payload = toLocationPayload(location);
+    if (found.length > 0 || !payload) {
+      setProblems(found);
+      Alert.alert(t('common.error', 'Error'), t(`storeLocation.problem_${found[0] ?? 'pin_missing'}`));
       return;
     }
 
@@ -143,9 +94,7 @@ export default function CreateStoreScreen() {
     try {
       await createMarket(
         trimmedName,
-        trimmedAddress,
-        latVal,
-        lngVal,
+        payload,
         {
           business_nature: selectedCategory,
           phone: trimmedPhone || undefined,
@@ -194,10 +143,6 @@ export default function CreateStoreScreen() {
     categoryChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
     categoryChipText: { ...Typography.caption, color: Colors.textSecondary, fontWeight: '600' },
     categoryChipTextActive: { color: Colors.textOnPrimary, fontWeight: '700' },
-    gpsButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, backgroundColor: 'rgba(108, 99, 255, 0.12)', borderRadius: BorderRadius.lg, paddingVertical: Spacing.md, borderWidth: 1, borderColor: Colors.primary + '40', marginBottom: Spacing.md },
-    gpsButtonText: { ...Typography.bodySmall, color: Colors.primary, fontWeight: '700' },
-    coordsRow: { flexDirection: 'row', gap: Spacing.md },
-    coordField: { flex: 1 },
     presetRow: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.xs },
     presetChip: { flex: 1, paddingVertical: Spacing.sm, paddingHorizontal: Spacing.sm, borderRadius: BorderRadius.md, backgroundColor: Colors.surfaceElevated, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center' },
     presetChipActive: { backgroundColor: Colors.secondary, borderColor: Colors.secondary },
@@ -218,8 +163,8 @@ export default function CreateStoreScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <View style={{ flex: 1 }}>
+        <KeyboardForm contentContainerStyle={styles.scroll}>
           <LinearGradient colors={[Colors.primary, '#8B83FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.heroCard}>
             <View style={styles.heroHeader}>
               <View style={styles.heroIconContainer}><Ionicons name="storefront" size={28} color="#FFFFFF" /></View>
@@ -270,29 +215,12 @@ export default function CreateStoreScreen() {
               <Ionicons name="location-outline" size={18} color={Colors.primary} />
               <Text style={styles.sectionTitle}>{t('onboarding.location', 'Location')}</Text>
             </View>
-            <TouchableOpacity style={styles.gpsButton} onPress={handleGeolocate} disabled={geolocating}>
-              {geolocating ? <ActivityIndicator size="small" color={Colors.primary} /> : (
-                <>
-                  <Ionicons name="navigate-circle-outline" size={22} color={Colors.primary} />
-                  <Text style={styles.gpsButtonText}>{t('onboarding.auto_detect', 'Auto-Detect Location')}</Text>
-                </>
-              )}
-            </TouchableOpacity>
-            <Text style={styles.inputLabel}>{t('onboarding.address', 'Address')} *</Text>
-            <View style={styles.inputContainer}>
-              <Ionicons name="map-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
-              <TextInput style={styles.textInput} placeholder="City, Street, Landmark" placeholderTextColor={Colors.textMuted} value={address} onChangeText={setAddress} />
-            </View>
-            <View style={styles.coordsRow}>
-              <View style={styles.coordField}>
-                <Text style={styles.inputLabel}>{t('onboarding.latitude', 'Latitude')}</Text>
-                <View style={styles.inputContainer}><TextInput style={styles.textInput} value={latitude} onChangeText={setLatitude} keyboardType="numeric" /></View>
-              </View>
-              <View style={styles.coordField}>
-                <Text style={styles.inputLabel}>{t('onboarding.longitude', 'Longitude')}</Text>
-                <View style={styles.inputContainer}><TextInput style={styles.textInput} value={longitude} onChangeText={setLongitude} keyboardType="numeric" /></View>
-              </View>
-            </View>
+            <StoreLocationForm
+              value={location}
+              onChange={(next) => { setLocation(next); setProblems([]); }}
+              problems={problems}
+              disabled={loading}
+            />
           </View>
 
           <View style={styles.sectionCard}>
@@ -321,8 +249,8 @@ export default function CreateStoreScreen() {
               </>
             )}
           </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardForm>
+      </View>
     </SafeAreaView>
   );
 }

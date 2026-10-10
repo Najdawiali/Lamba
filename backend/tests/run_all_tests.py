@@ -62,6 +62,13 @@ from tests.test_attribute_rules import TestSanitizeMerchantAttributes, TestAttri
 from tests.test_attribute_filters import TestAttributeFilters, TestSearchUsesTheSharedFilters
 from tests.test_build_synonym_table import TestBuildSynonymTable
 from tests.test_attributes_version_migration import TestAttributesVersionMigration
+from tests.test_jordan_geo import TestGovernorates, TestBoundingBox, TestAddressText, TestMobileMirror
+from tests.test_market_location import TestDistance, TestMovingThePin, TestEditingTheText, TestGovernorate, TestMessages
+from tests.test_store_location_migration import TestChain, TestUpgradeAndDowngrade, TestModels
+from tests.test_store_location_schemas import (  # need pydantic; skipped without it
+    TestMarketCreate, TestMarketLocationUpdate, TestRemovedAddressFields, TestCustomerAddressParts,
+)
+from tests.test_merchant_market_location_api import TestUpdateLocation, TestCreateStore
 from tests.test_attribute_extraction import (
     TestAttributeValidator, TestAttributeJsonParser, TestAttributeExtract, TestAttributePrompt,
 )

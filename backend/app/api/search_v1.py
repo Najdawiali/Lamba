@@ -74,6 +74,7 @@ from app.models.market_item import MarketItem
 from app.models.category import Category
 from app.models.user import User
 from app.models.search_alert import SearchAlert
+from app.jordan_geo import address_parts_of
 from app.schemas.search_v1 import (
     HybridSearchRequest,
     DoubleCheckSearchRequest,
@@ -359,6 +360,7 @@ async def _retrieve_fused_candidates(
             market_id=market.id,
             market_name=market.name,
             market_address=market.address,
+            market_address_parts=address_parts_of(market),
             latitude=float(lat),
             longitude=float(lng),
             market_is_open=market.is_currently_open,

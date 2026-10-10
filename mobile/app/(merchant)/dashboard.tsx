@@ -27,6 +27,7 @@ import { Spacing, BorderRadius, Typography, Shadows, TAB_BAR_OVERFLOW } from '..
 import { useThemeColors } from '../../context/ThemeContext';
 import { t, toggleLanguage, i18n } from '../../services/i18n';
 import { resolveImageUrl } from '../../services/utils';
+import { formatStoreAddress } from '../../utils/jordanAddress';
 import { formatPrice, getCurrencyCode } from '../../services/currency';
 import { CATEGORY_AR_FALLBACK } from '../../constants/categories';
 
@@ -1005,7 +1006,7 @@ export default function DashboardScreen() {
               {(isAr && market?.name_ar) ? market.name_ar : (market?.name || t('tabs.dashboard', 'المخزون'))}
             </Text>
             <Text style={styles.subtitle} numberOfLines={1}>
-              {(isAr && market?.address_ar) ? market.address_ar : (market?.address || t('merchant.dashboard_subtitle', 'إدارة المخزون والمبيعات'))}
+              {formatStoreAddress(market, market?.address, !!isAr).line || t('merchant.dashboard_subtitle', 'إدارة المخزون والمبيعات')}
             </Text>
           </View>
         </View>
