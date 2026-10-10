@@ -540,7 +540,7 @@ export default function ReceiptHistoryScreen() {
             </Text>
             <TouchableOpacity
               style={styles.emptyCta}
-              onPress={() => router.push('/(merchant)/scanner')}
+              onPress={() => router.push({ pathname: '/(merchant)/scanner', params: { mode: 'cashier' } })}
               activeOpacity={0.8}
             >
               <Text style={styles.emptyCtaText}>{t('history.go_to_cashier', 'الذهاب إلى الكاشير')} {isAr ? '←' : '→'}</Text>

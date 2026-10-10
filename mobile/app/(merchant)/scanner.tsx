@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
   Alert, TextInput, Animated, Vibration, Platform, Dimensions, Image, FlatList, ScrollView, Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -45,6 +45,8 @@ interface CartItem {
 export default function BarcodeScannerScreen() {
   const router = useRouter();
   const Colors = useThemeColors();
+  // The caller picks the mode: 'inventory' from the add-product and Stock screens, 'cashier' from the Cashier tab
+  const { mode: modeParam } = useLocalSearchParams<{ mode?: string }>();
 
 const styles = useMemo(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
@@ -618,7 +620,7 @@ const styles = useMemo(() => StyleSheet.create({
   const [torch, setTorch] = useState(false);
 
   // Scanner Modes: 'cashier' (POS sale list) or 'inventory' (original stock/price edit)
-  const [scannerMode, setScannerMode] = useState<'cashier' | 'inventory'>('cashier');
+  const [scannerMode, setScannerMode] = useState<'cashier' | 'inventory'>(modeParam === 'inventory' ? 'inventory' : 'cashier');
 
   // POS Cashier Cart States
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
@@ -723,6 +725,19 @@ const styles = useMemo(() => StyleSheet.create({
       setShowCartDrawer(visible);
     });
   };
+
+  // This screen stays mounted between visits, so follow the mode the caller asked for on every entry.
+  // A caller that sends no mode keeps whatever mode the screen was last in.
+  useFocusEffect(
+    useCallback(() => {
+      if (modeParam === 'inventory') {
+        setScannerMode('inventory');
+        animateCartDrawer(false);
+      } else if (modeParam === 'cashier') {
+        setScannerMode('cashier');
+      }
+    }, [modeParam])
+  );
 
   const handleBarcodeScanned = async ({ type, data }: { type: string; data: string }) => {
     // Synchronous mutex lock to avoid parallel multi-frame scan triggers (causing random item count)
