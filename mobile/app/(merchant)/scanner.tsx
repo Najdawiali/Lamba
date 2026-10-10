@@ -1408,7 +1408,7 @@ const styles = useMemo(() => StyleSheet.create({
                         handleCloseDrawer();
                         router.push({
                           pathname: '/(merchant)/add-product',
-                          params: { initialBarcode: scannedBarcode }
+                          params: { barcode: scannedBarcode }
                         });
                       }}
                     >
