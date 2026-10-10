@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
-  Alert, TextInput, Animated, Vibration, Platform, Dimensions, Image, FlatList, ScrollView, Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView
+  Alert, TextInput, Animated, Vibration, Platform, Dimensions, Image, FlatList, ScrollView, Keyboard, TouchableWithoutFeedback
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
@@ -29,6 +29,7 @@ import { formatPrice } from '../../services/currency';
 import { resolveImageUrl } from '../../services/utils';
 import ReceiptModal from '../../components/ReceiptModal';
 import ManualAddModal from '../../components/ManualAddModal';
+import PinnedSheet from '../../components/PinnedSheet';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const VIEWFINDER_SIZE = SCREEN_WIDTH * 0.7;
@@ -46,6 +47,7 @@ interface CartItem {
 export default function BarcodeScannerScreen() {
   const router = useRouter();
   const Colors = useThemeColors();
+  const insets = useSafeAreaInsets();
   // The caller picks the mode: 'inventory' from the add-product and Stock screens, 'cashier' from the Cashier tab
   const { mode: modeParam } = useLocalSearchParams<{ mode?: string }>();
 
@@ -240,21 +242,8 @@ const styles = useMemo(() => StyleSheet.create({
     color: '#FFF',
   },
 
-  // Glassmorphic Drawer
-  drawerContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(10, 10, 26, 0.95)',
-    borderTopLeftRadius: BorderRadius.xl,
-    borderTopRightRadius: BorderRadius.xl,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-    paddingBottom: Spacing.xl,
-    zIndex: 11,
-    ...Shadows.large,
-  },
+  // Drawers: the frame (surface, inset, keyboard) is components/PinnedSheet. Everything inside uses theme
+  // colours only: the sheet is white in the light theme, so no white-on-transparent fills here.
   drawerContent: {
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.sm,
@@ -270,7 +259,7 @@ const styles = useMemo(() => StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: Colors.textDark,
   },
 
   loadingWrapper: {
@@ -287,7 +276,7 @@ const styles = useMemo(() => StyleSheet.create({
   itemSummaryCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    backgroundColor: Colors.surfaceElevated,
     borderRadius: BorderRadius.md,
     padding: Spacing.md,
     width: '100%',
@@ -320,7 +309,7 @@ const styles = useMemo(() => StyleSheet.create({
   },
   itemCategory: {
     ...Typography.caption,
-    color: Colors.textMuted,
+    color: Colors.textSecondary,
     marginTop: 2,
   },
   badgeRow: {
@@ -334,11 +323,12 @@ const styles = useMemo(() => StyleSheet.create({
     paddingHorizontal: 6,
     borderRadius: BorderRadius.sm,
   },
-  badgeSuccess: { backgroundColor: 'rgba(0, 217, 126, 0.12)' },
-  badgeInfo: { backgroundColor: 'rgba(108, 99, 255, 0.12)' },
-  badgeText: { fontSize: 10, fontWeight: '700' },
-  badgeTextSuccess: { color: Colors.success },
-  badgeTextInfo: { color: Colors.primary },
+  // Tinted badges with the theme's primary text: green/purple text on its own tint was 2.4:1 in the light theme
+  badgeSuccess: { backgroundColor: 'rgba(0, 181, 115, 0.22)' },
+  badgeInfo: { backgroundColor: 'rgba(108, 99, 255, 0.2)' },
+  badgeText: { fontSize: 11, fontWeight: '700' },
+  badgeTextSuccess: { color: Colors.textPrimary },
+  badgeTextInfo: { color: Colors.textPrimary },
   barcodeText: {
     ...Typography.caption,
     color: Colors.textSecondary,
@@ -361,10 +351,10 @@ const styles = useMemo(() => StyleSheet.create({
   adjusterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: Colors.surfaceElevated,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
+    borderColor: Colors.border,
     height: 48,
     paddingHorizontal: Spacing.xs,
   },
@@ -372,7 +362,7 @@ const styles = useMemo(() => StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: Colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -383,10 +373,10 @@ const styles = useMemo(() => StyleSheet.create({
     fontWeight: '700',
   },
   priceInputWrapper: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: Colors.surfaceElevated,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
+    borderColor: Colors.border,
     height: 48,
     justifyContent: 'center',
     paddingHorizontal: Spacing.md,
@@ -411,7 +401,7 @@ const styles = useMemo(() => StyleSheet.create({
   },
   btnCancel: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: Colors.surfaceElevated,
   },
   btnSubmit: {
     flex: 2,
@@ -465,7 +455,7 @@ const styles = useMemo(() => StyleSheet.create({
     alignItems: 'center',
     marginBottom: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
+    borderBottomColor: Colors.border,
     paddingBottom: Spacing.sm,
   },
   posTitle: {
@@ -487,7 +477,7 @@ const styles = useMemo(() => StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: Spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.03)',
+    borderBottomColor: Colors.border,
     width: '100%',
   },
   cartItemText: {
@@ -524,7 +514,7 @@ const styles = useMemo(() => StyleSheet.create({
   },
   receiptSummary: {
     width: '100%',
-    backgroundColor: 'rgba(255,255,255,0.02)',
+    backgroundColor: Colors.surfaceElevated,
     borderRadius: BorderRadius.md,
     padding: Spacing.md,
     marginVertical: Spacing.md,
@@ -545,7 +535,7 @@ const styles = useMemo(() => StyleSheet.create({
   },
   receiptRowDivider: {
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: Colors.border,
     marginVertical: Spacing.xs,
   },
   receiptRowTotal: {
@@ -1212,8 +1202,8 @@ const styles = useMemo(() => StyleSheet.create({
 
       {/* POS Bottom Cashier Summary bar */}
       {scannerMode === 'cashier' && cartItems.length > 0 && !showCartDrawer && (
-        <TouchableOpacity 
-          style={styles.summaryBar} 
+        <TouchableOpacity
+          style={[styles.summaryBar, { bottom: insets.bottom + Spacing.xl }]}
           onPress={() => animateCartDrawer(true)}
           activeOpacity={0.9}
         >
@@ -1230,14 +1220,7 @@ const styles = useMemo(() => StyleSheet.create({
         </TouchableOpacity>
       )}
 
-      <Animated.View style={[
-        styles.drawerContainer,
-        { transform: [{ translateY: drawerY }] }
-      ]}>
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
-          style={{ width: '100%' }}
-        >
+      <PinnedSheet translateY={drawerY} open={drawerVisible}>
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.drawerContent}>
           <View style={[styles.notchWrapper, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
@@ -1308,7 +1291,7 @@ const styles = useMemo(() => StyleSheet.create({
 
                   <Text
                     style={{
-                      color: photoRequired && !photoUri ? Colors.error : Colors.textMuted,
+                      color: photoRequired && !photoUri ? Colors.error : Colors.textSecondary,
                       fontSize: 12,
                       textAlign: isArUI ? 'right' : 'left',
                       marginTop: 6,
@@ -1422,18 +1405,10 @@ const styles = useMemo(() => StyleSheet.create({
           )}
             </View>
           </TouchableWithoutFeedback>
-        </KeyboardAvoidingView>
-      </Animated.View>
+      </PinnedSheet>
 
       {/* ── DRAWER B: POS Cashier Transactions Drawer ── */}
-      <Animated.View style={[
-        styles.drawerContainer,
-        { transform: [{ translateY: cartDrawerY }], maxHeight: SCREEN_HEIGHT * 0.8 }
-      ]}>
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
-          style={{ width: '100%' }}
-        >
+      <PinnedSheet translateY={cartDrawerY} open={showCartDrawer} maxHeight={SCREEN_HEIGHT * 0.8}>
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.drawerContent}>
           <View style={[styles.notchWrapper, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
@@ -1542,8 +1517,7 @@ const styles = useMemo(() => StyleSheet.create({
           </View>
             </View>
           </TouchableWithoutFeedback>
-        </KeyboardAvoidingView>
-      </Animated.View>
+      </PinnedSheet>
 
       {/* ── DRAWER C: Full Screen Professional Invoice Receipt Modal ── */}
       <ReceiptModal
