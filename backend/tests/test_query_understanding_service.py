@@ -83,7 +83,8 @@ class TestQueryUnderstandingService(unittest.TestCase):
         self.adapter = FakeAdapter()
         self.config = make_config(
             query_llm_fallback_model="google/gemma-4-26B-A4B-it", query_llm_call_timeout_seconds=6.0,
-            query_llm_fail_fast=True, query_llm_max_inflight=8, cache_qu_ttl=604800,
+            query_llm_fail_fast=False, query_llm_max_inflight=8, cache_qu_ttl=604800,
+            query_llm_service_tier="priority",
         )
 
         async def get_redis():
@@ -119,7 +120,7 @@ class TestQueryUnderstandingService(unittest.TestCase):
         self.assertEqual(self.redis.counts(), {"not_needed": 1})
 
     # ── the model call ────────────────────────────────────────────────────────────────────────────
-    def test_the_call_has_one_attempt_its_own_breaker_fail_fast_and_a_sink(self):
+    def test_the_call_has_one_attempt_its_own_breaker_and_a_sink(self):
         self.adapter.reply = answer()
         intent = self.analyze("شاي اخضر")
         (call,) = self.adapter.calls
@@ -127,19 +128,57 @@ class TestQueryUnderstandingService(unittest.TestCase):
         self.assertEqual(call["max_retries"], 1)                     # no retry inside the search's budget
         self.assertEqual(call["timeout"], 6.0)
         self.assertIs(call["breaker"], self.pool.deepinfra_query_breaker)
-        self.assertIs(call["fail_fast"], True)
+        self.assertNotIn("fail_fast", call)                          # the queue serves a busy moment, see config.py
+        self.assertEqual(call["service_tier"], "priority")           # the query path's tier setting
         self.assertEqual(call["temperature"], 0.0)
         self.assertEqual(call["chat_template_kwargs"], {"enable_thinking": False})
         self.assertIsInstance(call["error_sink"], list)
+        self.assertEqual(call["uncounted_statuses"], (429,))          # "Model busy" must not open the breaker
         self.assertEqual(call["messages"][1]["content"], "Query: شاي اخضر")
         self.assertEqual((intent.intent, intent.query_clean, intent.attributes), ("product", "شاي", {"type": "أخضر"}))
         self.assertEqual(self.redis.counts(), {"ok": 1})
 
-    def test_fail_fast_can_be_switched_off(self):
-        self.config.settings.query_llm_fail_fast = False
+    # ── where an intent came from ─────────────────────────────────────────────────────────────────
+    def test_the_intent_says_whether_it_came_from_the_model_the_cache_or_the_rules(self):
+        self.adapter.reply = answer()
+        self.assertEqual(self.analyze("شاي اخضر").source, "model")      # a fresh answer
+        self.assertEqual(self.analyze("شاي اخضر").source, "cache")      # the same query again
+        self.assertEqual(self.analyze("شاي").source, "rules")           # no model needed
+        self.assertEqual(self.service.rules_only_intent("عطر نساءي").source, "rules")
+
+    def test_every_fallback_is_tagged_rules_so_it_is_not_mistaken_for_a_model_answer(self):
+        for reasons in (["timeout"], ["http_429"], ["http_503"], ["breaker_open"], ["error"]):
+            self.redis = FakeRedis()
+            self.adapter.reply, self.adapter.reasons = None, reasons
+            self.assertEqual(self.analyze("عطر نساءي").source, "rules", reasons)
+        self.adapter.reply = "not json"
+        self.assertEqual(self.analyze("قهوة باردة").source, "rules")
+
+    def test_the_source_is_not_stored_in_the_cache(self):
         self.adapter.reply = answer()
         self.analyze("شاي اخضر")
-        self.assertNotIn("fail_fast", self.adapter.calls[0])
+        (stored,) = self.redis.values.values()
+        self.assertNotIn("source", json.loads(stored))
+
+    def test_fail_fast_can_be_switched_on(self):
+        self.config.settings.query_llm_fail_fast = True
+        self.adapter.reply = answer()
+        self.analyze("شاي اخضر")
+        self.assertIs(self.adapter.calls[0]["fail_fast"], True)
+
+    def test_the_service_tier_is_a_setting_of_this_call_path(self):
+        self.config.settings.query_llm_service_tier = ""
+        self.adapter.reply = answer()
+        self.analyze("شاي اخضر")
+        self.assertNotIn("service_tier", self.adapter.calls[0])      # standard tier: nothing is sent
+
+        self.config.settings.query_llm_service_tier = "flex"          # a batch tier on an interactive path
+        self.analyze("شاي احمر")
+        self.assertNotIn("service_tier", self.adapter.calls[1])
+
+        self.config.settings.query_llm_service_tier = "prioriti"      # a typo must not break search
+        self.analyze("شاي ابيض")
+        self.assertNotIn("service_tier", self.adapter.calls[2])
 
     def test_the_rules_win_over_the_model_for_their_keys_and_everything_else_is_kept(self):
         # the model says male and invents organic false; the words say female
@@ -282,8 +321,9 @@ class TestSettingsDefaults(unittest.TestCase):
         self.assertEqual(d["query_understanding_budget_seconds"], 2.5)
         self.assertEqual(d["query_llm_call_timeout_seconds"], 6.0)
         self.assertGreater(d["query_llm_call_timeout_seconds"], d["query_understanding_budget_seconds"])  # a late answer can still be cached
-        self.assertIs(d["query_llm_fail_fast"], True)
+        self.assertIs(d["query_llm_fail_fast"], False)   # it rejected calls the queue would have served
         self.assertEqual(d["query_llm_max_inflight"], 8)
+        self.assertEqual(d["query_llm_service_tier"], "priority")
         self.assertEqual(d["cache_qu_ttl"], 604800)
 
 

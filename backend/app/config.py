@@ -198,10 +198,23 @@ class Settings(BaseSettings):
     query_understanding_budget_seconds: float = 2.5
     # The model call itself may outlive the budget, so that a late answer still fills the cache.
     query_llm_call_timeout_seconds: float = 6.0
-    # DeepInfra answers 429 at once instead of queueing the request when the model is at capacity.
-    query_llm_fail_fast: bool = True
+    # DeepInfra's "fail_fast": answer 429 "engine_overloaded" at once instead of queueing the request when the
+    # model has no free capacity. Off: it rejected the first two production calls on gemma-4-26B-A4B that the
+    # queue would have served, and it only pays off for an app that can fail over to another provider. The
+    # budget already bounds how long search waits, and a late answer still lands in the cache.
+    query_llm_fail_fast: bool = False
     # Model calls in flight at the same time; beyond that the rule-based attributes alone are used.
     query_llm_max_inflight: int = 8
+
+    # ── DeepInfra service tier per call path (see app/services/service_tier.py) ──
+    # "" = standard, "priority" = served first when the model is busy (+50% per token), "flex" = batch only.
+    # Measured on the server 2026-10-10 around a burst of 429 "Model busy" on gemma-4-26B-A4B: priority
+    # answered 6 of 6 calls, the standard tier 5 of 6. The cost is about $0.00016 instead of $0.00011 a call.
+    query_llm_service_tier: str = "priority"
+    # The classifier (restriction check + category, two models in parallel): interactive = a merchant is waiting
+    # on a screen (add, rename, CSV upload); batch = import_catalog and other jobs, which wait out a busy model.
+    classifier_service_tier_interactive: str = "priority"
+    classifier_service_tier_batch: str = ""
 
     # Offline LLM (smarter, used for enrichment and batch processing)
     offline_llm_model: str = "google/gemma-4-31B-it"

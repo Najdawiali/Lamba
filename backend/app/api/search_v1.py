@@ -88,7 +88,7 @@ from app.services.arabic_norm import normalize_query
 from app.services.attribute_filters import build_attribute_clauses
 from app.services.attribute_rules import plan_attribute_filters
 from app.services.cache import get_cached_search, cache_search, lookup_synonym, get_redis
-from app.services.search_budget import assemble_embeddings, understand_within_budget
+from app.services.search_budget import assemble_embeddings, counter_name, understand_within_budget
 from app.services import qu_cache
 from app.services.category_match import (
     boost_matching_category, exact_category_clause, exact_name_forms,
@@ -721,10 +721,10 @@ def needs_expansion(query: str, script: str = "ar", has_synonym: bool = False) -
     return False
 
 
-async def _count_budget_outcome(outcome: str) -> None:
-    """Count how often the model answered within the budget, was late or failed (HGETALL lamba:stats:search:<date>)."""
+async def _count_budget_outcome(counter: str) -> None:
+    """Add one to a search counter (HGETALL lamba:stats:search:<date>); the name comes from search_budget.counter_name."""
     try:
-        await qu_cache.count(await get_redis(), f"budget_{outcome}", group="search")
+        await qu_cache.count(await get_redis(), counter, group="search")
     except Exception:
         pass
 
@@ -795,11 +795,11 @@ async def _run_search(
     extracted_attrs: Dict[str, Any] = intent_analysis.attributes or {}
     query_clean: Optional[str] = intent_analysis.query_clean
     logger.info(
-        "[QU BUDGET] outcome=%s embed=%dms waited=%dms budget=%.1fs query=%r",
-        parallel.outcome, parallel.embed_ms, parallel.waited_ms,
+        "[QU BUDGET] outcome=%s source=%s embed=%dms waited=%dms budget=%.1fs query=%r",
+        parallel.outcome, intent_analysis.source, parallel.embed_ms, parallel.waited_ms,
         settings.query_understanding_budget_seconds, query_text,
     )
-    await _count_budget_outcome(parallel.outcome)
+    await _count_budget_outcome(counter_name(parallel.outcome, parallel.intent))
     if extracted_attrs:
         logger.info(f"[ATTR FILTER] query={query_text!r} resolved={resolved_query!r} attrs={extracted_attrs} query_clean={query_clean!r} qu={parallel.outcome}")
 

@@ -8,7 +8,7 @@ import logging
 import json
 import re
 import httpx
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Sequence
 from app.config import settings
 from app.services.http_pool import CircuitBreaker, get_client, deepinfra_llm_breaker
 
@@ -49,6 +49,7 @@ class LLMAdapter:
         max_retries: int = 3,
         breaker: Optional[CircuitBreaker] = None,
         error_sink: Optional[List[str]] = None,
+        uncounted_statuses: Sequence[int] = (),
     ) -> Optional[Dict[str, Any]]:
         """Post request to LLM endpoint with retries and exponential backoff.
 
@@ -57,6 +58,9 @@ class LLMAdapter:
         `error_sink`, when given, receives one short reason per failed attempt ("timeout", "http_429",
         "http_503", "error", "breaker_open", "no_api_key"), so a caller can tell a saturated model from a
         slow one; the return value is still just None.
+        `uncounted_statuses`: HTTP statuses that are still failures (reported, retried if retryable) but do not
+        count against the breaker. A 429 "Model busy" means busy, not down: counting it would open the breaker
+        and switch the model off for its whole cooldown although the next call would be served.
         """
         br = breaker or deepinfra_llm_breaker
 
@@ -91,7 +95,8 @@ class LLMAdapter:
                 br.record_success()
                 return resp.json()
             except httpx.HTTPStatusError as e:
-                br.record_failure()
+                if e.response.status_code not in uncounted_statuses:
+                    br.record_failure()
                 note(f"http_{e.response.status_code}")
                 logger.warning(
                     f"LLMAdapter HTTP error (attempt {attempt + 1}/{max_retries}): "
@@ -172,6 +177,7 @@ class LLMAdapter:
         max_retries: int = 3,
         breaker: Optional[CircuitBreaker] = None,
         error_sink: Optional[List[str]] = None,
+        uncounted_statuses: Sequence[int] = (),
         **kwargs: Any,
     ) -> Optional[Dict[str, Any]]:
         """Send chat completion request and return the entire parsed JSON response payload."""
@@ -185,7 +191,8 @@ class LLMAdapter:
         }
         payload.update(kwargs)
         return await self._post_with_retry(
-            url, payload, timeout=timeout, max_retries=max_retries, breaker=breaker, error_sink=error_sink
+            url, payload, timeout=timeout, max_retries=max_retries, breaker=breaker, error_sink=error_sink,
+            uncounted_statuses=uncounted_statuses,
         )
 
     async def complete_chat_raw(
@@ -198,6 +205,7 @@ class LLMAdapter:
         max_retries: int = 3,
         breaker: Optional[CircuitBreaker] = None,
         error_sink: Optional[List[str]] = None,
+        uncounted_statuses: Sequence[int] = (),
         **kwargs: Any,
     ) -> Optional[str]:
         """Send chat completion request and return the raw message.content string without cleaning."""
@@ -210,6 +218,7 @@ class LLMAdapter:
             max_retries=max_retries,
             breaker=breaker,
             error_sink=error_sink,
+            uncounted_statuses=uncounted_statuses,
             **kwargs,
         )
         if not data or not data.get("choices"):
@@ -228,6 +237,7 @@ class LLMAdapter:
         max_retries: int = 3,
         breaker: Optional[CircuitBreaker] = None,
         error_sink: Optional[List[str]] = None,
+        uncounted_statuses: Sequence[int] = (),
         **kwargs: Any,
     ) -> Optional[str]:
         """Send a chat completion request to DeepInfra API and return cleaned response text."""
@@ -240,6 +250,7 @@ class LLMAdapter:
             max_retries=max_retries,
             breaker=breaker,
             error_sink=error_sink,
+            uncounted_statuses=uncounted_statuses,
             **kwargs,
         )
         if raw_content is None:

@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from app.config import settings
 from app.services.http_pool import CircuitBreaker, deepinfra_catalog_breaker
 from app.services.llm import llm_adapter
+from app.services.service_tier import service_tier_fields
 from app.taxonomy import CATEGORY_BY_SLUG, LEAF_CATEGORIES
 
 logger = logging.getLogger(__name__)
@@ -132,6 +133,8 @@ async def classify_item(
     timeout: float = 12.0,
     max_retries: int = 2,
     breaker: CircuitBreaker | None = None,
+    service_tier: str = "",
+    allow_flex: bool = True,
 ) -> ClassificationResult:
     """Classify one product or service with one model. Never raises; failures come back as `error`."""
     allowed = {c.slug for c in LEAF_CATEGORIES if not listing_type or c.listing_type == listing_type}
@@ -150,6 +153,7 @@ async def classify_item(
             timeout=timeout,
             max_retries=max_retries,
             breaker=breaker,
+            **service_tier_fields(service_tier, allow_flex=allow_flex),
         )
     except Exception as exc:  # defensive: the adapter should not raise, but never let it escape
         logger.warning("classify_item: LLM call raised for %r: %s", name[:40], exc)
@@ -193,12 +197,21 @@ async def classify_item_ensemble(
     listing_type: str | None = None,
     *,
     timeout: float = 15.0,
+    interactive: bool = False,
 ) -> ClassificationResult:
-    """Classify with every configured model in parallel. Never raises."""
+    """
+    Classify with every configured model in parallel. Never raises.
+
+    `interactive` is for a merchant waiting on a screen (add, rename, CSV upload): both calls use the
+    classifier_service_tier_interactive setting ("priority" by default, served first when the model is busy).
+    Batch jobs (import_catalog) leave it False and use classifier_service_tier_batch (standard by default).
+    """
     models = [m for m in (settings.classifier_model, settings.classifier_secondary_model) if m]
+    tier = settings.classifier_service_tier_interactive if interactive else settings.classifier_service_tier_batch
     results = await asyncio.gather(*(
         classify_item(name, description, listing_type, model=m, timeout=timeout,
-                      max_retries=1, breaker=deepinfra_catalog_breaker)
+                      max_retries=1, breaker=deepinfra_catalog_breaker,
+                      service_tier=tier, allow_flex=not interactive)
         for m in models
     ))
     combined = combine_results(list(results))

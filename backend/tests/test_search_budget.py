@@ -8,6 +8,7 @@ import gc
 import os
 import sys
 import time
+import types
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -131,6 +132,37 @@ class TestUnderstandWithinBudget(unittest.TestCase):
         run(scenario())
         self.assertIsNone(embed.finished)
         self.assertIsNone(qu.finished)
+
+
+class TestCounterName(unittest.TestCase):
+    """Search counts how the model did by source, so a rules-only fallback is not counted as a model answer."""
+
+    @staticmethod
+    def intent(source):
+        return types.SimpleNamespace(source=source)
+
+    def test_an_answer_is_counted_by_where_it_came_from(self):
+        self.assertEqual(sb.counter_name("answered", self.intent("model")), "budget_answered_model")
+        self.assertEqual(sb.counter_name("answered", self.intent("cache")), "budget_answered_cache")
+        self.assertEqual(sb.counter_name("answered", self.intent("rules")), "budget_answered_rules")
+
+    def test_late_and_failed_have_no_source(self):
+        self.assertEqual(sb.counter_name("late", None), "budget_late")
+        self.assertEqual(sb.counter_name("failed", None), "budget_failed")
+        self.assertEqual(sb.counter_name("late", self.intent("model")), "budget_late")
+
+    def test_an_answer_without_a_source_keeps_the_old_name(self):
+        self.assertEqual(sb.counter_name("answered", None), "budget_answered")
+        self.assertEqual(sb.counter_name("answered", object()), "budget_answered")
+
+    def test_it_follows_what_understand_within_budget_returns(self):
+        answered = run(sb.understand_within_budget(Probe(0.01, "v")(), Probe(0.01, self.intent("rules"))(), 0.5))
+        late = run(sb.understand_within_budget(Probe(0.01, "v")(), Probe(0.3, self.intent("model"))(), 0.05))
+        failed = run(sb.understand_within_budget(Probe(0.01, "v")(), Probe(0.01, RuntimeError("x"))(), 0.5))
+        self.assertEqual(
+            [sb.counter_name(r.outcome, r.intent) for r in (answered, late, failed)],
+            ["budget_answered_rules", "budget_late", "budget_failed"],
+        )
 
 
 class TestAssembleEmbeddings(unittest.TestCase):

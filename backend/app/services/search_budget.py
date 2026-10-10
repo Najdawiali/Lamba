@@ -90,6 +90,19 @@ async def understand_within_budget(
     return Understood(embedding, None, "late", embed_ms, waited_ms)
 
 
+def counter_name(outcome: str, intent: Any = None) -> str:
+    """
+    The Redis counter (HGETALL lamba:stats:search:<date>) for one search: "answered" is split by where the
+    answer came from, because an instant rules-only fallback (a rejected, failed or unneeded model call) used
+    to be counted as answered just like a real model answer:
+    budget_answered_model | budget_answered_cache | budget_answered_rules | budget_late | budget_failed
+    """
+    source = getattr(intent, "source", None)
+    if outcome == "answered" and source:
+        return f"budget_answered_{source}"
+    return f"budget_{outcome}"
+
+
 async def assemble_embeddings(
     texts: Sequence[str],
     known: Dict[str, Any],

@@ -142,6 +142,46 @@ class TestErrorReasons(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.breaker.failure_count, 2)
         self.assertEqual(shared.failure_count, before)
 
+    async def test_a_429_listed_as_uncounted_does_not_count_against_the_breaker(self):
+        # "Model busy" is capacity, not an outage: ten of them must leave the breaker closed
+        breaker = self.http_pool.CircuitBreaker(failure_threshold=5, cooldown_seconds=60)
+        self.use(*[self.status(429) for _ in range(10)])
+        for _ in range(10):
+            sink = []
+            self.assertIsNone(await self.adapter._post_with_retry(
+                "https://x", {}, max_retries=1, breaker=breaker, error_sink=sink, uncounted_statuses=(429,)))
+            self.assertEqual(sink, ["http_429"])               # still reported as a failure
+        self.assertEqual((breaker.failure_count, breaker.should_skip()), (0, False))
+
+    async def test_the_same_429s_open_the_breaker_when_they_are_counted(self):
+        breaker = self.http_pool.CircuitBreaker(failure_threshold=5, cooldown_seconds=60)
+        self.use(*[self.status(429) for _ in range(10)])
+        for _ in range(5):
+            await self.adapter._post_with_retry("https://x", {}, max_retries=1, breaker=breaker)
+        self.assertTrue(breaker.should_skip())                 # the default is unchanged
+
+    async def test_timeouts_and_server_errors_still_count_when_429_is_uncounted(self):
+        breaker = self.http_pool.CircuitBreaker(failure_threshold=99)
+        self.use(self.httpx.ReadTimeout(""), self.status(503), self.status(500), RuntimeError("boom"), self.status(429))
+        for _ in range(5):
+            await self.adapter._post_with_retry("https://x", {}, max_retries=1, breaker=breaker, uncounted_statuses=(429,))
+        self.assertEqual(breaker.failure_count, 4)             # everything except the 429
+
+    async def test_a_listed_status_is_still_retried_when_there_are_attempts_left(self):
+        breaker = self.http_pool.CircuitBreaker(failure_threshold=99)
+        client = self.use(self.status(429), self.ok('{"a": 1}'))
+        result = await self.adapter._post_with_retry(
+            "https://x", {}, max_retries=2, breaker=breaker, uncounted_statuses=(429,))
+        self.assertIsNotNone(result)
+        self.assertEqual((len(client.calls), breaker.failure_count), (2, 0))
+
+    async def test_uncounted_statuses_pass_through_the_three_chat_methods(self):
+        breaker = self.http_pool.CircuitBreaker(failure_threshold=99)
+        for method in ("complete_chat_full", "complete_chat_raw", "complete_chat"):
+            self.use(self.status(429))
+            await getattr(self.adapter, method)(messages=[], max_retries=1, breaker=breaker, uncounted_statuses=(429,))
+        self.assertEqual(breaker.failure_count, 0)
+
     async def test_extra_request_fields_reach_the_payload_but_the_sink_does_not(self):
         client = self.use(self.ok('{"intent": "product"}'))
         sink = []
@@ -153,6 +193,7 @@ class TestErrorReasons(unittest.IsolatedAsyncioTestCase):
         self.assertIs(payload["fail_fast"], True)
         self.assertEqual(payload["chat_template_kwargs"], {"enable_thinking": False})
         self.assertNotIn("error_sink", payload)
+        self.assertNotIn("uncounted_statuses", payload)
         self.assertEqual(sink, [])
 
     async def test_failures_pass_through_the_three_chat_methods(self):
