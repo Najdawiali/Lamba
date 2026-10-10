@@ -56,6 +56,7 @@ from app.services.market_location import LocationChangeRefused, apply_location_u
 from app.services.embedding import embedding_service
 from app.services.alert_service import check_and_trigger_stock_alerts
 from app.services.attribute_rules import sanitize_merchant_attributes
+from app.services.image_sanitize import InvalidImage, sanitize_image
 from app.services.item_names import item_name_fields
 from app.services.storage import storage_service
 from sqlalchemy.exc import IntegrityError
@@ -401,7 +402,38 @@ MSG_PENDING = "تمت إضافة المنتج وهو قيد المراجعة، �
 MSG_CATEGORY_REQUIRED = "تعذّر تحديد القسم تلقائياً. الرجاء اختيار القسم ثم المحاولة مرة أخرى."
 MSG_SHARED_RENAME = "هذا المنتج من الكتالوج المشترك ولا يمكن تغيير اسمه. يمكنك تعديل السعر والكمية فقط."
 MAX_PHOTOS_PER_ITEM = 5
-MAX_PHOTO_BYTES = 8 * 1024 * 1024
+MAX_PHOTO_BYTES = 8 * 1024 * 1024   # the upload; what is stored is the re-encoded photo (image_sanitize)
+MSG_PHOTO_STORE_FIRST = "أضف المنتج إلى متجرك أولاً.\nAdd the product to your store first."
+MSG_PHOTO_ITEM_NOT_FOUND = "المنتج غير موجود في الكتالوج.\nCatalog item not found."
+MSG_PHOTOS_ENOUGH = "لهذا المنتج صور كافية بالفعل.\nThis product already has enough photos."
+MSG_NOT_AN_IMAGE = "يُقبل ملف صورة فقط (JPEG أو PNG أو WebP).\nOnly photos are accepted (JPEG, PNG or WebP)."
+MSG_IMAGE_EMPTY = "الصورة فارغة.\nThe image is empty."
+MSG_IMAGE_TOO_LARGE = (
+    f"حجم الصورة أكبر من {MAX_PHOTO_BYTES // (1024 * 1024)} ميغابايت.\n"
+    f"The image is larger than {MAX_PHOTO_BYTES // (1024 * 1024)} MB."
+)
+
+
+async def _clean_image_upload(upload: UploadFile) -> bytes:
+    """
+    Read an uploaded product photo and return it re-encoded: a JPEG of at most 1600 px with no metadata
+    (no GPS), whatever the file was called or claimed to be. Every product photo goes through here before
+    it is stored. The content-type is the client's word and only a quick first filter; Pillow decoding
+    the bytes is what decides.
+    """
+    if not (upload.content_type or "").startswith("image/"):
+        raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail=MSG_NOT_AN_IMAGE)
+    data = await upload.read()
+    if not data:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=MSG_IMAGE_EMPTY)
+    if len(data) > MAX_PHOTO_BYTES:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=MSG_IMAGE_TOO_LARGE)
+    try:
+        # CPU-bound: keep it off the event loop
+        return await asyncio.to_thread(sanitize_image, data)
+    except InvalidImage as exc:
+        logger.info("[IMAGE] upload refused: %s", exc)
+        raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail=MSG_NOT_AN_IMAGE)
 
 
 async def _category_by_slug(db: AsyncSession, slug: str | None) -> Category | None:
@@ -708,25 +740,19 @@ async def add_item_photo(
         .limit(1)
     )).scalar_one_or_none()
     if stocked is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Add the product to your store first.")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=MSG_PHOTO_STORE_FIRST)
 
     gi = (await db.execute(select(GlobalItem).where(GlobalItem.id == global_item_id))).unique().scalar_one_or_none()
     if gi is None or gi.moderation_status == "blocked":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Catalog item not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_PHOTO_ITEM_NOT_FOUND)
 
-    if not (image.content_type or "").startswith("image/"):
-        raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Only image files are accepted.")
-    data = await image.read()
-    if not data:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Empty image.")
-    if len(data) > MAX_PHOTO_BYTES:
-        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Image is larger than 8 MB.")
+    data = await _clean_image_upload(image)
 
     existing = (await db.execute(
         select(func.count()).select_from(ProductImage).where(ProductImage.global_item_id == gi.id)
     )).scalar_one()
     if existing >= MAX_PHOTOS_PER_ITEM:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This product already has enough photos.")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=MSG_PHOTOS_ENOUGH)
     has_primary = (await db.execute(
         select(func.count()).select_from(ProductImage)
         .where(ProductImage.global_item_id == gi.id, ProductImage.is_primary == True)  # noqa: E712
@@ -734,7 +760,7 @@ async def add_item_photo(
 
     url = await storage_service.upload(
         file_bytes=data,
-        original_filename=image.filename or "photo.jpg",
+        original_filename="photo.jpg",   # what is stored is always a JPEG, whatever the client called its file
         subfolder="products",
     )
     db.add(ProductImage(global_item_id=gi.id, image_url=url, is_primary=not has_primary))
@@ -821,21 +847,22 @@ async def create_new_item(
         )
 
     # 3. Images (local or cloud, based on STORAGE_BACKEND)
-    image_bytes = await image.read()
+    # Every photo is re-encoded first (JPEG, resized, no EXIF/GPS); an unusable file refuses the whole request
+    # before anything is stored.
+    image_bytes = await _clean_image_upload(image)
+    secondary_bytes = [await _clean_image_upload(f) for f in secondary_images if f.filename]
     primary_image_url = await storage_service.upload(
         file_bytes=image_bytes,
-        original_filename=image.filename or "photo.jpg",
+        original_filename="photo.jpg",
         subfolder="products",
     )
     secondary_urls = []
-    for sec_file in secondary_images:
-        if sec_file.filename:
-            sec_url = await storage_service.upload(
-                file_bytes=await sec_file.read(),
-                original_filename=sec_file.filename,
-                subfolder="products",
-            )
-            secondary_urls.append(sec_url)
+    for sec_bytes in secondary_bytes:
+        secondary_urls.append(await storage_service.upload(
+            file_bytes=sec_bytes,
+            original_filename="photo.jpg",
+            subfolder="products",
+        ))
 
     # 4. Save
     gi = GlobalItem(
