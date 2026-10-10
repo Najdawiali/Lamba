@@ -107,7 +107,7 @@ export default function CashierScreen() {
         {/* Card 1: Scan Barcode (POS Cashier) */}
         <TouchableOpacity
           style={styles.actionCard}
-          onPress={() => router.push('/(merchant)/scanner')}
+          onPress={() => router.push({ pathname: '/(merchant)/scanner', params: { mode: 'cashier' } })}
           activeOpacity={0.8}
           accessibilityRole="button"
           accessibilityLabel={t('scanner.scan_barcode', 'مسح الباركود')}

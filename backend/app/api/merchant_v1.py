@@ -790,7 +790,7 @@ async def create_new_item(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
                     "code": "barcode_exists",
-                    "message": "هذا الباركود موجود في الكتالوج. أضفه إلى متجرك من خلال مسح الباركود.",
+                    "message": "هذا الباركود موجود في الكتالوج. أضفه إلى متجرك من خلال مسح الباركود.\nThis barcode is already in the catalog. Add it to your store by scanning the barcode.",
                     "global_item_id": str(existing),
                 },
             )
@@ -844,7 +844,7 @@ async def create_new_item(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"code": "barcode_exists", "message": "هذا الباركود موجود في الكتالوج."},
+            detail={"code": "barcode_exists", "message": "هذا الباركود موجود في الكتالوج.\nThis barcode is already in the catalog."},
         )
 
     db.add(ProductImage(global_item_id=gi.id, image_url=primary_image_url, is_primary=True))

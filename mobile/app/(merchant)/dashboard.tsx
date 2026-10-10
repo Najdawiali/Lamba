@@ -445,11 +445,18 @@ export default function DashboardScreen() {
   statChipLabel: { fontSize: 9, fontWeight: '600', color: Colors.textMuted, textTransform: 'uppercase' },
 
   // Search Bar
-  searchContainer: { paddingHorizontal: Spacing.xl, marginBottom: Spacing.sm },
+  searchContainer: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    paddingHorizontal: Spacing.xl, marginBottom: Spacing.sm,
+  },
   searchBar: {
-    flexDirection: 'row', alignItems: 'center',
+    flex: 1, flexDirection: 'row', alignItems: 'center',
     backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.lg, height: 44, gap: Spacing.sm,
+  },
+  searchScanBtn: {
+    width: 44, height: 44, borderRadius: BorderRadius.md, backgroundColor: Colors.tabActive,
+    justifyContent: 'center', alignItems: 'center',
   },
   searchInput: { flex: 1, color: Colors.textPrimary, fontSize: 14 },
 
@@ -1049,6 +1056,15 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           )}
         </View>
+        <TouchableOpacity
+          style={styles.searchScanBtn}
+          onPress={() => router.push({ pathname: '/(merchant)/scanner', params: { mode: 'inventory' } })}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={t('merchant.scan_barcode', 'مسح الباركود')}
+        >
+          <Ionicons name="barcode-outline" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
       </View>
 
       {/* Category Filter Chips */}
@@ -1164,6 +1180,15 @@ export default function DashboardScreen() {
             >
               <Ionicons name="add" size={20} color="#FFFFFF" />
               <Text style={styles.emptyAddBtnText}>{t('dashboard.add_product', 'إضافة منتج')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.scannerIconButton, { marginTop: Spacing.md }]}
+              onPress={() => router.push({ pathname: '/(merchant)/scanner', params: { mode: 'inventory' } })}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+            >
+              <Ionicons name="barcode-outline" size={20} color={Colors.primary} />
+              <Text style={styles.scannerBtnText}>{t('merchant.scan_barcode', 'مسح الباركود')}</Text>
             </TouchableOpacity>
           </View>
         }

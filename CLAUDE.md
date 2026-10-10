@@ -105,7 +105,9 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
 ## Build and checks (Windows dev machine, PowerShell)
 - Type check: `cd mobile; npx tsc --noEmit` must print nothing.
 - Mobile tests: `cd mobile; npm test` (Node's own test runner on `services/api/session.ts`: renewal,
-  single refresh for parallel 401s, session end; no device, no extra packages; needs Node 22.18+).
+  single refresh for parallel 401s, session end) and on `utils/serverMessage.ts` (which text an API error shows:
+  bilingual strings, `{code, message}` objects like 409 barcode_exists); no device, no extra packages; needs
+  Node 22.18+).
 - End-to-end checks (sign-in throttle, proxy-header trust, Redis outages, refresh-token sessions) run real
   uvicorn, FastAPI, slowapi, redis-py and PyJWT: `backend/tests/e2e/` (README inside). They need a throwaway
   venv outside the repo built from the pins in `backend/requirements.txt`; no Docker, Redis or Postgres.

@@ -26,6 +26,7 @@ import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/them
 import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
 import { resolveImageUrl } from '../../services/utils';
+import { localizeServerMessage } from '../../utils/serverMessage';
 
 export default function AddProductScreen() {
   const router = useRouter();
@@ -410,9 +411,14 @@ export default function AddProductScreen() {
         );
       }
     } catch (err: any) {
+      // detail is a string, or {code, message} for 409 barcode_exists: never hand the object to the alert
       Alert.alert(
         isAr ? 'فشلت الإضافة' : 'AI Ingestion Failed',
-        err?.response?.data?.detail || (isAr ? 'حدث خطأ أثناء معالجة ونشر العنصر.' : 'An error occurred during AI extraction.')
+        localizeServerMessage(
+          err?.response?.data?.detail,
+          !!isAr,
+          isAr ? 'حدث خطأ أثناء معالجة ونشر العنصر.' : 'An error occurred during AI extraction.',
+        )
       );
     } finally {
       setLoading(false);
@@ -558,6 +564,12 @@ export default function AddProductScreen() {
       paddingVertical: 4,
     },
 
+    catalogScanBtn: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm,
+      height: 52, backgroundColor: Colors.primary, borderRadius: BorderRadius.md,
+      marginBottom: Spacing.md, ...Shadows.small,
+    },
+    catalogScanBtnText: { ...Typography.label, color: Colors.textOnPrimary, fontWeight: '700' },
     searchRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.lg },
     searchInput: {
       flex: 1, height: 52, backgroundColor: Colors.surface, borderRadius: BorderRadius.md,
@@ -1123,6 +1135,17 @@ export default function AddProductScreen() {
           {activeTab === 'catalog' && (
             <View style={styles.section}>
               <Text style={styles.label}>{t('merchant.tab_catalog', 'Scan or Check Global Catalog')}</Text>
+              {/* Barcode route: the scanner in Inventory mode finds the catalog product and links it to this shop */}
+              <TouchableOpacity
+                style={styles.catalogScanBtn}
+                onPress={() => router.push({ pathname: '/(merchant)/scanner', params: { mode: 'inventory' } })}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={t('merchant.scan_barcode', 'Scan Barcode')}
+              >
+                <Ionicons name="barcode-outline" size={22} color={Colors.textOnPrimary} />
+                <Text style={styles.catalogScanBtnText}>{t('merchant.scan_barcode', 'Scan Barcode')}</Text>
+              </TouchableOpacity>
               <View style={styles.searchRow}>
                 <TextInput
                   style={styles.searchInput}
