@@ -82,8 +82,8 @@ Google Play closed test. Owner: Ali, founder and sole developer.
   looks like 172.18.0.1 and slowapi's per-IP limits are global. Keep the API port on 127.0.0.1,
   never use `*`, and revisit this if Cloudflare is ever put in front of the API.
 - AI on DeepInfra, prepaid credit. If credit runs out, every AI call fails with HTTP 402
-  (search degrades, new products go to review). Models: query understanding gemma-4-E4B,
-  expansion gemma-4-26B-A4B, embeddings Qwen3-Embedding-0.6B (1024-d), reranker
+  (search degrades, new products go to review). Models: query understanding gemma-4-26B-A4B (priority
+  tier; E4B was saturated), expansion gemma-4-26B-A4B, embeddings Qwen3-Embedding-0.6B (1024-d), reranker
   Qwen3-Reranker-4B, enrichment gemma-4-31B, classifier = ensemble of gemma-4-26B-A4B and
   gemma-4-31B (approve only when both answer "allowed"; any flag or failure -> review).
 - Email: Resend sends codes (noreply@lambajo.com); support@lambajo.com via Cloudflare Email Routing.
@@ -178,27 +178,40 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
   the original alef/hamza letters put back, with and without "ال", and in its masculine form (colour
   feminines; a final "ة" dropped, which as a substring still matches the feminine form in a name). Brands are
   not inflected. Stored values stay as the model wrote them.
-- Query understanding in search (committed 2026-10-10 on branch catalog-attributes, not deployed when this
-  was written). Measured on the server 2026-10-09: the small model first used (gemma-4-E4B-it) was saturated
-  at DeepInfra (9 of 9 calls failed: 5 read timeouts, 4 HTTP 429 "engine_overloaded"; an hour earlier it had
-  answered in 2.5-7.6 s); `google/gemma-4-26B-A4B-it` answered 24 of 24 calls with correct attributes every
-  time, median 1.77 s, 83% within 2.0 s, 96% within 2.3 s, one outlier at 3.8 s. Production sets
-  `QUERY_LLM_FALLBACK_MODEL=google/gemma-4-26B-A4B-it` in backend/.env (now also the code default).
-  `analyze_query_async` works in layers and never raises: rules (`query_attributes.py`: organic, gender,
-  temperature, dietary from whole-word matches, a conflict guard, always present and winning over the model
-  for those keys); a Redis cache of the model's answer (`qu_cache.py`, 7 days, key = query + model + prompt
-  hash, which also makes a query's category and attributes stable); then ONE model call (no retry, its own
-  breaker `deepinfra_query_breaker`, DeepInfra `fail_fast`, at most 8 in flight). `search_budget.py` starts it
-  together with the first embedding and `_run_search` waits for it only until
-  `query_understanding_budget_seconds` (2.5) after the start of both; if it is late, search goes on with the
-  rules, the call keeps running and fills the cache, and that response is not put in the 5-minute search cache.
-  Category: only an EXACT taxonomy name (name/name_ar/name_en) counts, and the 1.5x boost goes to that
-  category and its subcategories (`category_match.py`); the model's loose words (شاي, حليب, dairy) are ignored,
-  so with the real taxonomy only names like "Beverages" resolve. Counters: `HGETALL lamba:stats:qu:<YYYY-MM-DD>`
-  (ok, cache_hit, not_needed, timeout, overloaded, http_error, breaker_open, busy, no_api_key, bad_json, error)
-  and `HGETALL lamba:stats:search:<YYYY-MM-DD>` (budget_answered, budget_late, budget_failed); log lines `[QU]`
-  and `[QU BUDGET]`. Free-text values from the model can still be longer than what is stored; the reliable
-  keys are organic, gender, temperature, dietary and brand.
+- Query understanding in search (PR #8, deployed 2026-10-10). Measured on the server 2026-10-09: the small model
+  first used (gemma-4-E4B-it) was saturated at DeepInfra (9 of 9 calls failed: 5 read timeouts, 4 HTTP 429
+  "engine_overloaded"; an hour earlier it had answered in 2.5-7.6 s); `google/gemma-4-26B-A4B-it` answered 24 of
+  24 calls with correct attributes every time, median 1.77 s, 83% within 2.0 s, 96% within 2.3 s, one outlier at
+  3.8 s. Production sets `QUERY_LLM_FALLBACK_MODEL=google/gemma-4-26B-A4B-it` in backend/.env (also the code
+  default). `analyze_query_async` works in layers and never raises: rules (`query_attributes.py`: organic,
+  gender, temperature, dietary from whole-word matches, a conflict guard, always present and winning over the
+  model for those keys); a Redis cache of the model's answer (`qu_cache.py`, 7 days, key = query + model +
+  prompt hash, which also makes a query's category and attributes stable); then ONE model call: no retry, 6 s
+  timeout, at most 8 in flight, its own breaker `deepinfra_query_breaker` that does NOT count HTTP 429 (busy is
+  not down), DeepInfra service tier `query_llm_service_tier` (priority). `fail_fast` is OFF
+  (`query_llm_fail_fast`): with it on, the first two production calls were rejected with 429 although the queue
+  would have served them (diagnostic 2026-10-10: around a burst of 429, priority 6 of 6 and standard 5 of 6, about
+  650 ms otherwise). `search_budget.py` starts the call together with the first embedding and `_run_search`
+  waits for it only until `query_understanding_budget_seconds` (2.5) after the start of both; if it is late,
+  search goes on with the rules, the call keeps running and fills the cache, and that response is not put in the
+  5-minute search cache. Category: only an EXACT taxonomy name (name/name_ar/name_en) counts, and the 1.5x boost
+  goes to that category and its subcategories (`category_match.py`); the model's loose words (شاي, حليب, dairy)
+  are ignored, so with the real taxonomy only names like "Beverages" resolve.
+  Counters: `HGETALL lamba:stats:qu:<YYYY-MM-DD>` (ok, cache_hit, not_needed, timeout, overloaded, http_error,
+  breaker_open, busy, no_api_key, bad_json, error) and `HGETALL lamba:stats:search:<YYYY-MM-DD>`
+  (budget_answered_model | budget_answered_cache | budget_answered_rules, budget_late, budget_failed).
+  `QueryIntent.source` says where an intent came from; "rules" is the rule-based fallback (model not needed,
+  rejected, failed or skipped), not a model answer, so read budget_answered_model for real answers and the qu
+  counters for why a fallback happened. Log lines `[QU]` and `[QU BUDGET]`.
+  Service tiers (`app/services/service_tier.py`; "" = standard, "priority" = +50% per token and served first
+  when the model is busy, "flex" = batch only and refused on interactive paths; an unknown value is ignored with
+  a warning): `query_llm_service_tier` (priority), `classifier_service_tier_interactive` (priority: merchant
+  add, rename and CSV upload, `classify_item_ensemble(..., interactive=True)`) and `classifier_service_tier_batch`
+  (standard: import_catalog). Priority was measured on gemma-4-26B-A4B only. If the 31B classifier model rejects
+  it (a failing classifier call sends the product to review), set `CLASSIFIER_SERVICE_TIER_INTERACTIVE=` (empty)
+  in backend/.env and recreate `api`.
+  Free-text values from the model can still be longer than what is stored; the reliable keys are organic,
+  gender, temperature, dietary and brand.
 - Golden-query comparison (before/after a change to search): run `scripts/eval_search.py --worksheet` twice
   against the live API with `data/golden_search.jsonl` and `data/attribute_queries.jsonl`, then
   `scripts/compare_search_runs.py before.jsonl after.jsonl` (per query: results that left or entered, overlap,
@@ -262,10 +275,10 @@ refresh-token sessions (deployed; renewal and the session-ended message verified
 In progress: Google Play personal developer account (identity verification pending; personal
 accounts need a 14-day closed test with 12+ testers).
 
-Next before the closed test: merge and deploy branch catalog-attributes (search safety fixes, the query path
-above, migration 0004), after taking the golden "before" run and then the "after" run; then the catalog
-attribute fill (job and tests are in the repo, NOT run yet: dry run of 100, graded, then the full run);
-review the ~49 held products;
+Next before the closed test: the catalog attribute fill (PR #8, with migration 0004 and the query path, is
+deployed; the job and its tests are in the repo, NOT run yet: dry run of 100, graded, then the full run);
+the golden-query comparison of the new query path (only meaningful if a "before" run was taken before the
+deploy); review the ~49 held products;
 monitoring alert for AI/credit failures; build the .aab; create review test accounts for Play "App access"; Play data safety form.
 
 Later: register Lamba as a business (unlocks Meta verification for WhatsApp codes, SMS sender ID,
