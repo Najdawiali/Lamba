@@ -583,7 +583,7 @@ async def update_market_item(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={"code": "shared_product", "message": MSG_SHARED_RENAME},
             )
-        verdict = await classify_item_ensemble(new_name, gi.description, gi.listing_type)
+        verdict = await classify_item_ensemble(new_name, gi.description, gi.listing_type, interactive=True)
         gi.name = new_name
         # A rename can send an approved product to review, but can never release a product
         # that is under review for a restriction flag, a user report, or a human block.
@@ -820,7 +820,7 @@ async def create_new_item(
             )
 
     # 1. Classify before storing anything
-    verdict = await classify_item_ensemble(name, description, listing_type)
+    verdict = await classify_item_ensemble(name, description, listing_type, interactive=True)
 
     # 2. Category: the merchant's explicit choice wins; otherwise the classifier's
     cat = await _merchant_category(db, category_id, listing_type)
@@ -990,7 +990,7 @@ async def upload_items_csv(
 
     async def _classify(r):
         async with sem:
-            r["verdict"] = await classify_item_ensemble(r["name"], r["description"], "product")
+            r["verdict"] = await classify_item_ensemble(r["name"], r["description"], "product", interactive=True)
 
     await asyncio.gather(*(_classify(r) for r in to_classify))
 

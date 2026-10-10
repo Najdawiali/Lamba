@@ -208,6 +208,10 @@ class Settings(BaseSettings):
     # Measured on the server 2026-10-10 around a burst of 429 "Model busy" on gemma-4-26B-A4B: priority
     # answered 6 of 6 calls, the standard tier 5 of 6. The cost is about $0.00016 instead of $0.00011 a call.
     query_llm_service_tier: str = "priority"
+    # The classifier (restriction check + category, two models in parallel): interactive = a merchant is waiting
+    # on a screen (add, rename, CSV upload); batch = import_catalog and other jobs, which wait out a busy model.
+    classifier_service_tier_interactive: str = "priority"
+    classifier_service_tier_batch: str = ""
 
     # Offline LLM (smarter, used for enrichment and batch processing)
     offline_llm_model: str = "google/gemma-4-31B-it"
