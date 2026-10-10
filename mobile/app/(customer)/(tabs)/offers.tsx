@@ -20,6 +20,7 @@ import {
 import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/theme';
 import { useThemeColors } from '../../../context/ThemeContext';
 import { t, i18n } from '../../../services/i18n';
+import { categoryLabel } from '../../../utils/categoryLabel';
 import { getCurrencyCode, formatPrice } from '../../../services/currency';
 import { resolveImageUrl, formatDistanceKm } from '../../../services/utils';
 import { useLocation } from '../../../hooks/useLocation';
@@ -550,7 +551,7 @@ export default function CustomerOffersScreen() {
         <View style={styles.cardInfo}>
           <Text style={styles.productName} numberOfLines={1}>{item.product_name}</Text>
           <Text style={styles.categoryName}>
-            {(i18n.locale?.startsWith('ar') ? (item.category_name_ar || item.category) : (item.category_name_en || item.category)) || t('offers.general_promo')}
+            {categoryLabel(item, i18n.locale?.startsWith('ar'), t('offers.general_promo'))}
           </Text>
 
           {item.price != null && (

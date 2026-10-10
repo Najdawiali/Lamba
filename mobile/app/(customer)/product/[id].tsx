@@ -19,6 +19,7 @@ import {
   startConversation, reportProduct, ReportReason
 } from '../../../services/api';
 import { t, i18n } from '../../../services/i18n';
+import { categoryLabel } from '../../../utils/categoryLabel';
 import { getCurrencyCode, formatPrice } from '../../../services/currency';
 import { resolveImageUrl, openMapDirections, calculateDistanceMeters, roundDistance } from '../../../services/utils';
 import { formatStoreAddress } from '../../../utils/jordanAddress';
@@ -362,9 +363,7 @@ export default function ProductDetailScreen() {
           {Boolean(product.category) ? (
             <View style={styles.categoryBadge}>
               <Text style={styles.categoryText}>
-                {i18n.locale?.startsWith('ar')
-                  ? (product.category_name_ar || product.category)
-                  : (product.category_name_en || product.category)}
+                {categoryLabel(product, i18n.locale?.startsWith('ar'))}
               </Text>
             </View>
           ) : null}

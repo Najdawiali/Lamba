@@ -113,8 +113,12 @@ class ItemCheckRequest(BaseModel):
 class CatalogItemMatch(BaseModel):
     id: uuid.UUID
     name: str
+    name_ar: Optional[str] = None
+    name_en: Optional[str] = None
     description: Optional[str] = None
     category: Optional[str] = None
+    category_name_ar: Optional[str] = None
+    category_name_en: Optional[str] = None
     image_url: Optional[str] = None
 
     model_config = {"from_attributes": True}
@@ -145,8 +149,12 @@ class MarketItemDashboardResponse(BaseModel):
     id: uuid.UUID  # market_item.id
     item_id: uuid.UUID  # global_item.id
     name: str
+    name_ar: Optional[str] = None
+    name_en: Optional[str] = None
     description: Optional[str] = None
     category: Optional[str] = None
+    category_name_ar: Optional[str] = None
+    category_name_en: Optional[str] = None
     image_url: Optional[str] = None
     stock_count: int
     in_stock: bool
@@ -171,7 +179,11 @@ class BarcodeLookupResponse(BaseModel):
     market_item_id: Optional[uuid.UUID] = None
     global_item_id: uuid.UUID
     name: str
+    name_ar: Optional[str] = None
+    name_en: Optional[str] = None
     category: Optional[str] = None
+    category_name_ar: Optional[str] = None
+    category_name_en: Optional[str] = None
     image_url: Optional[str] = None
     price: Optional[float] = None
     stock_count: Optional[int] = None

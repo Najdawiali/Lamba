@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
-  Alert, TextInput, Animated, Vibration, Platform, Dimensions, Image, FlatList, ScrollView, Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView
+  Alert, TextInput, Animated, Vibration, Platform, Dimensions, Image, FlatList, ScrollView, Keyboard, TouchableWithoutFeedback
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
@@ -11,6 +11,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
+import { categoryLabel } from '../../utils/categoryLabel';
+import { photoUploadErrorKey } from '../../utils/photoUploadError';
+import { useRefreshStock } from '../../hooks/useMerchant';
 import {
   lookupItemByBarcode,
   linkBarcodeToMarket,
@@ -28,6 +31,7 @@ import { formatPrice } from '../../services/currency';
 import { resolveImageUrl } from '../../services/utils';
 import ReceiptModal from '../../components/ReceiptModal';
 import ManualAddModal from '../../components/ManualAddModal';
+import PinnedSheet from '../../components/PinnedSheet';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const VIEWFINDER_SIZE = SCREEN_WIDTH * 0.7;
@@ -45,6 +49,8 @@ interface CartItem {
 export default function BarcodeScannerScreen() {
   const router = useRouter();
   const Colors = useThemeColors();
+  const insets = useSafeAreaInsets();
+  const refreshStock = useRefreshStock();
   // The caller picks the mode: 'inventory' from the add-product and Stock screens, 'cashier' from the Cashier tab
   const { mode: modeParam } = useLocalSearchParams<{ mode?: string }>();
 
@@ -239,21 +245,8 @@ const styles = useMemo(() => StyleSheet.create({
     color: '#FFF',
   },
 
-  // Glassmorphic Drawer
-  drawerContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(10, 10, 26, 0.95)',
-    borderTopLeftRadius: BorderRadius.xl,
-    borderTopRightRadius: BorderRadius.xl,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-    paddingBottom: Spacing.xl,
-    zIndex: 11,
-    ...Shadows.large,
-  },
+  // Drawers: the frame (surface, inset, keyboard) is components/PinnedSheet. Everything inside uses theme
+  // colours only: the sheet is white in the light theme, so no white-on-transparent fills here.
   drawerContent: {
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.sm,
@@ -269,7 +262,7 @@ const styles = useMemo(() => StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: Colors.textDark,
   },
 
   loadingWrapper: {
@@ -286,7 +279,7 @@ const styles = useMemo(() => StyleSheet.create({
   itemSummaryCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    backgroundColor: Colors.surfaceElevated,
     borderRadius: BorderRadius.md,
     padding: Spacing.md,
     width: '100%',
@@ -319,7 +312,7 @@ const styles = useMemo(() => StyleSheet.create({
   },
   itemCategory: {
     ...Typography.caption,
-    color: Colors.textMuted,
+    color: Colors.textSecondary,
     marginTop: 2,
   },
   badgeRow: {
@@ -333,11 +326,12 @@ const styles = useMemo(() => StyleSheet.create({
     paddingHorizontal: 6,
     borderRadius: BorderRadius.sm,
   },
-  badgeSuccess: { backgroundColor: 'rgba(0, 217, 126, 0.12)' },
-  badgeInfo: { backgroundColor: 'rgba(108, 99, 255, 0.12)' },
-  badgeText: { fontSize: 10, fontWeight: '700' },
-  badgeTextSuccess: { color: Colors.success },
-  badgeTextInfo: { color: Colors.primary },
+  // Tinted badges with the theme's primary text: green/purple text on its own tint was 2.4:1 in the light theme
+  badgeSuccess: { backgroundColor: 'rgba(0, 181, 115, 0.22)' },
+  badgeInfo: { backgroundColor: 'rgba(108, 99, 255, 0.2)' },
+  badgeText: { fontSize: 11, fontWeight: '700' },
+  badgeTextSuccess: { color: Colors.textPrimary },
+  badgeTextInfo: { color: Colors.textPrimary },
   barcodeText: {
     ...Typography.caption,
     color: Colors.textSecondary,
@@ -360,10 +354,10 @@ const styles = useMemo(() => StyleSheet.create({
   adjusterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: Colors.surfaceElevated,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
+    borderColor: Colors.border,
     height: 48,
     paddingHorizontal: Spacing.xs,
   },
@@ -371,7 +365,7 @@ const styles = useMemo(() => StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: Colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -382,10 +376,10 @@ const styles = useMemo(() => StyleSheet.create({
     fontWeight: '700',
   },
   priceInputWrapper: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: Colors.surfaceElevated,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
+    borderColor: Colors.border,
     height: 48,
     justifyContent: 'center',
     paddingHorizontal: Spacing.md,
@@ -410,7 +404,7 @@ const styles = useMemo(() => StyleSheet.create({
   },
   btnCancel: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: Colors.surfaceElevated,
   },
   btnSubmit: {
     flex: 2,
@@ -464,7 +458,7 @@ const styles = useMemo(() => StyleSheet.create({
     alignItems: 'center',
     marginBottom: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
+    borderBottomColor: Colors.border,
     paddingBottom: Spacing.sm,
   },
   posTitle: {
@@ -486,7 +480,7 @@ const styles = useMemo(() => StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: Spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.03)',
+    borderBottomColor: Colors.border,
     width: '100%',
   },
   cartItemText: {
@@ -523,7 +517,7 @@ const styles = useMemo(() => StyleSheet.create({
   },
   receiptSummary: {
     width: '100%',
-    backgroundColor: 'rgba(255,255,255,0.02)',
+    backgroundColor: Colors.surfaceElevated,
     borderRadius: BorderRadius.md,
     padding: Spacing.md,
     marginVertical: Spacing.md,
@@ -544,7 +538,7 @@ const styles = useMemo(() => StyleSheet.create({
   },
   receiptRowDivider: {
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: Colors.border,
     marginVertical: Spacing.xs,
   },
   receiptRowTotal: {
@@ -640,6 +634,8 @@ const styles = useMemo(() => StyleSheet.create({
   const [savingForm, setSavingForm] = useState(false);
   // Merchant-crowdsourced catalog photo: required when the product has none, optional otherwise
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  // The thumbnail could not be drawn (unreadable file, dead link): show an icon, not an empty box
+  const [thumbFailed, setThumbFailed] = useState(false);
   const photoRequired = !!scanResult && !scanResult.image_url;
   const isArUI = !!i18n.locale?.startsWith('ar');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -680,6 +676,11 @@ const styles = useMemo(() => StyleSheet.create({
       requestPermission();
     }
   }, [permission]);
+
+  // A new photo, or the next scanned product, gets a fresh try at drawing its thumbnail
+  useEffect(() => {
+    setThumbFailed(false);
+  }, [photoUri, scanResult?.image_url]);
 
   // Viewfinder scanner line animation loop
   useEffect(() => {
@@ -917,10 +918,11 @@ const styles = useMemo(() => StyleSheet.create({
       if (scanResult && photoUri) {
         try {
           await uploadItemPhoto(scanResult.global_item_id, photoUri);
-        } catch {
+        } catch (photoErr) {
+          console.warn('[SCANNER] photo upload failed, status:', (photoErr as any)?.response?.status ?? 'no response');
           Alert.alert(
-            isArUI ? 'تم الحفظ' : 'Saved',
-            isArUI ? 'تم حفظ الكمية والسعر، لكن تعذّر رفع الصورة. امسح الباركود مرة أخرى لإضافتها.' : 'Stock and price were saved, but the photo could not be uploaded. Scan the barcode again to add it.',
+            t('scanner.photo_saved_title', 'Saved'),
+            `${t('scanner.photo_not_uploaded')}\n${t(photoUploadErrorKey(photoErr))}\n${t('scanner.photo_retry_hint')}`,
           );
         }
       }
@@ -930,6 +932,8 @@ const styles = useMemo(() => StyleSheet.create({
       Alert.alert(t('common.error'), t('scanner.failed_save', 'Failed to save product adjustments.'));
     } finally {
       setSavingForm(false);
+      // The product may be linked, edited or re-photographed even when a later step failed
+      refreshStock();
     }
   };
 
@@ -976,6 +980,7 @@ const styles = useMemo(() => StyleSheet.create({
       }));
 
       const response = await checkoutPOS(payload);
+      refreshStock({ sale: true });   // stock went down, the asset value changed, a receipt exists
       Vibration.vibrate([0, 40, 60, 40]);
       
       setLastReceipt(response);
@@ -1211,8 +1216,8 @@ const styles = useMemo(() => StyleSheet.create({
 
       {/* POS Bottom Cashier Summary bar */}
       {scannerMode === 'cashier' && cartItems.length > 0 && !showCartDrawer && (
-        <TouchableOpacity 
-          style={styles.summaryBar} 
+        <TouchableOpacity
+          style={[styles.summaryBar, { bottom: insets.bottom + Spacing.xl }]}
           onPress={() => animateCartDrawer(true)}
           activeOpacity={0.9}
         >
@@ -1229,14 +1234,7 @@ const styles = useMemo(() => StyleSheet.create({
         </TouchableOpacity>
       )}
 
-      <Animated.View style={[
-        styles.drawerContainer,
-        { transform: [{ translateY: drawerY }] }
-      ]}>
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
-          style={{ width: '100%' }}
-        >
+      <PinnedSheet translateY={drawerY} open={drawerVisible}>
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.drawerContent}>
           <View style={[styles.notchWrapper, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
@@ -1272,15 +1270,24 @@ const styles = useMemo(() => StyleSheet.create({
                       activeOpacity={0.7}
                       accessibilityLabel={isArUI ? 'إضافة صورة للمنتج' : 'Add product photo'}
                     >
-                      {photoUri || scanResult.image_url ? (
+                      {(photoUri || scanResult.image_url) && !thumbFailed ? (
                         <Image
                           source={{ uri: photoUri || resolveImageUrl(scanResult.image_url) }}
                           style={styles.thumbnail}
                           resizeMode="cover"
+                          onLoad={() => setThumbFailed(false)}
+                          onError={(e) => {
+                            console.warn('[SCANNER] thumbnail did not load:', photoUri ? 'photo just taken' : 'catalog photo', e.nativeEvent?.error);
+                            setThumbFailed(true);
+                          }}
                         />
                       ) : (
                         <View style={styles.placeholderIcon}>
-                          <Ionicons name="camera-outline" size={24} color={Colors.error} />
+                          <Ionicons
+                            name={thumbFailed ? 'image-outline' : 'camera-outline'}
+                            size={24}
+                            color={thumbFailed ? Colors.textMuted : Colors.error}
+                          />
                         </View>
                       )}
                     </TouchableOpacity>
@@ -1290,14 +1297,14 @@ const styles = useMemo(() => StyleSheet.create({
                         {i18n.locale?.startsWith('ar') ? (scanResult.name_ar || scanResult.name) : (scanResult.name_en || scanResult.name)}
                       </Text>
                       <Text style={styles.itemCategory}>
-                        {(i18n.locale?.startsWith('ar') ? (scanResult.category_name_ar || scanResult.category) : (scanResult.category_name_en || scanResult.category)) || t('common.general', 'General')}
+                        {categoryLabel(scanResult, isArUI, t('common.general', 'General'))}
                       </Text>
                       <View style={styles.badgeRow}>
                         <View style={[styles.badge, scanResult.exists_in_branch ? styles.badgeSuccess : styles.badgeInfo]}>
                           <Text style={[styles.badgeText, scanResult.exists_in_branch ? styles.badgeTextSuccess : styles.badgeTextInfo]}>
                             {scanResult.exists_in_branch 
-                              ? t('inventory.in_stock', 'In My Store') 
-                              : t('scanner.not_stocked', 'Not Carrying')}
+                              ? t('scanner.in_my_store', 'In my store')
+                              : t('scanner.not_in_my_store', 'Not in my store')}
                           </Text>
                         </View>
                         <Text style={styles.barcodeText}>EAN: {scanResult.barcode}</Text>
@@ -1307,7 +1314,7 @@ const styles = useMemo(() => StyleSheet.create({
 
                   <Text
                     style={{
-                      color: photoRequired && !photoUri ? Colors.error : Colors.textMuted,
+                      color: photoRequired && !photoUri ? Colors.error : Colors.textSecondary,
                       fontSize: 12,
                       textAlign: isArUI ? 'right' : 'left',
                       marginTop: 6,
@@ -1324,7 +1331,7 @@ const styles = useMemo(() => StyleSheet.create({
                     <View style={styles.formRow}>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.inputLabel}>
-                          {t('inventory.in_stock', 'Stock Quantity')}
+                          {t('scanner.stock_quantity', 'Stock quantity')}
                         </Text>
                         <View style={styles.adjusterRow}>
                           <TouchableOpacity style={styles.adjusterBtn} onPress={() => adjustStock(-1)} activeOpacity={0.7}>
@@ -1377,7 +1384,7 @@ const styles = useMemo(() => StyleSheet.create({
                               ? (isArUI ? 'التقط صورة أولاً' : 'Take a photo first')
                               : scanResult.exists_in_branch
                                 ? t('common.save', 'Save Adjustments')
-                                : t('addProduct.add_new', 'Add to My Store')}
+                                : t('scanner.add_to_my_store', 'Add to my store')}
                           </Text>
                         )}
                       </TouchableOpacity>
@@ -1393,7 +1400,7 @@ const styles = useMemo(() => StyleSheet.create({
                     {t('scanner.unregistered_product', 'Unregistered Product!')}
                   </Text>
                   <Text style={styles.unregisteredDesc}>
-                    {t('scanner.barcode_not_found_desc', 'The scanned barcode was not found in the global product catalog. Would you like to register it as a new product in the catalog?').replace('{{barcode}}', scannedBarcode)}
+                    {t('scanner.unknown_barcode_hint', "This barcode isn't in the catalog. Add it as a new product.")}
                   </Text>
 
                   <View style={styles.actionButtons}>
@@ -1412,7 +1419,7 @@ const styles = useMemo(() => StyleSheet.create({
                         });
                       }}
                     >
-                      <Text style={styles.btnTextSubmit}>{t('scanner.ingest_new_item', 'Ingest New Item')}</Text>
+                      <Text style={styles.btnTextSubmit}>{t('scanner.add_as_new_product', 'Add as a new product')}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -1421,18 +1428,10 @@ const styles = useMemo(() => StyleSheet.create({
           )}
             </View>
           </TouchableWithoutFeedback>
-        </KeyboardAvoidingView>
-      </Animated.View>
+      </PinnedSheet>
 
       {/* ── DRAWER B: POS Cashier Transactions Drawer ── */}
-      <Animated.View style={[
-        styles.drawerContainer,
-        { transform: [{ translateY: cartDrawerY }], maxHeight: SCREEN_HEIGHT * 0.8 }
-      ]}>
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
-          style={{ width: '100%' }}
-        >
+      <PinnedSheet translateY={cartDrawerY} open={showCartDrawer} maxHeight={SCREEN_HEIGHT * 0.8}>
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.drawerContent}>
           <View style={[styles.notchWrapper, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
@@ -1541,8 +1540,7 @@ const styles = useMemo(() => StyleSheet.create({
           </View>
             </View>
           </TouchableWithoutFeedback>
-        </KeyboardAvoidingView>
-      </Animated.View>
+      </PinnedSheet>
 
       {/* ── DRAWER C: Full Screen Professional Invoice Receipt Modal ── */}
       <ReceiptModal

@@ -25,6 +25,7 @@ import { useMarket, merchantKeys } from '../../hooks/useMerchant';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
+import { categoryLabel } from '../../utils/categoryLabel';
 import { resolveImageUrl } from '../../services/utils';
 import { localizeServerMessage } from '../../utils/serverMessage';
 
@@ -1190,7 +1191,7 @@ export default function AddProductScreen() {
                             {i18n.locale?.startsWith('ar') ? (item.name_ar || item.name) : (item.name_en || item.name)}
                           </Text>
                           <Text style={styles.matchCategory}>
-                            {(i18n.locale?.startsWith('ar') ? (item.category_name_ar || item.category) : (item.category_name_en || item.category)) || 'General'}
+                            {categoryLabel(item, i18n.locale?.startsWith('ar'), t('common.general', 'General'))}
                           </Text>
                           {!!item.description && (
                             <Text style={styles.matchDesc} numberOfLines={1}>{item.description}</Text>

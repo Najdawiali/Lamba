@@ -34,7 +34,6 @@ import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/t
 import { useThemeColors } from '../../../context/ThemeContext';
 import { t, i18n } from '../../../services/i18n';
 import { formatPrice } from '../../../services/currency';
-import { CATEGORY_AR_FALLBACK } from '../../../constants/categories';
 
 export default function SearchScreen() {
   const Colors = useThemeColors();
@@ -1460,7 +1459,7 @@ export default function SearchScreen() {
                 </TouchableOpacity>
                 {filteredCategories.map(cat => {
                   const isAr = !i18n.locale || i18n.locale.includes('ar');
-                  const displayName = isAr ? (cat.name_ar || CATEGORY_AR_FALLBACK[cat.name]) : (cat.name_en || cat.name);
+                  const displayName = isAr ? (cat.name_ar || cat.name) : (cat.name_en || cat.name);
                   if (isAr && !displayName) return null;
                   return (
                     <TouchableOpacity
