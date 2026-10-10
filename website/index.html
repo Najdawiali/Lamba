@@ -3,16 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>لمبة | Lamba</title>
-<meta name="description" content="لمبة: دوّر على أي غرض، وشوف وين بتلاقيه بالمحلات القريبة منك في الأردن. Lamba helps you find what you need in the shops near you in Jordan.">
+<title>لمبة | Lamba - دوّر على أي غرض في المحلات القريبة منك</title>
+<meta name="description" content="لمبة: دوّر على أي غرض، وشوف وين بتلاقيه بالمحلات القريبة منك في الأردن، مع السعر والموقع على الخريطة.">
 <link rel="canonical" href="https://lambajo.com/">
+<link rel="alternate" hreflang="ar" href="https://lambajo.com/">
+<link rel="alternate" hreflang="en" href="https://lambajo.com/en/">
+<link rel="alternate" hreflang="x-default" href="https://lambajo.com/">
 <link rel="icon" href="/icon.png" type="image/png">
 <meta name="theme-color" content="#2D1B0A">
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="لمبة">
+<meta property="og:locale" content="ar_JO">
+<meta property="og:locale:alternate" content="en_US">
 <meta property="og:url" content="https://lambajo.com/">
-<meta property="og:title" content="لمبة | Lamba">
-<meta property="og:description" content="Find what you need in the shops near you, in Jordan.">
+<meta property="og:title" content="لمبة | Lamba - دوّر على أي غرض في المحلات القريبة منك">
+<meta property="og:description" content="دوّر على أي غرض، وشوف وين بتلاقيه بالمحلات القريبة منك في الأردن، مع السعر والموقع على الخريطة.">
 <meta property="og:image" content="https://lambajo.com/icon.png">
+<meta property="og:image:alt" content="أيقونة تطبيق لمبة">
 <style>
   @font-face {
     font-family: "Lalezar";
@@ -97,6 +104,22 @@
     font-size: 1rem;
   }
 
+  /* ── Language switch ───────────────────────────────────────── */
+  .night > .lang-switch { position: absolute; top: 1rem; inset-inline-end: 1rem; }
+  .lang-switch a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 1.25rem;
+    border: 1px solid rgba(255, 217, 138, 0.45);
+    border-radius: 999px;
+    color: var(--light);
+    font-family: system-ui, "Segoe UI", sans-serif;
+    font-size: 1rem;
+    text-decoration: none;
+  }
+  .lang-switch a:hover { background: rgba(255, 217, 138, 0.12); border-color: var(--light); }
+
   /* ── Limestone: what Lamba does ────────────────────────────── */
   .stone { background: var(--stone); padding: 4.5rem 1.5rem; }
   .wrap { max-width: 64rem; margin: 0 auto; }
@@ -139,6 +162,9 @@
 <body>
 
 <header class="night">
+  <nav class="lang-switch" aria-label="اللغة">
+    <a href="/en/" hreflang="en" lang="en" dir="ltr">English</a>
+  </nav>
   <img class="icon" src="/icon.png" alt="" width="88" height="88">
   <h1 class="wordmark">لمبة<span lang="en" dir="ltr">Lamba</span></h1>
   <p class="tagline">دوّر على أي غرض، وشوف وين بتلاقيه بالمحلات القريبة منك.</p>
