@@ -133,6 +133,7 @@ class TestQueryUnderstandingService(unittest.TestCase):
         self.assertEqual(call["temperature"], 0.0)
         self.assertEqual(call["chat_template_kwargs"], {"enable_thinking": False})
         self.assertIsInstance(call["error_sink"], list)
+        self.assertEqual(call["uncounted_statuses"], (429,))          # "Model busy" must not open the breaker
         self.assertEqual(call["messages"][1]["content"], "Query: شاي اخضر")
         self.assertEqual((intent.intent, intent.query_clean, intent.attributes), ("product", "شاي", {"type": "أخضر"}))
         self.assertEqual(self.redis.counts(), {"ok": 1})

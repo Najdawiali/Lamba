@@ -311,6 +311,7 @@ class QueryUnderstandingService:
                 max_retries=1,  # one attempt: a 429 or a timeout is not retried inside the search's time budget
                 breaker=deepinfra_query_breaker,
                 error_sink=reasons,
+                uncounted_statuses=(429,),  # "Model busy" is not an outage: it must not open the breaker
                 chat_template_kwargs={"enable_thinking": False},
                 **extra,
             )
