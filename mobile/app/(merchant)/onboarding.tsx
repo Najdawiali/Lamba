@@ -1,6 +1,7 @@
 /**
  * Market Profile Onboarding Screen — Setup store parameters.
- * Captures name, address, store type, and coordinates (with interactive mock geolocator).
+ * Captures name, store type, location (pin on the map + governorate / area / street / landmark,
+ * see components/StoreLocationForm) and operating hours.
  */
 
 import React, { useState, useMemo } from 'react';
@@ -10,8 +11,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
   ActivityIndicator,
   ScrollView,
@@ -21,11 +20,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
 import { createMarket } from '../../services/api';
 import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/theme';
 import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
+import { messageFromError } from '../../utils/serverMessage';
+import KeyboardForm from '../../components/KeyboardForm';
+import StoreLocationForm from '../../components/StoreLocationForm';
+import { EMPTY_LOCATION, locationProblems, toLocationPayload, type LocationProblem, type StoreLocationValue } from '../../utils/jordanAddress';
 
 const BUSINESS_CATEGORIES = [
   {
@@ -78,15 +80,13 @@ export default function OnboardingScreen() {
   const isAr = i18n.locale.includes('ar');
 
   const [name, setName] = useState('');
-  const [address, setAddress] = useState('');
-  const [latitude, setLatitude] = useState('');
-  const [longitude, setLongitude] = useState('');
+  const [location, setLocation] = useState<StoreLocationValue>(EMPTY_LOCATION);
+  const [problems, setProblems] = useState<LocationProblem[]>([]);
   const [selectedType, setSelectedType] = useState('');
   const [typeModalVisible, setTypeModalVisible] = useState(false);
   const [hoursPreset, setHoursPreset] = useState<'standard' | 'open_24_7' | 'weekdays'>('standard');
 
   const [loading, setLoading] = useState(false);
-  const [geolocating, setGeolocating] = useState(false);
 
   // Build structured operating_hours based on selected preset.
   const buildOperatingHours = (): Record<string, string> | null => {
@@ -95,72 +95,17 @@ export default function OnboardingScreen() {
     return { 'Sat-Thu': '08:00-22:00', Fri: '09:00-22:00' };
   };
 
-  const handleGeolocate = async () => {
-    setGeolocating(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(
-          t('onboarding.location_permission', 'Location Permission'),
-          t('onboarding.location_permission_desc', 'Please allow location access to detect store coordinates')
-        );
-        return;
-      }
-      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const coords = position.coords;
-      const latStr = coords.latitude.toFixed(6);
-      const lngStr = coords.longitude.toFixed(6);
-      setLatitude(latStr);
-      setLongitude(lngStr);
-
-      // Reverse geocode using expo-location (no API key needed)
-      try {
-        const geocode = await Location.reverseGeocodeAsync({
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-        });
-        if (geocode && geocode.length > 0) {
-          const place = geocode[0];
-          const parts = [place.street, place.district, place.city, place.region].filter(Boolean);
-          if (parts.length > 0 && !address.trim()) {
-            setAddress(parts.join(', '));
-          }
-        }
-      } catch (geoErr) {
-        // Geocoding is optional — coordinates are what matter
-      }
-
-      Alert.alert(
-        t('onboarding.location_success', 'Location detected'),
-        t('onboarding.location_detected_msg', 'Your store location has been set. Please verify the address below.')
-      );
-    } catch {
-      Alert.alert(
-        t('common.error', 'Error'),
-        t('onboarding.location_failed', 'Failed to detect location. Please enter coordinates manually.')
-      );
-    } finally {
-      setGeolocating(false);
-    }
-  };
-  const handleAutoDetect = handleGeolocate;
-
   const handleInitialize = async () => {
-    if (!name.trim() || !address.trim() || !latitude.trim() || !longitude.trim()) {
+    if (!name.trim()) {
       Alert.alert(t('common.error', 'Error'), t('onboarding.fill_all_fields', 'Please fill in all physical store fields'));
       return;
     }
 
-    const latVal = parseFloat(latitude);
-    const lngVal = parseFloat(longitude);
-
-    if (isNaN(latVal) || latVal < -90 || latVal > 90) {
-      Alert.alert(t('common.error', 'Error'), t('onboarding.invalid_lat', 'Please enter a valid Latitude (-90 to 90)'));
-      return;
-    }
-
-    if (isNaN(lngVal) || lngVal < -180 || lngVal > 180) {
-      Alert.alert(t('common.error', 'Error'), t('onboarding.invalid_lng', 'Please enter a valid Longitude (-180 to 180)'));
+    const found = locationProblems(location);
+    const payload = toLocationPayload(location);
+    if (found.length > 0 || !payload) {
+      setProblems(found);
+      Alert.alert(t('common.error', 'Error'), t(`storeLocation.problem_${found[0] ?? 'pin_missing'}`));
       return;
     }
 
@@ -172,7 +117,7 @@ export default function OnboardingScreen() {
 
     setLoading(true);
     try {
-      await createMarket(name.trim(), address.trim(), latVal, lngVal, {
+      await createMarket(name.trim(), payload, {
         business_nature: businessNatureValue.trim() || undefined,
         operating_hours: buildOperatingHours(),
       });
@@ -190,7 +135,10 @@ export default function OnboardingScreen() {
     } catch (err: any) {
       Alert.alert(
         t('onboarding.init_failed', 'Initialization Failed'),
-        err?.response?.data?.detail || t('common.something_went_wrong', 'Something went wrong. Please check coordinates and try again.')
+        messageFromError(err, isAr, {
+          network: t('login.network_error', "Couldn't reach the server. Check your internet connection and try again."),
+          fallback: t('common.something_went_wrong', 'Something went wrong. Please try again.'),
+        })
       );
     } finally {
       setLoading(false);
@@ -283,10 +231,6 @@ export default function OnboardingScreen() {
       marginBottom: Spacing.md,
       height: 52,
     },
-    textAreaContainer: {
-      height: 90,
-      alignItems: 'flex-start',
-    },
     inputIcon: {
       marginRight: Spacing.sm,
     },
@@ -294,40 +238,6 @@ export default function OnboardingScreen() {
       flex: 1,
       color: Colors.textPrimary,
       ...Typography.body,
-    },
-    textArea: {
-      height: '100%',
-      textAlignVertical: 'top',
-      paddingVertical: Spacing.sm,
-    },
-    coordsRow: {
-      flexDirection: 'row',
-      gap: Spacing.sm,
-      marginBottom: Spacing.md,
-    },
-    coordPrefix: {
-      ...Typography.bodySmall,
-      color: Colors.textSecondary,
-      fontWeight: '700',
-      marginRight: 4,
-    },
-    geolocateBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6,
-      paddingVertical: Spacing.md,
-      borderRadius: BorderRadius.md,
-      backgroundColor: 'rgba(0, 217, 166, 0.05)',
-      borderWidth: 1,
-      borderColor: 'rgba(0, 217, 166, 0.15)',
-      marginBottom: Spacing.xl,
-      height: 48,
-    },
-    geolocateText: {
-      ...Typography.caption,
-      color: Colors.secondary,
-      fontWeight: '700',
     },
     selectButton: {
       flexDirection: 'row',
@@ -400,11 +310,8 @@ export default function OnboardingScreen() {
   }), [Colors]);
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+    <View style={styles.container}>
+      <KeyboardForm contentContainerStyle={styles.scroll}>
         {/* Glow Ambient */}
         <View style={styles.glowOrb1} />
         <View style={styles.glowOrb2} />
@@ -438,26 +345,6 @@ export default function OnboardingScreen() {
             />
           </View>
 
-          {/* Store Address */}
-          <Text style={styles.label}>{t('onboarding.store_address', 'Store Address')} *</Text>
-          <View style={[styles.inputContainer, styles.textAreaContainer]}>
-            <Ionicons 
-              name="location-outline" 
-              size={20} 
-              color={Colors.textMuted} 
-              style={[styles.inputIcon, { marginTop: Spacing.sm }]} 
-            />
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              placeholder={t('onboarding.store_address', 'Store Address')}
-              placeholderTextColor={Colors.textMuted}
-              value={address}
-              onChangeText={setAddress}
-              multiline
-              numberOfLines={3}
-            />
-          </View>
-
           {/* Store Type Selector */}
           <Text style={styles.label}>{t('onboarding.store_type', 'Store Type')}</Text>
           <TouchableOpacity
@@ -474,34 +361,14 @@ export default function OnboardingScreen() {
             <Ionicons name="chevron-down" size={20} color={Colors.textMuted} />
           </TouchableOpacity>
 
-          {/* Coordinates Row */}
-          <View style={styles.coordsRow}>
-            {/* Latitude */}
-            <View style={[styles.inputContainer, { flex: 1, marginBottom: 0 }]}>
-              <Text style={styles.coordPrefix}>Lat:</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="31.9500"
-                placeholderTextColor={Colors.textMuted}
-                value={latitude}
-                onChangeText={setLatitude}
-                keyboardType="numeric"
-              />
-            </View>
-            
-            {/* Longitude */}
-            <View style={[styles.inputContainer, { flex: 1, marginBottom: 0 }]}>
-              <Text style={styles.coordPrefix}>Lng:</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="35.9100"
-                placeholderTextColor={Colors.textMuted}
-                value={longitude}
-                onChangeText={setLongitude}
-                keyboardType="numeric"
-              />
-            </View>
-          </View>
+          {/* Store Location */}
+          <Text style={styles.label}>{t('onboarding.location', 'Location')} *</Text>
+          <StoreLocationForm
+            value={location}
+            onChange={(next) => { setLocation(next); setProblems([]); }}
+            problems={problems}
+            disabled={loading}
+          />
 
           {/* Operating Hours Preset */}
           <Text style={styles.presetLabel}>
@@ -533,25 +400,6 @@ export default function OnboardingScreen() {
               : t('onboarding.hours_24_7_hint', 'Always open (no schedule)')}
           </Text>
 
-          {/* Geolocate Button */}
-          <TouchableOpacity
-            style={styles.geolocateBtn}
-            onPress={handleGeolocate}
-            disabled={geolocating || loading}
-            activeOpacity={0.7}
-          >
-            {geolocating ? (
-              <ActivityIndicator color={Colors.secondary} />
-            ) : (
-              <>
-                <Ionicons name="locate-outline" size={18} color={Colors.secondary} />
-                <Text style={styles.geolocateText}>
-                  {t('onboarding.location', 'Acquire Current Coordinates')}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-
           {/* Action Button */}
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
@@ -566,7 +414,7 @@ export default function OnboardingScreen() {
             )}
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </KeyboardForm>
 
       {/* Store Type Picker */}
       <Modal visible={typeModalVisible} animationType="slide" transparent onRequestClose={() => setTypeModalVisible(false)}>
@@ -635,6 +483,6 @@ export default function OnboardingScreen() {
           </SafeAreaView>
         </View>
       </Modal>
-    </KeyboardAvoidingView>
+    </View>
   );
 }

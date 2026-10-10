@@ -21,6 +21,7 @@ import {
 import { t, i18n } from '../../../services/i18n';
 import { getCurrencyCode, formatPrice } from '../../../services/currency';
 import { resolveImageUrl, openMapDirections, calculateDistanceMeters, roundDistance } from '../../../services/utils';
+import { formatStoreAddress } from '../../../utils/jordanAddress';
 
 const REPORT_REASONS: { key: ReportReason; ar: string; en: string }[] = [
   { key: 'restricted_item', ar: 'منتج ممنوع (تبغ، كحول، أدوية، أسلحة)', en: 'Prohibited item (tobacco, alcohol, drugs, weapons)' },
@@ -392,7 +393,12 @@ export default function ProductDetailScreen() {
               <Ionicons name="storefront-outline" size={24} color={product.shop.is_currently_open ? Colors.success : Colors.error} />
               <View style={{ flex: 1, marginLeft: Spacing.sm }}>
                 <Text style={styles.shopName}>{product.shop.name}</Text>
-                <Text style={styles.shopAddress}>{product.shop.address}</Text>
+                <Text style={styles.shopAddress}>{formatStoreAddress(product.shop.address_parts, product.shop.address, isAr).line}</Text>
+                {formatStoreAddress(product.shop.address_parts, product.shop.address, isAr).landmark ? (
+                  <Text style={styles.shopAddress}>
+                    {t('storeLocation.near', { landmark: formatStoreAddress(product.shop.address_parts, product.shop.address, isAr).landmark })}
+                  </Text>
+                ) : null}
                 {product.shop.average_rating !== undefined && product.shop.average_rating > 0 ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
                     <Ionicons name="star" size={14} color="#FFB800" />

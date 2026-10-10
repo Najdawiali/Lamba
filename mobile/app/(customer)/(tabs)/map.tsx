@@ -20,6 +20,7 @@ import { Spacing, BorderRadius, Typography, Shadows } from '../../../constants/t
 import { useTheme } from '../../../context/ThemeContext';
 import { t, i18n } from '../../../services/i18n';
 import { getMapStyle, calculateDistanceMeters, openMapDirections, formatDistanceKm } from '../../../services/utils';
+import { formatStoreAddress } from '../../../utils/jordanAddress';
 
 const CARD_WIDTH = 280;
 const CARD_MARGIN = 10;
@@ -303,7 +304,7 @@ export default function MapScreen() {
                 </View>
                 <View style={styles.cardContent}>
                   <Text style={styles.cardTitle} numberOfLines={1}>{item.name}</Text>
-                  <Text style={styles.cardSubtitle} numberOfLines={1}>{item.address}</Text>
+                  <Text style={styles.cardSubtitle} numberOfLines={1}>{formatStoreAddress(item.address_parts, item.address, !!i18n.locale?.startsWith('ar')).line}</Text>
                   <View style={styles.cardFooter}>
                     <View style={styles.statusBadge}>
                       <View style={[styles.statusDot, { backgroundColor: item.is_currently_open ? Colors.success : Colors.error }]} />

@@ -4,6 +4,7 @@
 
 import * as SecureStore from 'expo-secure-store';
 import api from './client';
+import type { AddressParts } from '../../utils/jordanAddress';
 
 // ── Types ──────────────────────────────────────────────────────
 export interface NearMarketResponse {
@@ -13,6 +14,7 @@ export interface NearMarketResponse {
   name_ar?: string | null;
   name_en?: string | null;
   address: string;
+  address_parts?: AddressParts | null;
   latitude: number;
   longitude: number;
   distance_km: number;
@@ -93,6 +95,7 @@ export interface ShopDetails {
   id: string;
   name: string;
   address: string;
+  address_parts?: AddressParts | null;
   latitude: number;
   longitude: number;
   phone: string | null;
