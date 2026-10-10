@@ -17,6 +17,10 @@ from app.services.service_tier import service_tier_fields
 class TestServiceTierFields(unittest.TestCase):
     def setUp(self):
         service_tier._warned.clear()
+        # other test code may have switched logging off; these tests check the warnings
+        previous = logging.root.manager.disable
+        logging.disable(logging.NOTSET)
+        self.addCleanup(logging.disable, previous)
 
     def test_the_standard_tier_adds_nothing(self):
         for value in (None, "", "   ", "standard", "Standard", "default", "none"):
