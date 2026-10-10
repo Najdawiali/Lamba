@@ -26,6 +26,7 @@ from app.models.rating import Rating
 from app.models.user import User
 from app.models.search_alert import SearchAlert
 from app.models.search_history import SearchHistory
+from app.jordan_geo import address_parts_of
 from app.schemas.customer_v1 import (
     NearMarketResponse,
     CustomerItemResponse,
@@ -125,6 +126,7 @@ async def get_near_markets(
                     name_ar=getattr(market, "name_ar", None),
                     name_en=getattr(market, "name_en", None),
                     address=market.address,
+                    address_parts=address_parts_of(market),
                     latitude=float(lat),
                     longitude=float(lng),
                     distance_km=round(float(dist_km), 2),
@@ -521,6 +523,7 @@ async def get_market_item_details(
             "id": str(market.id),
             "name": market.name,
             "address": market.address,
+            "address_parts": address_parts_of(market),
             "latitude": lat,
             "longitude": lng,
             "phone": market.phone,
@@ -715,6 +718,7 @@ async def get_customer_offers(
                     shop_id=market.id,
                     shop_name=market.name,
                     shop_address=market.address,
+                    shop_address_parts=address_parts_of(market),
                     latitude=float(lat),
                     longitude=float(lng),
                     shop_is_open=market.is_currently_open,

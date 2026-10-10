@@ -76,17 +76,18 @@ class TestMerchantMarketProfileAPI(unittest.IsolatedAsyncioTestCase):
         try:
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                # 1. GET profile initially (unlocked for both name and address)
+                # 1. GET profile initially (name not locked yet). The address is not part of the
+                #    profile any more: the location has its own endpoint (PUT /market/location).
                 res = await client.get("/api/v1/merchant/market/profile")
                 self.assertEqual(res.status_code, 200)
                 data = res.json()
                 self.assertEqual(data["name"], "Original Market")
                 self.assertFalse(data["is_name_locked"])
-                self.assertFalse(data["is_address_locked"])
                 self.assertIsNone(data["name_edited_at"])
-                self.assertIsNone(data["address_edited_at"])
+                for gone in ("address", "address_ar", "address_edited_at", "is_address_locked", "is_profile_locked"):
+                    self.assertNotIn(gone, data)
 
-                # 2. PATCH name only (first time) -> should succeed and lock name ONLY
+                # 2. PATCH name (first time) -> should succeed and lock the name
                 res = await client.patch(
                     "/api/v1/merchant/market/profile",
                     json={
@@ -99,9 +100,7 @@ class TestMerchantMarketProfileAPI(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(data["name"], "Updated Name")
                 self.assertEqual(data["contact_phone"], "+962791234567")
                 self.assertTrue(data["is_name_locked"])
-                self.assertFalse(data["is_address_locked"])
                 self.assertIsNotNone(data["name_edited_at"])
-                self.assertIsNone(data["address_edited_at"])
 
                 # Ensure mock_market state updated
                 mock_market.name = "Updated Name"
@@ -115,31 +114,17 @@ class TestMerchantMarketProfileAPI(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(res.status_code, 403)
                 self.assertIn("Store name can only be edited once", res.json()["detail"])
 
-                # 4. PATCH address first time -> must SUCCEED because address is not locked yet
+                # 4. An address in a profile PATCH is ignored (and never locks anything): the
+                #    stored address is only ever changed through PUT /market/location.
                 res = await client.patch(
                     "/api/v1/merchant/market/profile",
-                    json={"address": "New Location Street"},
+                    json={"address": "New Location Street", "address_ar": "شارع جديد"},
                 )
                 self.assertEqual(res.status_code, 200)
-                data = res.json()
-                self.assertEqual(data["address"], "New Location Street")
-                self.assertTrue(data["is_name_locked"])
-                self.assertTrue(data["is_address_locked"])
-                self.assertIsNotNone(data["address_edited_at"])
+                self.assertEqual(mock_market.address, "Street 1")
+                self.assertIsNone(mock_market.address_edited_at)
 
-                # Ensure mock_market state updated
-                mock_market.address = "New Location Street"
-                mock_market.address_edited_at = datetime.now(timezone.utc)
-
-                # 5. PATCH address second time -> must return 403 Forbidden
-                res = await client.patch(
-                    "/api/v1/merchant/market/profile",
-                    json={"address": "Another Address"},
-                )
-                self.assertEqual(res.status_code, 403)
-                self.assertIn("Store address can only be edited once", res.json()["detail"])
-
-                # 6. PATCH contact info only -> must SUCCEED even when both name & address are locked
+                # 5. PATCH contact info only -> must SUCCEED even when the name is locked
                 res = await client.patch(
                     "/api/v1/merchant/market/profile",
                     json={
@@ -152,9 +137,8 @@ class TestMerchantMarketProfileAPI(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(data["contact_phone"], "0799998888")
                 self.assertEqual(data["contact_email"], "new.email@market.jo")
                 self.assertTrue(data["is_name_locked"])
-                self.assertTrue(data["is_address_locked"])
 
-                # 7. PUT employees -> replaces employees list
+                # 6. PUT employees -> replaces employees list
                 res = await client.put(
                     "/api/v1/merchant/market/employees",
                     json={"employees": ["Omar", "Lina", " Tariq "]},

@@ -65,6 +65,10 @@ from tests.test_attributes_version_migration import TestAttributesVersionMigrati
 from tests.test_jordan_geo import TestGovernorates, TestBoundingBox, TestAddressText
 from tests.test_market_location import TestDistance, TestMovingThePin, TestEditingTheText, TestGovernorate, TestMessages
 from tests.test_store_location_migration import TestChain, TestUpgradeAndDowngrade, TestModels
+from tests.test_store_location_schemas import (  # need pydantic; skipped without it
+    TestMarketCreate, TestMarketLocationUpdate, TestRemovedAddressFields, TestCustomerAddressParts,
+)
+from tests.test_merchant_market_location_api import TestUpdateLocation, TestCreateStore
 from tests.test_attribute_extraction import (
     TestAttributeValidator, TestAttributeJsonParser, TestAttributeExtract, TestAttributePrompt,
 )
