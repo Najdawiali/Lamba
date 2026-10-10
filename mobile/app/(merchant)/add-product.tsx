@@ -558,6 +558,12 @@ export default function AddProductScreen() {
       paddingVertical: 4,
     },
 
+    catalogScanBtn: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm,
+      height: 52, backgroundColor: Colors.primary, borderRadius: BorderRadius.md,
+      marginBottom: Spacing.md, ...Shadows.small,
+    },
+    catalogScanBtnText: { ...Typography.label, color: Colors.textOnPrimary, fontWeight: '700' },
     searchRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.lg },
     searchInput: {
       flex: 1, height: 52, backgroundColor: Colors.surface, borderRadius: BorderRadius.md,
@@ -1123,6 +1129,17 @@ export default function AddProductScreen() {
           {activeTab === 'catalog' && (
             <View style={styles.section}>
               <Text style={styles.label}>{t('merchant.tab_catalog', 'Scan or Check Global Catalog')}</Text>
+              {/* Barcode route: the scanner in Inventory mode finds the catalog product and links it to this shop */}
+              <TouchableOpacity
+                style={styles.catalogScanBtn}
+                onPress={() => router.push({ pathname: '/(merchant)/scanner', params: { mode: 'inventory' } })}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={t('merchant.scan_barcode', 'Scan Barcode')}
+              >
+                <Ionicons name="barcode-outline" size={22} color={Colors.textOnPrimary} />
+                <Text style={styles.catalogScanBtnText}>{t('merchant.scan_barcode', 'Scan Barcode')}</Text>
+              </TouchableOpacity>
               <View style={styles.searchRow}>
                 <TextInput
                   style={styles.searchInput}
