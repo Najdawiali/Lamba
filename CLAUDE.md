@@ -107,7 +107,9 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
 - Mobile tests: `cd mobile; npm test` (Node's own test runner on `services/api/session.ts`: renewal,
   single refresh for parallel 401s, session end) and on `utils/serverMessage.ts` (which text an API error shows:
   bilingual strings, `{code, message}` objects like 409 barcode_exists); no device, no extra packages; needs
-  Node 22.18+).
+  Node 22.18+). More in `mobile/tests/`: `i18n-keys` (the translation-key ratchet, below), `categorylabel`,
+  `photouploaderror`, and source-wiring checks for the scanner (`pinnedsheet`, `scanner-labels`, `scanner-refresh`)
+  that read the screen's source because a screen cannot run under Node.
 - End-to-end checks (sign-in throttle, proxy-header trust, Redis outages, refresh-token sessions) run real
   uvicorn, FastAPI, slowapi, redis-py and PyJWT: `backend/tests/e2e/` (README inside). They need a throwaway
   venv outside the repo built from the pins in `backend/requirements.txt`; no Docker, Redis or Postgres.
@@ -136,6 +138,9 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
   test already imported); every one of those modules passes alone. Two tests need a live Redis or Postgres and fail
   without one: `test_customer_auth` (public endpoints) and `test_synonym_table.test_cache_lookup`. The Postgres-only
   suites skip themselves without `LAMBA_TEST_DATABASE_URL`.
+- Photo tests (`test_image_sanitize.py`, `test_photo_upload_api.py`) run on production's own versions with a
+  tiny venv: `uv venv --python 3.13 <dir>`, `uv pip install --python <dir>\Scripts\python.exe --only-binary :all:
+  Pillow==11.0.0`, `python -B -X utf8 -m unittest tests.test_image_sanitize` (the HTTP-level one needs the full venv above).
 - APK: `cd mobile\android; .\gradlew.bat assembleRelease --no-daemon`
   -> `app\build\outputs\apk\release\app-release.apk`. Google Play needs an .aab (`bundleRelease`).
 - Release builds inline `EXPO_PUBLIC_API_URL` from the git-ignored `mobile/.env`, which must hold
@@ -171,7 +176,29 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
   the server decides.
 - Forms with text fields use `components/KeyboardForm.tsx` (react-native-keyboard-controller).
   Android 16 is edge-to-edge, so the old adjustResize no longer works. `KeyboardProvider` is in
-  `app/_layout.tsx` with statusBarTranslucent and navigationBarTranslucent.
+  `app/_layout.tsx` with statusBarTranslucent and navigationBarTranslucent. React Native's own
+  `KeyboardAvoidingView` does nothing on Android here (`behavior` undefined, or 'height' which needs the window
+  to resize): use `KeyboardForm` for scrolling forms, keyboard-controller's `KeyboardAvoidingView` for sheets in a
+  `Modal` (1.18.5 attaches to Modal windows itself: read in its source, not yet seen on a phone), and
+  `components/PinnedSheet.tsx` (also not yet seen on a phone) for a sheet pinned to the
+  bottom of a screen (the scanner's two drawers). PinnedSheet also adds the bottom inset (the scanner hides the
+  tab bar that normally keeps content clear of the navigation bar) and uses the THEME surface, so text from
+  `useThemeColors()` is readable in both themes; never put theme text on a fixed dark or light background.
+  Most other sheets and modals with inputs have not been moved over yet (list in the status section).
+- Translation keys: `t('key', 'fallback')` silently returns the fallback for a missing key, so tsc never
+  catches a forgotten one and the Arabic UI shows English. `tests/i18n-keys.test.mjs` is a ratchet: a key used
+  in the app must exist in BOTH `locales/*.json` (real Arabic, not a copy of the English); the 38 keys that were
+  already missing are listed in `tests/i18n-known-missing.json`, which may only shrink (the test fails when a
+  listed key gets translated, so delete it then). Keys built at runtime are not seen. Do not reuse a key for a
+  different meaning because it exists: the locale's text wins over the fallback you wrote (that made a catalog
+  product's button say "Add Brand-New").
+- Category names: `utils/categoryLabel.ts` (the name in the app's language, else the plain `category`, else a
+  fallback) is the one rule for every screen; the hand-written English-to-Arabic map is gone. The merchant API
+  sends `name_ar`/`name_en`/`category_name_ar`/`category_name_en` on the barcode lookup, the catalog search and
+  the dashboard rows through ONE helper, `backend/app/services/item_names.py` (a test checks every builder uses
+  it). App builds from this change show English categories on the merchant screens until the backend is deployed.
+- After anything that changes stock, prices or photos outside the Stock screens (the scanner), call
+  `useRefreshStock()` from `hooks/useMerchant.ts`: the Stock tab is never refetched on focus.
 - Code entry uses `components/auth/OtpInput.tsx` (real input laid over the boxes).
 - Store location (migration 0005, PR "store-location-pin"): a store has a pin (`markets.location`) and a structured
   address: `governorate` (a KEY from `app/jordan_geo.py`, the 12 governorates; the app shows the name in its language),
@@ -271,6 +298,15 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
   Batch jobs must wait out an open circuit breaker and retry, never fast-fail the queue.
 - Merchant photos: the first photo of a catalog product becomes its catalog photo
   (POST /api/v1/merchant/items/{id}/photos); required in the scanner when a product has none.
+  Every product photo (that endpoint and POST /items/new, primary and secondary) goes through
+  `_clean_image_upload` -> `app/services/image_sanitize.py` before it is stored: decoded by Pillow (SVG, HTML,
+  damaged files and canvases over 64 MP are refused), rotated by its EXIF, long side at most 1600 px, flattened
+  to RGB on white, colours converted to sRGB, written as a NEW JPEG (quality 82) with all metadata dropped (GPS,
+  camera, XMP, comments). The stored name is always `photo.jpg`, never the client's file name. Pitfall: Pillow's
+  JPEG writer reuses `img.info["xmp"]` (11.0, the pinned version) and `["comment"]` even when no metadata
+  argument is given, so `sanitize_image` clears `img.info`; the tests cover each kind with and without an ICC
+  profile. The upload cap is still 8 MB (`MAX_PHOTO_BYTES`): a 50 MP camera photo can exceed it and is refused
+  with a bilingual message. Photos stored before this change still carry their original metadata.
 - Sign-in throttle (`app/services/signin_throttle.py`): 10 failed sign-ins per account within 15
   minutes (fixed window from the first failure) -> HTTP 429 with a bilingual message and Retry-After.
   This is the per-account limit NIST SP 800-63B-4 3.2.2 asks for; slowapi's limits are per IP and
@@ -312,7 +348,12 @@ images.lambajo.com, homepage, password policy, email-only auth with its fixes (k
 confirm password, code entry with paste, single-language errors; verified on a phone),
 refresh-token sessions (deployed; renewal and the session-ended message verified on a phone),
 structured store address with a map pin picker (branch store-location-pin: migration 0005 and the new app build are
-needed together; not yet run on a phone).
+needed together; not yet run on a phone),
+scanner step 1 (branch scanner-sheet-i18n, not yet on a phone): drawers clear of the navigation bar / lifted by the
+keyboard / readable in the light theme (PinnedSheet), Arabic and English category names from the merchant API,
+photo re-encoding on the server (EXIF/GPS stripped), the correct button for each of the three cases, Stock tab
+refresh after a save, the translation-key ratchet. Deploy the BACKEND first (names + photo re-encoding; no migration),
+then build the app.
 
 In progress: Google Play personal developer account (identity verification pending; personal
 accounts need a 14-day closed test with 12+ testers).
@@ -322,6 +363,14 @@ deployed; the job and its tests are in the repo, NOT run yet: dry run of 100, gr
 the golden-query comparison of the new query path (only meaningful if a "before" run was taken before the
 deploy); review the ~49 held products;
 monitoring alert for AI/credit failures; build the .aab; create review test accounts for Play "App access"; Play data safety form.
+UI sweep after scanner step 1, in this order: step 2 = chat composers' keyboard (customer chat, merchant inbox),
+forgot-password and verify translations (the 38 keys in `tests/i18n-known-missing.json`), add-product's keyboard,
+the sheets and modals with inputs (dashboard edit-product, low-stock replenish, merchant-profile edit field,
+customer-profile edit, shop write-review, RatingModal, search filters, merchant offers create, EmployeesModal);
+step 3 = the rest (bottom insets of the sheets without inputs, hardcoded Arabic-only / English-only literals in
+customer product/shop/chat and `_layout.tsx`, the dashboard toast and ReceiptModal that put theme text on a fixed
+dark background). Photos stored before the re-encoding still carry their metadata: a one-off cleanup job over
+images.lambajo.com is open (needs a decision; also decide whether the privacy policy should say photos are stripped).
 
 Later: Google Geocoding for store addresses, only after evaluating it on about 20 real locations in Jordan against the
 phone's geocoder (language=ar, region=jo; read Google's caching terms first, results may not be stored freely; the
