@@ -159,6 +159,32 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
   Android 16 is edge-to-edge, so the old adjustResize no longer works. `KeyboardProvider` is in
   `app/_layout.tsx` with statusBarTranslucent and navigationBarTranslucent.
 - Code entry uses `components/auth/OtpInput.tsx` (real input laid over the boxes).
+- Store location (migration 0005, PR "store-location-pin"): a store has a pin (`markets.location`) and a structured
+  address: `governorate` (a KEY from `app/jordan_geo.py`, the 12 governorates; the app shows the name in its language),
+  `area` (required), `street` and `landmark` (optional), all text as the merchant typed it. The server composes the
+  one-line `markets.address` from street, area and the Arabic governorate name; it is the plain fallback (old
+  clients, the `city` search filter) and is never sent by the app. Customer responses carry `address_parts`
+  (`market_address_parts` in search results, `shop_address_parts` in offers); `mobile/utils/jordanAddress.ts`
+  `formatStoreAddress` builds the line in the viewer's language and falls back to `address` for a store without parts.
+  `address_ar` never had a column and is gone from code and API (`name_ar` is the same kind of phantom, left alone).
+  Creating a store (`POST /market`) needs governorate, area and a pin inside the rough Jordan box (swapped
+  coordinates and (0, 0) are refused); the old address-only request is refused. Existing stores change location only
+  through `PUT /api/v1/merchant/market/location` (`app/services/market_location.py`, pure and tested): pin moves up
+  to 200 m and area/street/landmark edits are free; a bigger move or a different governorate (once set) is a bilingual
+  403 pointing to support@lambajo.com. Every accepted change is a row in `market_location_changes` (old/new pin,
+  metres moved, old/new fields, user, time; cascades with the store and the user). The profile PATCH no longer takes
+  an address and the address-lock fields (`is_address_locked`, `is_profile_locked`, `address_edited_at` in responses)
+  are gone; the `markets.address_edited_at` column stays and records the time of the last location edit. Mobile: one
+  `components/StoreLocationForm.tsx` serves create-store (أضف متجرك), `(merchant)/onboarding.tsx` and the profile
+  address row (`StoreLocationEditModal`); `LocationPicker` is the fixed-centre-pin map (satellite toggle, my-location,
+  GPS warning above 50 m, a 200 m ring for existing stores). The phone's geocoder (`services/deviceLocation.ts`) only
+  PREFILLS governorate/area/street through `prefillFromDeviceAddress` (region, subregion, city, district, street,
+  name and formattedAddress; plus codes, numbers, postal codes and the country are skipped); a merchant's own text is
+  never replaced without asking, and a detect that finds nothing leaves the fields alone. The keys, names, box and
+  limits in `jordanAddress.ts` mirror `app/jordan_geo.py` and `market_location.py`; `test_jordan_geo.py` compares
+  them. No Google Geocoding yet (decision pending its evaluation, see Later). The HTTP-level tests
+  (`test_merchant_market_location_api.py`) need the full backend dependencies; the rules, schemas and migration are
+  covered by tests that run in the small throwaway venv.
 - Moderation: `global_items.moderation_status` approved | pending_review | blocked. Customers only
   ever see approved products. Review tool:
   `docker compose run --rm --no-deps api python -m app.moderation_cli pending|reports|approve <id>|block <id>`
@@ -270,7 +296,9 @@ Done: security hardening, Alembic migrations, taxonomy, classifier ensemble, mer
 report button, account deletion (in app + web page), legal pages, catalog import and enrichment,
 images.lambajo.com, homepage, password policy, email-only auth with its fixes (keyboard-aware forms,
 confirm password, code entry with paste, single-language errors; verified on a phone),
-refresh-token sessions (deployed; renewal and the session-ended message verified on a phone).
+refresh-token sessions (deployed; renewal and the session-ended message verified on a phone),
+structured store address with a map pin picker (branch store-location-pin: migration 0005 and the new app build are
+needed together; not yet run on a phone).
 
 In progress: Google Play personal developer account (identity verification pending; personal
 accounts need a 14-day closed test with 12+ testers).
@@ -281,7 +309,11 @@ the golden-query comparison of the new query path (only meaningful if a "before"
 deploy); review the ~49 held products;
 monitoring alert for AI/credit failures; build the .aab; create review test accounts for Play "App access"; Play data safety form.
 
-Later: register Lamba as a business (unlocks Meta verification for WhatsApp codes, SMS sender ID,
+Later: Google Geocoding for store addresses, only after evaluating it on about 20 real locations in Jordan against the
+phone's geocoder (language=ar, region=jo; read Google's caching terms first, results may not be stored freely; the
+10,000 free requests a month and $5 per 1,000 after that were read from Google's pricing page on 2026-10-10; the
+server needs its own IP-restricted key, the Maps key in app.json is Android-restricted and cannot call web services);
+register Lamba as a business (unlocks Meta verification for WhatsApp codes, SMS sender ID,
 Play organization account); enrichment prompt v2 with evaluation; `name_en` fill (a separate job, after the
 attributes); a gender filter that also accepts unisex/any items; app.json "locales" should point
 to native-only strings; consider removing expo-dev-client from release builds; review npm audit.
