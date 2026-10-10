@@ -76,7 +76,7 @@ from tests.test_qu_cache import TestQuCache
 from tests.test_service_tier import TestServiceTierFields
 from tests.test_item_classifier_tier import TestClassifierTier, TestWhoIsInteractive, TestDefaults
 from tests.test_query_understanding_service import TestQueryUnderstandingService, TestSettingsDefaults
-from tests.test_search_budget import TestUnderstandWithinBudget, TestAssembleEmbeddings
+from tests.test_search_budget import TestUnderstandWithinBudget, TestCounterName, TestAssembleEmbeddings
 from tests.test_search_pipeline_structure import TestSearchPipelineStructure
 from tests.test_category_match import TestExactNames, TestBoost, TestRealTaxonomy, TestClause, TestSearchUsesIt
 from tests.test_compare_search_runs import TestCompare, TestEvalSearchOptions, TestFlushSearchCache

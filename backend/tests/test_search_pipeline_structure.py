@@ -107,10 +107,11 @@ class TestSearchPipelineStructure(unittest.TestCase):
             guards = [a for a in ancestors(write) if isinstance(a, ast.If) and ast.unparse(a.test) == "not qu_late"]
             self.assertEqual(len(guards), 1, ast.unparse(write)[:60])
 
-    def test_outcomes_against_the_budget_are_counted(self):
-        self.assertEqual(len(self.calls(self.run_search, "_count_budget_outcome")), 1)
+    def test_outcomes_against_the_budget_are_counted_by_source(self):
+        counted = self.calls(self.run_search, "_count_budget_outcome")
+        self.assertEqual(len(counted), 1)
+        self.assertEqual(ast.unparse(counted[0].args[0]), "counter_name(parallel.outcome, parallel.intent)")
         helper = find_function(self.tree, "_count_budget_outcome")
-        self.assertIn("budget_", ast.unparse(helper))
         self.assertIn('group="search"', ast.unparse(helper).replace("'", '"'))
 
 

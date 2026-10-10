@@ -190,6 +190,7 @@ class QueryIntent(BaseModel):
     search_query: str                      # Processed search query string
     query_clean: Optional[str] = None      # Core product term without attribute modifiers
     attributes: Dict[str, Any] = {}        # Extracted structured attributes for JSONB filtering
+    source: str = "rules"                  # where this came from: "model" (a fresh answer), "cache" or "rules" only
 
 
 # Allowed attribute keys — anything else from LLM is discarded
@@ -276,7 +277,7 @@ class QueryUnderstandingService:
             intent, outcome = fallback, "error"
         elapsed_ms = int((time.monotonic() - started) * 1000)
         log = logger.debug if outcome == "not_needed" else logger.info
-        log("[QU] outcome=%s ms=%d query=%r attrs=%s", outcome, elapsed_ms, query_text, intent.attributes)
+        log("[QU] outcome=%s source=%s ms=%d query=%r attrs=%s", outcome, intent.source, elapsed_ms, query_text, intent.attributes)
         await qu_cache.count(redis_client, outcome)
         return intent
 
@@ -287,7 +288,7 @@ class QueryUnderstandingService:
         key = qu_cache.cache_key(normalize_query(query_text), settings.query_llm_fallback_model, _PROMPT_VERSION)
         cached = await qu_cache.get(redis_client, key)
         if cached is not None:
-            return self._intent_from(cached, fallback), "cache_hit"
+            return self._intent_from(cached, fallback, "cache"), "cache_hit"
 
         if deepinfra_query_breaker.should_skip():
             return fallback, "breaker_open"
@@ -324,10 +325,10 @@ class QueryUnderstandingService:
         if fields is None:
             return fallback, "bad_json"
         await qu_cache.put(redis_client, key, fields, settings.cache_qu_ttl)
-        return self._intent_from(fields, fallback), "ok"
+        return self._intent_from(fields, fallback, "model"), "ok"
 
     @staticmethod
-    def _intent_from(fields: dict, fallback: QueryIntent) -> QueryIntent:
+    def _intent_from(fields: dict, fallback: QueryIntent, source: str) -> QueryIntent:
         return QueryIntent(
             intent=fields.get("intent"),
             category_name=fields.get("category_name"),
@@ -335,6 +336,7 @@ class QueryUnderstandingService:
             search_query=fields.get("search_query") or fallback.search_query,
             query_clean=fields.get("query_clean"),
             attributes=merge_attributes(fields.get("attributes"), fallback.attributes),
+            source=source,
         )
 
 

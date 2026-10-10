@@ -138,6 +138,28 @@ class TestQueryUnderstandingService(unittest.TestCase):
         self.assertEqual((intent.intent, intent.query_clean, intent.attributes), ("product", "شاي", {"type": "أخضر"}))
         self.assertEqual(self.redis.counts(), {"ok": 1})
 
+    # ── where an intent came from ─────────────────────────────────────────────────────────────────
+    def test_the_intent_says_whether_it_came_from_the_model_the_cache_or_the_rules(self):
+        self.adapter.reply = answer()
+        self.assertEqual(self.analyze("شاي اخضر").source, "model")      # a fresh answer
+        self.assertEqual(self.analyze("شاي اخضر").source, "cache")      # the same query again
+        self.assertEqual(self.analyze("شاي").source, "rules")           # no model needed
+        self.assertEqual(self.service.rules_only_intent("عطر نساءي").source, "rules")
+
+    def test_every_fallback_is_tagged_rules_so_it_is_not_mistaken_for_a_model_answer(self):
+        for reasons in (["timeout"], ["http_429"], ["http_503"], ["breaker_open"], ["error"]):
+            self.redis = FakeRedis()
+            self.adapter.reply, self.adapter.reasons = None, reasons
+            self.assertEqual(self.analyze("عطر نساءي").source, "rules", reasons)
+        self.adapter.reply = "not json"
+        self.assertEqual(self.analyze("قهوة باردة").source, "rules")
+
+    def test_the_source_is_not_stored_in_the_cache(self):
+        self.adapter.reply = answer()
+        self.analyze("شاي اخضر")
+        (stored,) = self.redis.values.values()
+        self.assertNotIn("source", json.loads(stored))
+
     def test_fail_fast_can_be_switched_on(self):
         self.config.settings.query_llm_fail_fast = True
         self.adapter.reply = answer()
