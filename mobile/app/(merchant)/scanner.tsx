@@ -12,6 +12,8 @@ import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/them
 import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
 import { categoryLabel } from '../../utils/categoryLabel';
+import { photoUploadErrorKey } from '../../utils/photoUploadError';
+import { useRefreshStock } from '../../hooks/useMerchant';
 import {
   lookupItemByBarcode,
   linkBarcodeToMarket,
@@ -48,6 +50,7 @@ export default function BarcodeScannerScreen() {
   const router = useRouter();
   const Colors = useThemeColors();
   const insets = useSafeAreaInsets();
+  const refreshStock = useRefreshStock();
   // The caller picks the mode: 'inventory' from the add-product and Stock screens, 'cashier' from the Cashier tab
   const { mode: modeParam } = useLocalSearchParams<{ mode?: string }>();
 
@@ -631,6 +634,8 @@ const styles = useMemo(() => StyleSheet.create({
   const [savingForm, setSavingForm] = useState(false);
   // Merchant-crowdsourced catalog photo: required when the product has none, optional otherwise
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  // The thumbnail could not be drawn (unreadable file, dead link): show an icon, not an empty box
+  const [thumbFailed, setThumbFailed] = useState(false);
   const photoRequired = !!scanResult && !scanResult.image_url;
   const isArUI = !!i18n.locale?.startsWith('ar');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -671,6 +676,11 @@ const styles = useMemo(() => StyleSheet.create({
       requestPermission();
     }
   }, [permission]);
+
+  // A new photo, or the next scanned product, gets a fresh try at drawing its thumbnail
+  useEffect(() => {
+    setThumbFailed(false);
+  }, [photoUri, scanResult?.image_url]);
 
   // Viewfinder scanner line animation loop
   useEffect(() => {
@@ -908,10 +918,11 @@ const styles = useMemo(() => StyleSheet.create({
       if (scanResult && photoUri) {
         try {
           await uploadItemPhoto(scanResult.global_item_id, photoUri);
-        } catch {
+        } catch (photoErr) {
+          console.warn('[SCANNER] photo upload failed, status:', (photoErr as any)?.response?.status ?? 'no response');
           Alert.alert(
-            isArUI ? 'تم الحفظ' : 'Saved',
-            isArUI ? 'تم حفظ الكمية والسعر، لكن تعذّر رفع الصورة. امسح الباركود مرة أخرى لإضافتها.' : 'Stock and price were saved, but the photo could not be uploaded. Scan the barcode again to add it.',
+            t('scanner.photo_saved_title', 'Saved'),
+            `${t('scanner.photo_not_uploaded')}\n${t(photoUploadErrorKey(photoErr))}\n${t('scanner.photo_retry_hint')}`,
           );
         }
       }
@@ -921,6 +932,8 @@ const styles = useMemo(() => StyleSheet.create({
       Alert.alert(t('common.error'), t('scanner.failed_save', 'Failed to save product adjustments.'));
     } finally {
       setSavingForm(false);
+      // The product may be linked, edited or re-photographed even when a later step failed
+      refreshStock();
     }
   };
 
@@ -967,6 +980,7 @@ const styles = useMemo(() => StyleSheet.create({
       }));
 
       const response = await checkoutPOS(payload);
+      refreshStock({ sale: true });   // stock went down, the asset value changed, a receipt exists
       Vibration.vibrate([0, 40, 60, 40]);
       
       setLastReceipt(response);
@@ -1256,15 +1270,24 @@ const styles = useMemo(() => StyleSheet.create({
                       activeOpacity={0.7}
                       accessibilityLabel={isArUI ? 'إضافة صورة للمنتج' : 'Add product photo'}
                     >
-                      {photoUri || scanResult.image_url ? (
+                      {(photoUri || scanResult.image_url) && !thumbFailed ? (
                         <Image
                           source={{ uri: photoUri || resolveImageUrl(scanResult.image_url) }}
                           style={styles.thumbnail}
                           resizeMode="cover"
+                          onLoad={() => setThumbFailed(false)}
+                          onError={(e) => {
+                            console.warn('[SCANNER] thumbnail did not load:', photoUri ? 'photo just taken' : 'catalog photo', e.nativeEvent?.error);
+                            setThumbFailed(true);
+                          }}
                         />
                       ) : (
                         <View style={styles.placeholderIcon}>
-                          <Ionicons name="camera-outline" size={24} color={Colors.error} />
+                          <Ionicons
+                            name={thumbFailed ? 'image-outline' : 'camera-outline'}
+                            size={24}
+                            color={thumbFailed ? Colors.textMuted : Colors.error}
+                          />
                         </View>
                       )}
                     </TouchableOpacity>

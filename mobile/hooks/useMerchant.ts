@@ -12,6 +12,7 @@
  *  - Pull-to-refresh via refetch() instead of manual setRefreshing
  */
 
+import { useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getMyMarket,
@@ -142,6 +143,21 @@ export function useUpdateItem() {
       queryClient.invalidateQueries({ queryKey: merchantKeys.inventoryValue });
     },
   });
+}
+
+/**
+ * Refresh what the Stock tab and its totals show, for changes made outside those screens (the scanner links a
+ * product, edits stock or price, uploads a photo, or finishes a sale). Without it the Stock tab keeps its
+ * cached list: it is 30 s fresh, never refetched on tab focus, and the scanner has no mutation hook to patch it.
+ * `{ sale: true }` also refreshes the sales history.
+ */
+export function useRefreshStock() {
+  const queryClient = useQueryClient();
+  return useCallback((options?: { sale?: boolean }) => {
+    queryClient.invalidateQueries({ queryKey: merchantKeys.items });
+    queryClient.invalidateQueries({ queryKey: merchantKeys.inventoryValue });
+    if (options?.sale) queryClient.invalidateQueries({ queryKey: merchantKeys.checkoutHistory });
+  }, [queryClient]);
 }
 
 /**
