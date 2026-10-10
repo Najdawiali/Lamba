@@ -2,6 +2,7 @@
 
 import math
 import os
+import re
 import sys
 import unittest
 from types import SimpleNamespace
@@ -128,6 +129,46 @@ class TestAddressText(unittest.TestCase):
         legacy = SimpleNamespace(governorate=None, area=None, street=None, landmark=None)
         self.assertIsNone(geo.address_parts_of(legacy))
         self.assertIsNone(geo.address_parts_of(SimpleNamespace()))  # attributes missing altogether
+
+
+MOBILE_ADDRESS = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "mobile", "utils", "jordanAddress.ts"
+)
+
+
+class TestMobileMirror(unittest.TestCase):
+    """mobile/utils/jordanAddress.ts repeats the keys, names, box and limits; they must not drift."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open(MOBILE_ADDRESS, encoding="utf-8") as f:
+            cls.source = f.read()
+
+    def number(self, pattern):
+        match = re.search(pattern, self.source)
+        self.assertIsNotNone(match, pattern)
+        return float(match.group(1))
+
+    def test_governorates_match_key_by_key(self):
+        pattern = r"key: '([a-z]+)', ar: '([^']+)', en: (?:\"([^\"]+)\"|'([^']+)')"
+        mobile = [(k, ar, en_double or en_single) for k, ar, en_double, en_single in re.findall(pattern, self.source)]
+        backend = [(g.key, g.name_ar, g.name_en) for g in geo.GOVERNORATES]
+        self.assertEqual(mobile, backend)
+
+    def test_bounding_box_matches(self):
+        self.assertEqual(self.number(r"minLat: ([0-9.]+)"), geo.JORDAN_MIN_LAT)
+        self.assertEqual(self.number(r"maxLat: ([0-9.]+)"), geo.JORDAN_MAX_LAT)
+        self.assertEqual(self.number(r"minLng: ([0-9.]+)"), geo.JORDAN_MIN_LNG)
+        self.assertEqual(self.number(r"maxLng: ([0-9.]+)"), geo.JORDAN_MAX_LNG)
+
+    def test_text_limits_match(self):
+        self.assertEqual(self.number(r"AREA_MAX_LENGTH = ([0-9]+)"), geo.AREA_MAX_LENGTH)
+        self.assertEqual(self.number(r"STREET_MAX_LENGTH = ([0-9]+)"), geo.STREET_MAX_LENGTH)
+        self.assertEqual(self.number(r"LANDMARK_MAX_LENGTH = ([0-9]+)"), geo.LANDMARK_MAX_LENGTH)
+
+    def test_the_free_move_limit_matches_the_policy(self):
+        from app.services.market_location import FREE_MOVE_LIMIT_M
+        self.assertEqual(self.number(r"FREE_MOVE_LIMIT_M = ([0-9]+)"), FREE_MOVE_LIMIT_M)
 
 
 if __name__ == "__main__":
