@@ -27,6 +27,7 @@ from app.services.cache import get_redis
 from app.services.http_pool import deepinfra_query_breaker
 from app.services.llm import llm_adapter
 from app.services.query_attributes import extract_query_attributes, merge_attributes
+from app.services.service_tier import service_tier_fields
 
 logger = logging.getLogger(__name__)
 
@@ -295,6 +296,7 @@ class QueryUnderstandingService:
 
         reasons: List[str] = []
         extra = {"fail_fast": True} if settings.query_llm_fail_fast else {}
+        extra.update(service_tier_fields(settings.query_llm_service_tier, allow_flex=False))
         self._inflight += 1
         try:
             reply = await llm_adapter.complete_chat(

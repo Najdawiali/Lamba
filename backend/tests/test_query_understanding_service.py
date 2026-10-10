@@ -84,6 +84,7 @@ class TestQueryUnderstandingService(unittest.TestCase):
         self.config = make_config(
             query_llm_fallback_model="google/gemma-4-26B-A4B-it", query_llm_call_timeout_seconds=6.0,
             query_llm_fail_fast=True, query_llm_max_inflight=8, cache_qu_ttl=604800,
+            query_llm_service_tier="priority",
         )
 
         async def get_redis():
@@ -128,6 +129,7 @@ class TestQueryUnderstandingService(unittest.TestCase):
         self.assertEqual(call["timeout"], 6.0)
         self.assertIs(call["breaker"], self.pool.deepinfra_query_breaker)
         self.assertIs(call["fail_fast"], True)
+        self.assertEqual(call["service_tier"], "priority")           # the query path's tier setting
         self.assertEqual(call["temperature"], 0.0)
         self.assertEqual(call["chat_template_kwargs"], {"enable_thinking": False})
         self.assertIsInstance(call["error_sink"], list)
@@ -140,6 +142,20 @@ class TestQueryUnderstandingService(unittest.TestCase):
         self.adapter.reply = answer()
         self.analyze("شاي اخضر")
         self.assertNotIn("fail_fast", self.adapter.calls[0])
+
+    def test_the_service_tier_is_a_setting_of_this_call_path(self):
+        self.config.settings.query_llm_service_tier = ""
+        self.adapter.reply = answer()
+        self.analyze("شاي اخضر")
+        self.assertNotIn("service_tier", self.adapter.calls[0])      # standard tier: nothing is sent
+
+        self.config.settings.query_llm_service_tier = "flex"          # a batch tier on an interactive path
+        self.analyze("شاي احمر")
+        self.assertNotIn("service_tier", self.adapter.calls[1])
+
+        self.config.settings.query_llm_service_tier = "prioriti"      # a typo must not break search
+        self.analyze("شاي ابيض")
+        self.assertNotIn("service_tier", self.adapter.calls[2])
 
     def test_the_rules_win_over_the_model_for_their_keys_and_everything_else_is_kept(self):
         # the model says male and invents organic false; the words say female
@@ -284,6 +300,7 @@ class TestSettingsDefaults(unittest.TestCase):
         self.assertGreater(d["query_llm_call_timeout_seconds"], d["query_understanding_budget_seconds"])  # a late answer can still be cached
         self.assertIs(d["query_llm_fail_fast"], True)
         self.assertEqual(d["query_llm_max_inflight"], 8)
+        self.assertEqual(d["query_llm_service_tier"], "priority")
         self.assertEqual(d["cache_qu_ttl"], 604800)
 
 

@@ -203,6 +203,12 @@ class Settings(BaseSettings):
     # Model calls in flight at the same time; beyond that the rule-based attributes alone are used.
     query_llm_max_inflight: int = 8
 
+    # ── DeepInfra service tier per call path (see app/services/service_tier.py) ──
+    # "" = standard, "priority" = served first when the model is busy (+50% per token), "flex" = batch only.
+    # Measured on the server 2026-10-10 around a burst of 429 "Model busy" on gemma-4-26B-A4B: priority
+    # answered 6 of 6 calls, the standard tier 5 of 6. The cost is about $0.00016 instead of $0.00011 a call.
+    query_llm_service_tier: str = "priority"
+
     # Offline LLM (smarter, used for enrichment and batch processing)
     offline_llm_model: str = "google/gemma-4-31B-it"
 
