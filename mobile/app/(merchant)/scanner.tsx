@@ -1280,8 +1280,8 @@ const styles = useMemo(() => StyleSheet.create({
                         <View style={[styles.badge, scanResult.exists_in_branch ? styles.badgeSuccess : styles.badgeInfo]}>
                           <Text style={[styles.badgeText, scanResult.exists_in_branch ? styles.badgeTextSuccess : styles.badgeTextInfo]}>
                             {scanResult.exists_in_branch 
-                              ? t('inventory.in_stock', 'In My Store') 
-                              : t('scanner.not_stocked', 'Not Carrying')}
+                              ? t('scanner.in_my_store', 'In my store')
+                              : t('scanner.not_in_my_store', 'Not in my store')}
                           </Text>
                         </View>
                         <Text style={styles.barcodeText}>EAN: {scanResult.barcode}</Text>
@@ -1308,7 +1308,7 @@ const styles = useMemo(() => StyleSheet.create({
                     <View style={styles.formRow}>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.inputLabel}>
-                          {t('inventory.in_stock', 'Stock Quantity')}
+                          {t('scanner.stock_quantity', 'Stock quantity')}
                         </Text>
                         <View style={styles.adjusterRow}>
                           <TouchableOpacity style={styles.adjusterBtn} onPress={() => adjustStock(-1)} activeOpacity={0.7}>
@@ -1361,7 +1361,7 @@ const styles = useMemo(() => StyleSheet.create({
                               ? (isArUI ? 'التقط صورة أولاً' : 'Take a photo first')
                               : scanResult.exists_in_branch
                                 ? t('common.save', 'Save Adjustments')
-                                : t('addProduct.add_new', 'Add to My Store')}
+                                : t('scanner.add_to_my_store', 'Add to my store')}
                           </Text>
                         )}
                       </TouchableOpacity>
@@ -1377,7 +1377,7 @@ const styles = useMemo(() => StyleSheet.create({
                     {t('scanner.unregistered_product', 'Unregistered Product!')}
                   </Text>
                   <Text style={styles.unregisteredDesc}>
-                    {t('scanner.barcode_not_found_desc', 'The scanned barcode was not found in the global product catalog. Would you like to register it as a new product in the catalog?').replace('{{barcode}}', scannedBarcode)}
+                    {t('scanner.unknown_barcode_hint', "This barcode isn't in the catalog. Add it as a new product.")}
                   </Text>
 
                   <View style={styles.actionButtons}>
@@ -1396,7 +1396,7 @@ const styles = useMemo(() => StyleSheet.create({
                         });
                       }}
                     >
-                      <Text style={styles.btnTextSubmit}>{t('scanner.ingest_new_item', 'Ingest New Item')}</Text>
+                      <Text style={styles.btnTextSubmit}>{t('scanner.add_as_new_product', 'Add as a new product')}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
