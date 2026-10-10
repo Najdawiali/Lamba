@@ -26,6 +26,7 @@ import { Spacing, BorderRadius, Typography, Shadows } from '../../constants/them
 import { useThemeColors } from '../../context/ThemeContext';
 import { t, i18n } from '../../services/i18n';
 import { resolveImageUrl } from '../../services/utils';
+import { localizeServerMessage } from '../../utils/serverMessage';
 
 export default function AddProductScreen() {
   const router = useRouter();
@@ -410,9 +411,14 @@ export default function AddProductScreen() {
         );
       }
     } catch (err: any) {
+      // detail is a string, or {code, message} for 409 barcode_exists: never hand the object to the alert
       Alert.alert(
         isAr ? 'فشلت الإضافة' : 'AI Ingestion Failed',
-        err?.response?.data?.detail || (isAr ? 'حدث خطأ أثناء معالجة ونشر العنصر.' : 'An error occurred during AI extraction.')
+        localizeServerMessage(
+          err?.response?.data?.detail,
+          !!isAr,
+          isAr ? 'حدث خطأ أثناء معالجة ونشر العنصر.' : 'An error occurred during AI extraction.',
+        )
       );
     } finally {
       setLoading(false);
