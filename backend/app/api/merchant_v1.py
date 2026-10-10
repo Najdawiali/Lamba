@@ -56,6 +56,7 @@ from app.services.market_location import LocationChangeRefused, apply_location_u
 from app.services.embedding import embedding_service
 from app.services.alert_service import check_and_trigger_stock_alerts
 from app.services.attribute_rules import sanitize_merchant_attributes
+from app.services.item_names import item_name_fields
 from app.services.storage import storage_service
 from sqlalchemy.exc import IntegrityError
 from app.services.item_classifier import classify_item_ensemble, restricted_reason_for
@@ -450,6 +451,7 @@ def _dashboard_row(mi: MarketItem, gi: GlobalItem) -> MarketItemDashboardRespons
         in_stock=mi.status,
         price=mi.price,
         moderation_status=gi.moderation_status,
+        **item_name_fields(gi),
     )
 
 # ── GET /market/items ───────────────────────────────────────────
@@ -608,7 +610,17 @@ async def check_item(
 
     return ItemCheckResponse(
         exists=len(matches) > 0,
-        matches=[CatalogItemMatch.model_validate(gi) for gi in matches]
+        matches=[
+            CatalogItemMatch(
+                id=gi.id,
+                name=gi.name,
+                description=gi.description,
+                category=gi.category,
+                image_url=gi.image_url,
+                **item_name_fields(gi),
+            )
+            for gi in matches
+        ]
     )
 
 
@@ -1210,6 +1222,7 @@ async def lookup_item_by_barcode(
         price=float(mi.price) if (mi and mi.price is not None) else None,
         stock_count=mi.stock_count if mi else None,
         barcode=barcode,
+        **item_name_fields(gi),
     )
 
 @router.post("/checkout")
