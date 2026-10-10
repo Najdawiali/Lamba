@@ -122,6 +122,18 @@ Schema changes only through Alembic migrations (`backend/alembic/versions/`), ne
   uv's cache); no database is needed. Modules whose dependencies are not installed locally (httpx,
   pydantic-settings) are imported against stand-ins from `backend/tests/stub_modules.py`, which installs them
   only for the length of a test and restores `sys.modules` afterwards.
+- Full backend suite (run on 2026-10-10 for the store-location PR, 414 tests): a throwaway venv OUTSIDE the repo
+  with everything in `backend/requirements.txt` (`uv run --no-project python -m venv <dir>`, then
+  `uv pip install --python <dir>\Scripts\python.exe --only-binary :all: ...`). The dev PC has Python 3.14
+  (production 3.13), so use `sqlalchemy>=2.0.43,<2.1` (2.0.36 does not import on 3.14), unpinned `asyncpg` and
+  `Pillow` (the pinned versions have no 3.14 wheels), and add `numpy`. Run from a checkout WITHOUT `backend/.env`
+  (settings read it from the working directory; a `git worktree` works) with `DATABASE_URL=postgresql+asyncpg://u:p@localhost:5432/db`
+  and `DEEPINFRA_API_KEY=test-key-not-real` in the environment, and run each module in its own process
+  (`python -B -X utf8 -m unittest tests.<name>`). `tests/run_all_tests.py` in ONE process shows 33 failures on main
+  and on the branch alike (modules that install stand-ins for httpx or config fight with the real modules an earlier
+  test already imported); every one of those modules passes alone. Two tests need a live Redis or Postgres and fail
+  without one: `test_customer_auth` (public endpoints) and `test_synonym_table.test_cache_lookup`. The Postgres-only
+  suites skip themselves without `LAMBA_TEST_DATABASE_URL`.
 - APK: `cd mobile\android; .\gradlew.bat assembleRelease --no-daemon`
   -> `app\build\outputs\apk\release\app-release.apk`. Google Play needs an .aab (`bundleRelease`).
 - Release builds inline `EXPO_PUBLIC_API_URL` from the git-ignored `mobile/.env`, which must hold
