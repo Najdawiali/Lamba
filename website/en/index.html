@@ -94,9 +94,19 @@
     color: var(--light);
     text-shadow: 0 0 42px rgba(255, 179, 0, 0.45);
   }
-  .wordmark span { display: block; font-size: 0.32em; color: var(--glow); }
+  /* The other-script line of the logo and the small tagline are pictures of text (img/), so they cannot be
+     selected or copied. Sizes are in em so they follow the text they replace. */
+  .wordmark span { display: block; position: relative; height: 1.1em; font-size: 0.32em; }
+  .wordmark span img {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    height: 1.7em; width: auto; max-width: none;
+    filter: drop-shadow(0 0 21px rgba(255, 179, 0, 0.45));
+  }
+  .wordmark span img, .tagline-ar img { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; pointer-events: none; }
   .tagline { margin: 1.25rem 0 0; font-size: 1.5rem; font-size: clamp(1.25rem, 4.5vw, 1.75rem); line-height: 1.5; max-width: 26ch; }
-  .tagline-ar { margin: 0.5rem 0 0; font-family: var(--text-ar); font-size: 1.05rem; line-height: 1.8; opacity: 0.85; }
+  .tagline-ar { margin: 0.5rem 0 0; font-size: 1.05rem; line-height: 1.8; opacity: 0.85; }
+  .tagline-ar img { display: block; margin: 0 auto; width: 24.7em; max-width: 100%; height: auto; }
+  @media (max-width: 520px) { .tagline-ar img { width: 15.57em; } }
   .status {
     margin-top: 2.25rem;
     padding: 0.55rem 1.4rem;
@@ -165,9 +175,12 @@
     <a href="/" hreflang="ar" lang="ar" dir="rtl">العربية</a>
   </nav>
   <img class="icon" src="/icon.png" alt="" width="88" height="88">
-  <h1 class="wordmark">Lamba<span lang="ar" dir="rtl">لمبة</span></h1>
+  <h1 class="wordmark">Lamba<span role="img" aria-label="لمبة" lang="ar"><img src="/img/wordmark-ar.png" alt="" width="115" height="109" draggable="false"></span></h1>
   <p class="tagline">Find what you need in the shops near you.</p>
-  <p class="tagline-ar" lang="ar" dir="rtl">دوّر على أي غرض، وشوف وين بتلاقيه بالمحلات القريبة منك.</p>
+  <p class="tagline-ar" role="img" aria-label="دوّر على أي غرض، وشوف وين بتلاقيه بالمحلات القريبة منك." lang="ar" dir="rtl"><picture>
+    <source media="(max-width: 520px)" srcset="/img/tagline-ar-narrow.png" width="261" height="60">
+    <img src="/img/tagline-ar.png" alt="" width="415" height="30" draggable="false">
+  </picture></p>
   <p class="status">Coming soon on Google Play</p>
 </header>
 

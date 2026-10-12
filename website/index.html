@@ -93,9 +93,18 @@
     color: var(--light);
     text-shadow: 0 0 42px rgba(255, 179, 0, 0.45);
   }
-  .wordmark span { display: block; font-size: 0.32em; letter-spacing: 0.04em; color: var(--glow); }
+  /* The other-script line of the logo and the small tagline are pictures of text (img/), so they cannot be
+     selected or copied. Sizes are in em so they follow the text they replace. */
+  .wordmark span { display: block; position: relative; height: 1.1em; font-size: 0.32em; }
+  .wordmark span img {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    height: 1.7em; width: auto; max-width: none;
+    filter: drop-shadow(0 0 21px rgba(255, 179, 0, 0.45));
+  }
+  .wordmark span img, .tagline-en img { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; pointer-events: none; }
   .tagline { margin: 1.25rem 0 0; font-size: 1.5rem; font-size: clamp(1.25rem, 4.5vw, 1.75rem); line-height: 1.6; max-width: 26ch; }
   .tagline-en { margin: 0.5rem 0 0; font-size: 1.05rem; opacity: 0.85; }
+  .tagline-en img { display: block; margin: 0 auto; width: 18.9em; max-width: 100%; height: auto; }
   .status {
     margin-top: 2.25rem;
     padding: 0.55rem 1.4rem;
@@ -163,9 +172,9 @@
     <a href="/en/" hreflang="en" lang="en" dir="ltr">English</a>
   </nav>
   <img class="icon" src="/icon.png" alt="" width="88" height="88">
-  <h1 class="wordmark">لمبة<span lang="en" dir="ltr">Lamba</span></h1>
+  <h1 class="wordmark">لمبة<span role="img" aria-label="Lamba" lang="en"><img src="/img/wordmark-en.png" alt="" width="206" height="109" draggable="false"></span></h1>
   <p class="tagline">دوّر على أي غرض، وشوف وين بتلاقيه بالمحلات القريبة منك.</p>
-  <p class="tagline-en" lang="en" dir="ltr">Find what you need in the shops near you.</p>
+  <p class="tagline-en" role="img" aria-label="Find what you need in the shops near you." lang="en" dir="ltr"><img src="/img/tagline-en.png" alt="" width="318" height="30" draggable="false"></p>
   <p class="status">قريباً على Google Play</p>
 </header>
 
