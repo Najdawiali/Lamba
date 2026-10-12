@@ -41,7 +41,13 @@ Google Play closed test. Owner: Ali, founder and sole developer.
   - `android/` is committed (bare workflow). Do NOT run `expo prebuild`: native changes go directly
     into `android/` (app.json alone does not reach the APK).
 - `website/` static homepage for lambajo.com (Cloudflare Workers static assets, uploaded in the
-  Cloudflare dashboard). `_redirects` maps /privacy, /terms, /account-deletion to the API.
+  Cloudflare dashboard). `_redirects` maps /privacy, /terms, /account-deletion to the API. Arabic is the
+  default page at `/` (`website/index.html`), English lives at `/en/` (`website/en/index.html`); each has a
+  language switch, hreflang links and its own title/description/Open Graph tags. Each page is in one language;
+  the other-script wordmark line and the small other-language tagline are PNG pictures in `website/img/` (not
+  selectable; see website/README.md before changing those texts). Keep the two pages' copy in step, and upload
+  the whole folder (a new upload replaces the site, and the pages need `img/` and `fonts/`), not just the
+  changed files.
 - `docker-compose.yml` (root; used on the server and locally): `postgres` (built from
   `backend/Dockerfile.postgres`), `redis` (password, 256 MB LRU) and `api` (built from `backend/`,
   reads `backend/.env`, mounts `backend/uploads`). Only `api` publishes a port: 127.0.0.1:8000.

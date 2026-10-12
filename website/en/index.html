@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lamba | Find what you need in the shops near you</title>
+<meta name="description" content="Lamba: search for any product or service and see which shops near you in Jordan have it, with prices and locations on a map.">
+<link rel="canonical" href="https://lambajo.com/en/">
+<link rel="alternate" hreflang="ar" href="https://lambajo.com/">
+<link rel="alternate" hreflang="en" href="https://lambajo.com/en/">
+<link rel="alternate" hreflang="x-default" href="https://lambajo.com/">
+<link rel="icon" href="/icon.png" type="image/png">
+<meta name="theme-color" content="#2D1B0A">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lamba">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ar_JO">
+<meta property="og:url" content="https://lambajo.com/en/">
+<meta property="og:title" content="Lamba | Find what you need in the shops near you">
+<meta property="og:description" content="Search for any product or service and see which shops near you in Jordan have it, with prices and locations on a map.">
+<meta property="og:image" content="https://lambajo.com/icon.png">
+<meta property="og:image:alt" content="The Lamba app icon">
+<style>
+  @font-face {
+    font-family: "Lalezar";
+    src: url("/fonts/lalezar.woff2") format("woff2");
+    font-display: swap;
+  }
+
+  :root {
+    --night: #2D1B0A;      /* the app's splash colour */
+    --night-deep: #22140A;
+    --glow: #FFB300;       /* the lamp */
+    --wick: #FF8F00;       /* the app's primary orange */
+    --light: #FFD98A;      /* lit text on the night background */
+    --stone: #E6D3A6;      /* As-Salt's honey-coloured limestone */
+    --stone-edge: #CDB580;
+    --ink: #2D1B0A;
+    --sign: "Lalezar", "Noto Kufi Arabic", "Segoe UI", Tahoma, sans-serif;
+    --text: system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --text-ar: "Noto Sans Arabic", "Segoe UI", Tahoma, "Geeza Pro", system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--night);
+    color: var(--ink);
+    font-family: var(--text);
+    font-size: 1.125rem;
+    line-height: 1.7;
+  }
+  a { color: inherit; }
+  a:focus-visible { outline: 3px solid var(--glow); outline-offset: 3px; border-radius: 2px; }
+
+  /* ── Night street: the shop light comes on ─────────────────── */
+  .night {
+    position: relative;
+    overflow: hidden;
+    min-height: 86vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 1.5rem 5rem;
+    text-align: center;
+    color: var(--light);
+  }
+  .night::before {
+    content: "";
+    position: absolute;
+    inset: -20% -20% 0;
+    background: radial-gradient(ellipse 50% 42% at 50% 40%,
+                rgba(255, 179, 0, 0.34), rgba(255, 143, 0, 0.12) 45%, transparent 72%);
+    animation: switch-on 1.6s ease-out 0.2s both;
+    pointer-events: none;
+  }
+  @keyframes switch-on {
+    0%   { opacity: 0; }
+    35%  { opacity: 0.55; }
+    45%  { opacity: 0.25; }
+    100% { opacity: 1; }
+  }
+  .night > * { position: relative; }
+  .icon { width: 88px; height: 88px; border-radius: 22px; }
+  .wordmark {
+    margin: 0.5rem 0 0;
+    font-family: var(--sign);
+    font-weight: 400;
+    font-size: 7rem;
+    font-size: clamp(5.5rem, 24vw, 11rem);
+    line-height: 1.1;
+    color: var(--light);
+    text-shadow: 0 0 42px rgba(255, 179, 0, 0.45);
+  }
+  /* The other-script line of the logo and the small tagline are pictures of text (img/), so they cannot be
+     selected or copied. Sizes are in em so they follow the text they replace. */
+  .wordmark span { display: block; position: relative; height: 1.1em; font-size: 0.32em; }
+  .wordmark span img {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    height: 1.7em; width: auto; max-width: none;
+    filter: drop-shadow(0 0 21px rgba(255, 179, 0, 0.45));
+  }
+  .wordmark span img, .tagline-ar img { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; pointer-events: none; }
+  .tagline { margin: 1.25rem 0 0; font-size: 1.5rem; font-size: clamp(1.25rem, 4.5vw, 1.75rem); line-height: 1.5; max-width: 26ch; }
+  .tagline-ar { margin: 0.5rem 0 0; font-size: 1.05rem; line-height: 1.8; opacity: 0.85; }
+  .tagline-ar img { display: block; margin: 0 auto; width: 24.7em; max-width: 100%; height: auto; }
+  @media (max-width: 520px) { .tagline-ar img { width: 15.57em; } }
+  .status {
+    margin-top: 2.25rem;
+    padding: 0.55rem 1.4rem;
+    border: 1px solid rgba(255, 217, 138, 0.45);
+    border-radius: 999px;
+    font-size: 1rem;
+  }
+
+  /* ── Language switch ───────────────────────────────────────── */
+  .night > .lang-switch { position: absolute; top: 1rem; inset-inline-end: 1rem; }
+  .lang-switch a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 1.25rem;
+    border: 1px solid rgba(255, 217, 138, 0.45);
+    border-radius: 999px;
+    color: var(--light);
+    font-family: var(--text-ar);
+    font-size: 1rem;
+    text-decoration: none;
+  }
+  .lang-switch a:hover { background: rgba(255, 217, 138, 0.12); border-color: var(--light); }
+
+  /* ── Limestone: what Lamba does ────────────────────────────── */
+  .stone { background: var(--stone); padding: 4.5rem 1.5rem; }
+  .wrap { max-width: 64rem; margin: 0 auto; }
+  .stone h2 { font-family: var(--sign); font-weight: 400; font-size: 2.4rem; line-height: 1.3; margin: 0 0 1rem; }
+  .intro { margin-bottom: 3rem; padding-bottom: 2.5rem; border-bottom: 2px solid var(--stone-edge); text-align: center; }
+  .intro p { max-width: 36rem; margin: 0 auto; font-size: 1.5rem; font-size: clamp(1.2rem, 3.6vw, 1.5rem); line-height: 1.6; text-wrap: balance; }
+  .intro p span { display: block; }
+  .sides { display: grid; grid-template-columns: 1fr 1fr; }
+  .side { padding: 0 2.5rem; }
+  .side:first-child { padding-inline-start: 0; }
+  .side + .side { border-inline-start: 2px solid var(--stone-edge); padding-inline-end: 0; }
+  .side ul { margin: 0; padding: 0; list-style: none; max-width: 34ch; }
+  .side li { position: relative; padding-inline-start: 1.25rem; margin-bottom: 0.9rem; }
+  .side li::before {
+    content: ""; position: absolute; inset-inline-start: 0; top: 0.75em;
+    width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--wick);
+  }
+
+  /* ── Footer: who runs Lamba, how to reach it ───────────────── */
+  footer { background: var(--night-deep); color: var(--light); padding: 3rem 1.5rem 3.5rem; font-size: 1rem; }
+  footer .wrap { display: grid; gap: 1.5rem; }
+  footer p { margin: 0; }
+  .contact a { color: var(--glow); font-size: 1.15rem; }
+  .legal { display: flex; flex-wrap: wrap; gap: 0.5rem 1.75rem; padding: 0; margin: 0; list-style: none; }
+  .legal-note { font-size: 0.9rem; opacity: 0.8; }
+  .operator { opacity: 0.8; }
+
+  @media (max-width: 720px) {
+    .sides { grid-template-columns: 1fr; }
+    .side, .side:first-child { padding: 0; }
+    .side + .side { border-inline-start: 0; border-top: 2px solid var(--stone-edge); margin-top: 2rem; padding-top: 2rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .night::before { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="night">
+  <nav class="lang-switch" aria-label="Language">
+    <a href="/" hreflang="ar" lang="ar" dir="rtl">العربية</a>
+  </nav>
+  <img class="icon" src="/icon.png" alt="" width="88" height="88">
+  <h1 class="wordmark">Lamba<span role="img" aria-label="لمبة" lang="ar"><img src="/img/wordmark-ar.png" alt="" width="115" height="109" draggable="false"></span></h1>
+  <p class="tagline">Find what you need in the shops near you.</p>
+  <p class="tagline-ar" role="img" aria-label="دوّر على أي غرض، وشوف وين بتلاقيه بالمحلات القريبة منك." lang="ar" dir="rtl"><picture>
+    <source media="(max-width: 520px)" srcset="/img/tagline-ar-narrow.png" width="261" height="60">
+    <img src="/img/tagline-ar.png" alt="" width="415" height="30" draggable="false">
+  </picture></p>
+  <p class="status">Coming soon on Google Play</p>
+</header>
+
+<main class="stone">
+  <div class="wrap">
+    <div class="intro">
+      <p><span>Lamba is a local shopping app for Jordan.</span> <span>Search for a product or service, and see which shops near you have it before you head out.</span></p>
+    </div>
+
+    <div class="sides">
+      <section class="side" aria-labelledby="customers">
+        <h2 id="customers">For customers</h2>
+        <ul>
+          <li>Search for any product or service, in Arabic, in English, or even in everyday dialect.</li>
+          <li>See the nearby shops that have it, with the price and the location on a map.</li>
+          <li>Message the shop directly before you leave home.</li>
+        </ul>
+      </section>
+      <section class="side" aria-labelledby="shops">
+        <h2 id="shops">For shops</h2>
+        <ul>
+          <li>Add your products by scanning barcodes, from a ready catalog of more than 10,000 products.</li>
+          <li>Let people in your area know what you have and how much it costs.</li>
+          <li>Answer customers' questions from the messages in the app.</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p class="contact">Contact us: <a href="mailto:support@lambajo.com">support@lambajo.com</a></p>
+    <ul class="legal">
+      <li><a href="/privacy">Privacy policy</a></li>
+      <li><a href="/terms">Terms of service</a></li>
+      <li><a href="/account-deletion">Delete your account</a></li>
+    </ul>
+    <p class="legal-note">These pages are in Arabic and English. The English text follows the Arabic.</p>
+    <p class="operator">Lamba is operated by Ali Sharhabeel Abdallah Al-Najdawi, Jordan.</p>
+  </div>
+</footer>
+
+</body>
+</html>
